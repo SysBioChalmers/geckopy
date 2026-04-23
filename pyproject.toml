@@ -12,6 +12,7 @@ dependencies = [
     "cobra>=0.29",
     "numpy>=1.21",
     "pydantic>=2",
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
