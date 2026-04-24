@@ -9,7 +9,7 @@ Schema expected in uniprot.tsv (tab-delimited, one header line):
     Entry | Gene Names | EC number | Mass | Sequence
 
 All five columns are always present, though individual cells may be
-empty. Mass is in Da in the file and converted to kDa on load to match
+empty. Mass is in Da in the file and stored as Da in the UniprotDB to match
 GECKO's ec.mw convention. Duplicate Entry values raise ValueError,
 matching MATLAB's dispEM-based hard failure.
 """
@@ -26,7 +26,7 @@ class UniprotDB:
     """Parsed uniprot.tsv. Arrays are aligned: row i in every field
     describes the same database entry (or gene-name row when split).
 
-    ``mw`` is in kDa (converted from the Da values in the TSV).
+    ``mw`` is in Da, matching the Mass column of the TSV verbatim.
     """
     ids: list[str] = field(default_factory=list)
     genes: list[str] = field(default_factory=list)
@@ -76,7 +76,7 @@ def load_uniprot_tsv(
     Returns
     -------
     UniprotDB
-        Parsed database. MW is in kDa.
+        Parsed database. MW is in Da.
 
     Raises
     ------
@@ -142,13 +142,11 @@ def load_uniprot_tsv(
 
     _check_duplicate_ids(ids, path)
 
-    mw_kda = np.array(mw_da, dtype=float) / 1000.0
-
     return UniprotDB(
         ids=ids,
         genes=genes,
         eccodes=eccodes,
-        mw=mw_kda,
+        mw=np.array(mw_da, dtype=float),
         sequences=sequences,
     )
 

@@ -50,7 +50,7 @@ def test_make_ec_model_populates_ec_genes_alphabetically():
     assert ec_model.ec.genes == ["G1", "G2", "G3", "G4", "G5"]
     assert ec_model.ec.enzymes == ["P1", "P2", "P3", "P4", "P5"]
     np.testing.assert_array_almost_equal(
-        ec_model.ec.mw, [10.0, 20.0, 30.0, 40.0, 50.0]
+        ec_model.ec.mw, [10000.0, 20000.0, 30000.0, 40000.0, 50000.0]
     )
 
 

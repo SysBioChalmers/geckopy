@@ -49,16 +49,17 @@ def test_parses_basic_row(tmp_path):
     assert db.genes == ["G1"]
     assert db.eccodes == ["1.1.1.1"]
     assert db.sequences == ["MKAL"]
-    np.testing.assert_array_almost_equal(db.mw, [10.0])  # Da -> kDa
+    np.testing.assert_array_almost_equal(db.mw, [10000.0])  # stored as Da
 
 
-def test_mw_conversion_to_kda(tmp_path):
+def test_mw_stored_as_da(tmp_path):
+    """Mass is stored verbatim as Da, matching the TSV column."""
     path = _write_tsv(tmp_path / "u.tsv", [
         "P1\tG1\t\t40000\tMKAL",
         "P2\tG2\t\t12500\tMKAL",
     ])
     db = load_uniprot_tsv(path)
-    np.testing.assert_array_almost_equal(db.mw, [40.0, 12.5])
+    np.testing.assert_array_almost_equal(db.mw, [40000.0, 12500.0])
 
 
 def test_empty_cells_become_empty_strings(tmp_path):
@@ -164,7 +165,7 @@ def test_split_gene_cells_expands_multi_gene_rows(tmp_path):
     assert db.genes == ["G1", "G2"]
     assert db.ids == ["P1", "P1"]
     assert db.eccodes == ["1.1.1.1", "1.1.1.1"]
-    np.testing.assert_array_almost_equal(db.mw, [10.0, 10.0])
+    np.testing.assert_array_almost_equal(db.mw, [10000.0, 10000.0])
     assert db.sequences == ["MKAL", "MKAL"]
 
 
