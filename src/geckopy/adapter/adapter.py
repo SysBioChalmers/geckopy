@@ -127,3 +127,19 @@ class ModelAdapter:
                     mapping[parts[0]] = parts[1]
 
         return [mapping.get(g, g) for g in model_genes]
+    
+    def get_brenda_db_folder(self) -> Path:
+        """Return the folder where the BRENDA database files are stored.
+
+        Default: `<project_path>/data`. Override to place it elsewhere
+        (useful when sharing a BRENDA snapshot across multiple ecModel
+        projects).
+        """
+        return self.params.path / "data"
+
+    def get_phyl_dist_path(self) -> Path:
+        """Return the path to the phylogenetic distance structure file.
+
+        Default: `<project_path>/data/PhylDist.mat`.
+        """
+        return self.params.path / "data" / "PhylDist.mat"

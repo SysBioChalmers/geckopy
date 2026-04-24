@@ -24,7 +24,8 @@ gr_exp = 0.41
 id = "sce"
 
 [uniprot]
-tax_id = "559292"
+type = "taxonomy"
+id = "559292"
 reviewed = true
 
 [complex]
@@ -56,7 +57,7 @@ def test_from_folder_with_full_toml(tmp_path):
     assert adapter.params.f == 0.4461
     assert adapter.params.kegg.id == "sce"
     assert adapter.params.uniprot.reviewed is True
-    assert adapter.params.complex.taxonomic_id == 559292
+    assert adapter.params.uniprot.id == "559292"
 
 
 def test_missing_toml_raises(tmp_path):
