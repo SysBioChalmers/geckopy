@@ -10,8 +10,18 @@ from .preprocess import (
     invert_backwards_only_reactions,
     remove_pseudoreaction_gprs,
 )
+from .protein_pool import (
+    add_protein_pool_exchange_reaction,
+    add_protein_pool_pseudometabolite,
+    add_protein_pseudometabolites,
+    add_protein_usage_reactions,
+)
 
 __all__ = [
+    "add_protein_pool_exchange_reaction",
+    "add_protein_pool_pseudometabolite",
+    "add_protein_pseudometabolites",
+    "add_protein_usage_reactions",
     "allocate_ec_for_catalyzed_reactions",
     "build_rxn_enzyme_coupling",
     "convert_to_irreversible",
