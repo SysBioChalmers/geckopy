@@ -15,6 +15,7 @@ from .protein_pool import (
     add_protein_pool_pseudometabolite,
     add_protein_pseudometabolites,
     add_protein_usage_reactions,
+    set_prot_pool_size,
 )
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "invert_backwards_only_reactions",
     "populate_enzyme_data",
     "remove_pseudoreaction_gprs",
+    "set_prot_pool_size",
 ]
