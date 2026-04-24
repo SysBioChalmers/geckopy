@@ -1,0 +1,25 @@
+# Test ecModel adapter, mirrors TestGEMAdapter.m from GECKO MATLAB.
+conv_gem = "models/testModel.xml"
+org_name = "testus testus"
+
+sigma = 0.5
+p_tot = 0.5
+f = 4.0           # intentionally out-of-range test value
+gr_exp = 0.41
+
+c_source = "E1"
+bio_rxn = "R4"
+enzyme_comp = "c"
+
+[kegg]
+id = "tst"
+gene_id = "kegg"
+
+[uniprot]
+type = "taxonomy"
+id = "TE00000000"
+gene_id_field = "gene_tst"
+reviewed = true
+
+[complex]
+taxonomic_id = 123456
