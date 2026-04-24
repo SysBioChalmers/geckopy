@@ -67,3 +67,40 @@ def remove_pseudoreaction_gprs(
         cleared.append(rxn_id)
 
     return sorted(cleared)
+
+def invert_backwards_only_reactions(model: "cobra.Model") -> list[str]:
+    """Flip reactions that are constrained to only carry negative flux.
+
+    Corresponds to stage 2 of GECKO MATLAB `makeEcModel`. A reaction
+    with ``lb < 0`` and ``ub == 0`` is physically identical to a
+    forward-only reaction with inverted stoichiometry and bounds
+    ``[0, -lb]``. Rewriting it in that canonical form keeps downstream
+    irreversibility handling simple.
+
+    Reactions with ``lb == 0`` (already forward) or with both bounds
+    negative or both positive are not touched.
+
+    Parameters
+    ----------
+    model
+        A cobra.Model, mutated in place.
+
+    Returns
+    -------
+    list of str
+        Sorted IDs of reactions that were inverted.
+    """
+    inverted: list[str] = []
+    for rxn in model.reactions:
+        if rxn.lower_bound < 0 and rxn.upper_bound == 0:
+            # Flip stoichiometry: every coefficient gets negated.
+            flipped = {m: -coef for m, coef in rxn.metabolites.items()}
+            # add_metabolites with combine=False overwrites the existing values.
+            rxn.add_metabolites(flipped, combine=False)
+            # Swap bounds. Assign upper_bound first to avoid the
+            # lb > ub transient state that cobrapy rejects.
+            new_ub = -rxn.lower_bound
+            rxn.lower_bound = 0.0
+            rxn.upper_bound = new_ub
+            inverted.append(rxn.id)
+    return sorted(inverted)

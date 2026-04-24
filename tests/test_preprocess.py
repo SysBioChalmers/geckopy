@@ -10,7 +10,142 @@ import cobra
 
 from geckopy import ModelAdapter
 from geckopy.ec_model.pipeline import remove_pseudoreaction_gprs
+from geckopy.ec_model.pipeline import invert_backwards_only_reactions
 
+
+def _build_model_with_bounds(
+    reactions: list[tuple[str, dict[str, float], float, float]],
+) -> cobra.Model:
+    """Build from (rxn_id, {met_id: coef}, lb, ub) tuples."""
+    model = cobra.Model("test")
+    mets: dict[str, cobra.Metabolite] = {}
+    for _, stoich, _, _ in reactions:
+        for met_id in stoich:
+            if met_id not in mets:
+                mets[met_id] = cobra.Metabolite(met_id, compartment="c")
+
+    for rxn_id, stoich, lb, ub in reactions:
+        rxn = cobra.Reaction(rxn_id)
+        rxn.lower_bound = lb
+        rxn.upper_bound = ub
+        rxn.add_metabolites({mets[m]: c for m, c in stoich.items()})
+        model.add_reactions([rxn])
+    return model
+
+
+def test_inverts_single_backwards_only_reaction():
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, -1000.0, 0.0),
+    ])
+
+    inverted = invert_backwards_only_reactions(model)
+
+    r1 = model.reactions.get_by_id("r1")
+    assert inverted == ["r1"]
+    assert r1.lower_bound == 0.0
+    assert r1.upper_bound == 1000.0
+    # Stoichiometry was flipped.
+    stoich = {m.id: c for m, c in r1.metabolites.items()}
+    assert stoich == {"A": 1.0, "B": -1.0}
+
+
+def test_does_not_touch_forward_only_reactions():
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, 0.0, 1000.0),
+    ])
+
+    inverted = invert_backwards_only_reactions(model)
+
+    r1 = model.reactions.get_by_id("r1")
+    assert inverted == []
+    assert r1.lower_bound == 0.0
+    assert r1.upper_bound == 1000.0
+    stoich = {m.id: c for m, c in r1.metabolites.items()}
+    assert stoich == {"A": -1.0, "B": 1.0}
+
+
+def test_does_not_touch_reversible_reactions():
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, -1000.0, 1000.0),
+    ])
+
+    inverted = invert_backwards_only_reactions(model)
+    assert inverted == []
+    r1 = model.reactions.get_by_id("r1")
+    assert r1.lower_bound == -1000.0
+    assert r1.upper_bound == 1000.0
+
+
+def test_does_not_touch_blocked_reactions():
+    """A reaction with lb == 0 and ub == 0 should not be inverted."""
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, 0.0, 0.0),
+    ])
+
+    inverted = invert_backwards_only_reactions(model)
+    assert inverted == []
+
+
+def test_does_not_touch_negative_only_reactions_with_nonzero_ub():
+    """lb < 0, ub < 0 is a strange case that should not be inverted
+    (MATLAB condition is lb < 0 AND ub == 0 exactly)."""
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, -1000.0, -100.0),
+    ])
+
+    inverted = invert_backwards_only_reactions(model)
+    assert inverted == []
+    r1 = model.reactions.get_by_id("r1")
+    assert r1.lower_bound == -1000.0
+    assert r1.upper_bound == -100.0
+
+
+def test_inverts_multiple_reactions_independently():
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, -500.0, 0.0),
+        ("r2", {"B": -2.0, "C": 3.0}, 0.0, 1000.0),     # not touched
+        ("r3", {"C": -1.0, "D": 1.0}, -200.0, 0.0),
+    ])
+
+    inverted = invert_backwards_only_reactions(model)
+
+    assert inverted == ["r1", "r3"]
+
+    r1 = model.reactions.get_by_id("r1")
+    assert r1.bounds == (0.0, 500.0)
+    assert {m.id: c for m, c in r1.metabolites.items()} == {"A": 1.0, "B": -1.0}
+
+    r2 = model.reactions.get_by_id("r2")
+    assert r2.bounds == (0.0, 1000.0)
+    assert {m.id: c for m, c in r2.metabolites.items()} == {"B": -2.0, "C": 3.0}
+
+    r3 = model.reactions.get_by_id("r3")
+    assert r3.bounds == (0.0, 200.0)
+    assert {m.id: c for m, c in r3.metabolites.items()} == {"C": 1.0, "D": -1.0}
+
+
+def test_inversion_preserves_gpr_and_name():
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, -500.0, 0.0),
+    ])
+    r1 = model.reactions.get_by_id("r1")
+    r1.name = "backwards reaction"
+    r1.gene_reaction_rule = "g1 and g2"
+
+    invert_backwards_only_reactions(model)
+
+    r1 = model.reactions.get_by_id("r1")
+    assert r1.name == "backwards reaction"
+    assert r1.gene_reaction_rule == "g1 and g2"
+    assert {g.id for g in r1.genes} == {"g1", "g2"}
+
+
+def test_returns_empty_list_when_nothing_to_invert():
+    model = _build_model_with_bounds([
+        ("r1", {"A": -1.0, "B": 1.0}, 0.0, 1000.0),
+        ("r2", {"B": -1.0, "C": 1.0}, -1000.0, 1000.0),
+    ])
+    assert invert_backwards_only_reactions(model) == []
 
 def _minimal_adapter(tmp_path: Path) -> ModelAdapter:
     """Adapter rooted in tmp_path. No real SBML needed for these tests."""
