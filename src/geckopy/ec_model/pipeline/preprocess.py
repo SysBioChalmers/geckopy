@@ -16,9 +16,12 @@ if TYPE_CHECKING:
 def convert_to_irreversible(model: "cobra.Model") -> list[str]:
     """Split non-exchange reversible reactions into forward + reverse pair.
 
-    Corresponds to stage 4 of GECKO MATLAB `makeEcModel`. Implicitly
-    covers stage 3 (`rev` field computation) since that field is only
-    consumed here and nowhere else in GECKO.
+    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
+    (stage 4). Wraps RAVEN: convertToIrrev.m. RAVENpy candidate.
+
+    Stage 3 (`rev` field computation) is absorbed into the bounds check
+    here, since the MATLAB `rev` field is only ever consumed by
+    convertToIrrev and never read again.
 
     For each non-exchange reaction with ``lb < 0``:
 
@@ -83,7 +86,8 @@ def remove_pseudoreaction_gprs(
 ) -> list[str]:
     """Clear gene-protein-reaction rules from pseudoreactions.
 
-    Corresponds to stage 1 of GECKO MATLAB `makeEcModel`. A reaction is
+    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
+    (stage 1, inline block). No RAVEN equivalent. A reaction is
     treated as a pseudoreaction if either:
 
     - its name contains the substring ``pseudoreaction`` (case-sensitive,
@@ -136,7 +140,8 @@ def remove_pseudoreaction_gprs(
 def invert_backwards_only_reactions(model: "cobra.Model") -> list[str]:
     """Flip reactions that are constrained to only carry negative flux.
 
-    Corresponds to stage 2 of GECKO MATLAB `makeEcModel`. A reaction
+    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
+    (stage 2, inline block). No RAVEN equivalent. A reaction
     with ``lb < 0`` and ``ub == 0`` is physically identical to a
     forward-only reaction with inverted stoichiometry and bounds
     ``[0, -lb]``. Rewriting it in that canonical form keeps downstream
