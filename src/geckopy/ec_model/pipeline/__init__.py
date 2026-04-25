@@ -18,6 +18,7 @@ from .protein_pool import (
     add_protein_usage_reactions,
     set_prot_pool_size,
 )
+from .query import get_reactions_from_enzyme
 from .set_kcat import set_kcat_for_reactions
 
 __all__ = [
@@ -30,6 +31,7 @@ __all__ = [
     "build_rxn_enzyme_coupling",
     "convert_to_irreversible",
     "expand_model",
+    "get_reactions_from_enzyme",
     "invert_backwards_only_reactions",
     "populate_enzyme_data",
     "remove_pseudoreaction_gprs",
