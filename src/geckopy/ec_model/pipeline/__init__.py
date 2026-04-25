@@ -1,4 +1,5 @@
 """Pipeline stages of make_ec_model, ported from GECKO MATLAB."""
+from .apply_custom_kcats import apply_custom_kcats
 from .apply_kcat import apply_kcat_constraints
 from .expand import expand_model
 from .populate_ec import (
@@ -27,6 +28,7 @@ __all__ = [
     "add_protein_pseudometabolites",
     "add_protein_usage_reactions",
     "allocate_ec_for_catalyzed_reactions",
+    "apply_custom_kcats",
     "apply_kcat_constraints",
     "build_rxn_enzyme_coupling",
     "convert_to_irreversible",
