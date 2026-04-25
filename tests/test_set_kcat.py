@@ -21,7 +21,7 @@ EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 def _ectestgem_ec_model() -> EcModel:
     adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
     cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model, _ = make_ec_model(cobra_model, adapter)
+    ec_model = make_ec_model(cobra_model, adapter)
     return ec_model
 
 

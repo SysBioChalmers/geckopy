@@ -20,7 +20,7 @@ def _ectestgem_ec_model() -> EcModel:
     """Load the ecTestGEM fixture through make_ec_model."""
     adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
     cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model, _ = make_ec_model(cobra_model, adapter)
+    ec_model = make_ec_model(cobra_model, adapter)
     return ec_model
 
 
