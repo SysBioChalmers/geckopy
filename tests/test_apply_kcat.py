@@ -69,20 +69,24 @@ def test_writes_expected_coefficients_multi_subunit_reaction():
 
 
 def test_kcat_nan_produces_zero_coefficient():
-    """When kcat is NaN, no coefficient is written."""
+    """When kcat is NaN, no coefficient is written. The all-NaN warning
+    is expected: a freshly built ecModel has all-NaN kcats."""
     ec_model = _ectestgem_ec_model()
     # All kcats are initialized to NaN by make_ec_model.
-    apply_kcat_constraints(ec_model)
+    with pytest.warns(UserWarning, match="no valid entries"):
+        apply_kcat_constraints(ec_model)
     r3 = ec_model.reactions.get_by_id("R3")
     assert _get_s_coef(r3, "prot_P4") == 0.0
 
 
 def test_kcat_zero_produces_zero_coefficient():
+    """All-zero/NaN selection triggers the documented warning."""
     ec_model = _ectestgem_ec_model()
     r3_idx = ec_model.ec.rxns.index("R3")
     ec_model.ec.kcat[r3_idx] = 0.0
 
-    apply_kcat_constraints(ec_model)
+    with pytest.warns(UserWarning, match="no valid entries"):
+        apply_kcat_constraints(ec_model)
 
     r3 = ec_model.reactions.get_by_id("R3")
     assert _get_s_coef(r3, "prot_P4") == 0.0
