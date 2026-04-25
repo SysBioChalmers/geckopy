@@ -5,6 +5,12 @@ Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
 cobrapy's GPR AST rather than RAVEN's string manipulation.
 
 Only applies to full ecModels (geckoLight skips this stage).
+
+MATLAB-COMPAT: GECKO MATLAB and RAVEN expandModel.m use string
+manipulation on grRules to detect and split isozymes. geckopy uses
+cobrapy's GPR AST instead. Output should be equivalent for any
+well-formed GPR; cases that differ are likely indicative of malformed
+GPR strings on the MATLAB side that the AST flags as invalid.
 """
 from __future__ import annotations
 

@@ -137,6 +137,16 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
 def add_protein_usage_reactions(model: "EcModel") -> list[str]:
     """Stage 11: add ``usage_prot_<enzyme>`` reactions.
 
+    MATLAB-COMPAT: GECKO MATLAB writes these reactions as
+    ``prot_<enzyme> -> prot_pool`` with bounds ``(-1000, 0)``, so flux
+    is negative when the enzyme is being produced. geckopy uses the
+    forward direction ``prot_pool -> prot_<enzyme>`` with bounds
+    ``(0, 1000)``, matching cobrapy convention. To make the two
+    representations interchangeable, MATLAB GECKO should switch to
+    the forward direction in a future release. The model I/O layer
+    (when written) detects and translates the old form on read.
+
+
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
     (stage 11, full-model branch only).
 
@@ -196,6 +206,14 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
 def add_protein_pool_exchange_reaction(model: "EcModel") -> None:
     """Stage 12: add the single ``prot_pool_exchange`` reaction.
 
+    MATLAB-COMPAT: GECKO MATLAB writes this as
+    ``prot_pool -> (nothing)`` with bounds ``(-1000, 0)``, so negative
+    flux imports protein. geckopy uses the forward direction
+    ``(nothing) -> prot_pool`` with bounds ``(0, 1000)``. As with the
+    usage reactions, MATLAB GECKO should switch to the forward
+    direction.
+
+
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
     (stage 12).
 
@@ -236,6 +254,13 @@ def set_prot_pool_size(
     sigma: float | None = None,
 ) -> float:
     """Set the upper bound of ``prot_pool_exchange`` to limit total protein use.
+
+    MATLAB-COMPAT: GECKO MATLAB sets the (negative) lower bound,
+    geckopy sets the (positive) upper bound. The numerical value is
+    identical in absolute terms. When MATLAB GECKO switches its pool
+    exchange to the forward direction, this function in MATLAB will
+    also switch from setting lb to setting ub.
+
 
     Ported from GECKO MATLAB: src/geckomat/change_model/setProtPoolSize.m.
 

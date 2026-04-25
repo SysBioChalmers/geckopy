@@ -45,6 +45,13 @@ def apply_kcat_constraints(
     assigned"; their stoichiometric coefficients are set to 0 (i.e.,
     the enzyme places no constraint on that reaction).
 
+    MATLAB-COMPAT: GECKO MATLAB clears existing coefficients before
+    checking kcat validity, so flipping a kcat to NaN or 0 and
+    re-applying clears the prior constraint. geckopy matches this
+    semantics exactly. (An earlier draft of geckopy did the check
+    first and skipped clearing on all-invalid; this was changed to
+    match MATLAB.) No MATLAB-side change required.
+
     The function is idempotent: existing non-zero coefficients at
     ``S[prot_<enzyme>, rxn]`` are first cleared for the reactions being
     updated, then freshly written from current ec.kcat. Running it
