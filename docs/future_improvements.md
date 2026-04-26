@@ -51,6 +51,17 @@ Notable items:
 - Make `getReactionsFromEnzyme` case-sensitive.
 - Forbid length-N kcat lists for un-suffixed `rxn_ids` in
   `setKcatForReactions` (strict matching rule).
+- Switch `getECstring` from accumulator (`EC_set` in/out) to a pure
+  function returning just the formatted EC string for one raw input.
+  The accumulator is a footgun: callers must remember to add a
+  trailing space to `EC_set` before calling, otherwise tokens collide.
+- Fix `getECstring` empty-input behaviour. It currently returns the
+  bare string `"EC"` for empty input because `strsplit("", " ")`
+  returns `{''}` and the loop runs once. Should return `""`.
+- Validate tokens in `getECstring`. The current implementation will
+  blindly produce `ECEC1.1.1.1` for already-prefixed input and
+  `ECnotanec` for junk. Strip a leading `EC` (case-insensitive) before
+  re-prefixing and warn-and-skip tokens that fail the EC-shape regex.
 
 ## get_enzyme_data subsystem
 
