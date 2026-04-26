@@ -51,3 +51,13 @@ Notable items:
 - Make `getReactionsFromEnzyme` case-sensitive.
 - Forbid length-N kcat lists for un-suffixed `rxn_ids` in
   `setKcatForReactions` (strict matching rule).
+
+## get_enzyme_data subsystem
+
+- **KEGG as an alternative protein-sequence source for `make_ec_model`.**
+  Currently `populate_enzyme_data` consults UniProt only. KEGG returns
+  similar information (gene, EC, MW, sequence) and is sometimes more
+  complete for non-model organisms. The KEGG loader and downloader are
+  ported as part of `get_enzyme_data/`, but `make_ec_model` does not yet
+  use them. Future work: add a KEGG fallback path in stage 7 of
+  `make_ec_model`, controlled via adapter parameters.
