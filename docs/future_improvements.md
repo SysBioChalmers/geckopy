@@ -51,17 +51,15 @@ Notable items:
 - Make `getReactionsFromEnzyme` case-sensitive.
 - Forbid length-N kcat lists for un-suffixed `rxn_ids` in
   `setKcatForReactions` (strict matching rule).
-- Switch `getECstring` from accumulator (`EC_set` in/out) to a pure
-  function returning just the formatted EC string for one raw input.
-  The accumulator is a footgun: callers must remember to add a
-  trailing space to `EC_set` before calling, otherwise tokens collide.
-- Fix `getECstring` empty-input behaviour. It currently returns the
-  bare string `"EC"` for empty input because `strsplit("", " ")`
-  returns `{''}` and the loop runs once. Should return `""`.
-- Validate tokens in `getECstring`. The current implementation will
-  blindly produce `ECEC1.1.1.1` for already-prefixed input and
-  `ECnotanec` for junk. Strip a leading `EC` (case-insensitive) before
-  re-prefixing and warn-and-skip tokens that fail the EC-shape regex.
+- Delete `getECstring` from MATLAB GECKO. After the `findECInDB`
+  refactor (geckopy works with raw `;`-joined EC tokens throughout)
+  the function has no remaining callers. It also has three latent
+  bugs not worth fixing in place: an accumulator footgun (callers
+  must add a trailing space to `EC_set` before calling, otherwise
+  tokens collide), an empty-input quirk (returns `"EC"` instead of
+  `""` because `strsplit("", " ")` returns `{''}`), and no
+  validation (would happily emit `ECEC1.1.1.1` for already-prefixed
+  input or `ECnotanec` for junk).
 - Fix the validation regex in `getECfromGEM`. The current pattern
   `(\d\.(\w|-)+\.(\w|-)+\.(\w|-)+)(;\w+\.(\w|-)+\.(\w|-)+\.(\w|-)+)*(.*)`
   substituted with `$3` returns the level-3 character of the first EC
@@ -71,6 +69,12 @@ Notable items:
   discarded. Replace with a straightforward
   `^TOKEN(;TOKEN)*$` validation where `TOKEN` is the canonical
   four-level dotted EC pattern with `-` allowed in any level.
+- Dedupe the `intersection` helper output in `findECInDB`. The
+  helper currently produces duplicates when multiple subunits share
+  the same EC (e.g. `"1.1.1.1;1.1.1.1"` for a two-subunit complex
+  whose subunits both map to EC 1.1.1.1). Apply a final
+  `compare_wild` pass on the intersection result, mirroring what
+  geckopy does.
 
 ## get_enzyme_data subsystem
 

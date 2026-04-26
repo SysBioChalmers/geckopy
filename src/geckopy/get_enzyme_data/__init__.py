@@ -3,6 +3,6 @@
 Mirrors GECKO MATLAB's `src/geckomat/get_enzyme_data/` directory.
 """
 from .ec_from_gem import get_ec_from_gem
-from .ec_string import get_ec_string
+from .find_ec_in_db import find_ec_in_db
 
-__all__ = ["get_ec_from_gem", "get_ec_string"]
+__all__ = ["find_ec_in_db", "get_ec_from_gem"]

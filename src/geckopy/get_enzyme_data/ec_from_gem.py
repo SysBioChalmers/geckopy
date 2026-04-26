@@ -17,10 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Pattern for a `;`-joined EC string, e.g. `1.2.3.4;5.6.7.-`. Each token
 # is four dot-separated levels of either a non-negative integer or `-`
-# (the IUBMB placeholder). The constant is duplicated from
-# `ec_string.py` (token-level there, semicolon-joined here) by design;
-# the two patterns differ in their separators and a shared helper would
-# obscure that.
+# (the IUBMB placeholder).
 _EC_TOKEN = r"(?:\d+|-)\.(?:\d+|-)\.(?:\d+|-)\.(?:\d+|-)"
 _EC_MULTI_RE = re.compile(rf"^{_EC_TOKEN}(?:;{_EC_TOKEN})*$")
 
