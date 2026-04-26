@@ -62,6 +62,15 @@ Notable items:
   blindly produce `ECEC1.1.1.1` for already-prefixed input and
   `ECnotanec` for junk. Strip a leading `EC` (case-insensitive) before
   re-prefixing and warn-and-skip tokens that fail the EC-shape regex.
+- Fix the validation regex in `getECfromGEM`. The current pattern
+  `(\d\.(\w|-)+\.(\w|-)+\.(\w|-)+)(;\w+\.(\w|-)+\.(\w|-)+\.(\w|-)+)*(.*)`
+  substituted with `$3` returns the level-3 character of the first EC
+  for any valid input (e.g. `"1.2.3.4"` -> `"3"`), and the subsequent
+  `~cellfun(@isempty, ...)` then flags every non-empty result as
+  invalid. As written, every non-empty EC string is silently
+  discarded. Replace with a straightforward
+  `^TOKEN(;TOKEN)*$` validation where `TOKEN` is the canonical
+  four-level dotted EC pattern with `-` allowed in any level.
 
 ## get_enzyme_data subsystem
 
