@@ -117,6 +117,11 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Make `readDLKcatOutput`'s substrate-name match against
+  `model.metNames` case-insensitive. `ismember` is case-sensitive by
+  default, which can fail spuriously when an SBML loader normalizes
+  case differently from how the DLKcat input was generated. geckopy
+  uses case-insensitive matching here.
 - Fix the `rxnsToClear(ecRxns) = false` block in `writeDLKcatInput`.
   The `rxnsToClear` array has length `numel(ecRxns)` (the count of
   selected reactions), but `ecRxns` (after `find()`) holds indices
