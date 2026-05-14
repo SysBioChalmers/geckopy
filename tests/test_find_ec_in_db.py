@@ -349,6 +349,77 @@ def test_intersection_result_is_deduped():
 
 
 # --------------------------------------------------------------------------- #
+# Optional `conflicts` accumulator
+# --------------------------------------------------------------------------- #
+
+def test_conflicts_accumulator_is_optional():
+    """Default behaviour (no accumulator) is unchanged."""
+    db_eccodes, db_mw, idx = _make_db([
+        ("g1", "1.1.1.1", 100.0),
+        ("g1", "2.2.2.2", 200.0),
+    ])
+    result = find_ec_in_db(["g1"], db_eccodes, db_mw, idx)
+    assert result == "1.1.1.1"
+
+
+def test_conflicts_accumulator_stays_empty_when_no_conflict():
+    db_eccodes, db_mw, idx = _make_db([
+        ("g1", "1.1.1.1", 100.0),
+        ("g1", "1.1.1.1", 200.0),  # same EC, no conflict
+    ])
+    conflicts: list = []
+    find_ec_in_db(["g1"], db_eccodes, db_mw, idx, conflicts=conflicts)
+    assert conflicts == []
+
+
+def test_conflicts_accumulator_collects_one_per_conflicting_gene():
+    db_eccodes, db_mw, idx = _make_db([
+        ("g1", "1.1.1.1", 100.0),
+        ("g1", "2.2.2.2", 50.0),
+        ("g2", "3.3.3.3", 100.0),  # no conflict
+        ("g3", "4.4.4.4", 100.0),
+        ("g3", "5.5.5.5", 100.0),
+    ])
+    conflicts: list = []
+    find_ec_in_db(
+        ["g1", "g2", "g3"], db_eccodes, db_mw, idx, conflicts=conflicts,
+    )
+    assert len(conflicts) == 2
+    genes = [c[0] for c in conflicts]
+    assert genes == ["g1", "g3"]
+
+
+def test_conflicts_accumulator_protein_indices_are_first_per_distinct_ec():
+    """Protein indices appended should be the first DB row seen for
+    each distinct EC, mirroring MATLAB ``unique('stable')``."""
+    db_eccodes, db_mw, idx = _make_db([
+        ("g1", "1.1.1.1", 100.0),  # idx 0, EC A first match
+        ("g1", "1.1.1.1", 200.0),  # idx 1, EC A duplicate
+        ("g1", "2.2.2.2", 300.0),  # idx 2, EC B first match
+        ("g1", "2.2.2.2", 400.0),  # idx 3, EC B duplicate
+    ])
+    conflicts: list = []
+    find_ec_in_db(["g1"], db_eccodes, db_mw, idx, conflicts=conflicts)
+    assert len(conflicts) == 1
+    gene, protein_indices = conflicts[0]
+    assert gene == "g1"
+    assert protein_indices == [0, 2]
+
+
+def test_conflicts_accumulator_appends_across_calls():
+    db_eccodes, db_mw, idx = _make_db([
+        ("g1", "1.1.1.1", 100.0),
+        ("g1", "2.2.2.2", 100.0),
+        ("g2", "3.3.3.3", 100.0),
+        ("g2", "4.4.4.4", 100.0),
+    ])
+    conflicts: list = []
+    find_ec_in_db(["g1"], db_eccodes, db_mw, idx, conflicts=conflicts)
+    find_ec_in_db(["g2"], db_eccodes, db_mw, idx, conflicts=conflicts)
+    assert [c[0] for c in conflicts] == ["g1", "g2"]
+
+
+# --------------------------------------------------------------------------- #
 # Complex realistic case
 # --------------------------------------------------------------------------- #
 

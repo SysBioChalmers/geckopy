@@ -87,6 +87,8 @@ def find_ec_in_db(
     db_eccodes: list[str],
     db_mw: np.ndarray,
     gene_to_protein_indices: dict[str, list[int]],
+    *,
+    conflicts: list[tuple[str, list[int]]] | None = None,
 ) -> str:
     """Collect EC codes for a reaction's genes from a protein database.
 
@@ -146,6 +148,14 @@ def find_ec_in_db(
         Maps gene ID to a list of protein row indices in the DB. Built
         once by ``getECfromDatabase`` before iterating reactions.
         Missing keys mean "this gene has no DB match" (silent).
+    conflicts
+        Optional accumulator. If provided, ``(gene,
+        protein_indices)`` tuples are appended for every gene in
+        ``gene_set`` that maps to multiple distinct EC strings, where
+        ``protein_indices`` are the DB row indices of the first
+        protein per distinct EC (mirroring MATLAB's
+        ``unique('stable')`` indexing). Useful for aggregating
+        conflicts across many calls without scraping logs.
 
     Returns
     -------
@@ -163,14 +173,18 @@ def find_ec_in_db(
             per_gene_tokens.append([])
             continue
 
-        # Distinct EC strings, preserving DB order.
+        # Distinct EC strings, preserving DB order. Track the first
+        # protein index seen per distinct EC so callers can collect
+        # them as conflict evidence.
         seen: set[str] = set()
         distinct: list[str] = []
+        distinct_proteins: list[int] = []
         for p in matched:
             ec = db_eccodes[p]
             if ec not in seen:
                 seen.add(ec)
                 distinct.append(ec)
+                distinct_proteins.append(p)
 
         if len(distinct) > 1:
             logger.warning(
@@ -182,6 +196,8 @@ def find_ec_in_db(
                 distinct[0],
             )
             chosen = distinct[0]
+            if conflicts is not None:
+                conflicts.append((gene, distinct_proteins))
         else:
             mws = db_mw[matched]
             finite_mws = np.where(np.isnan(mws), np.inf, mws)

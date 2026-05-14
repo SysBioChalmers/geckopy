@@ -84,6 +84,17 @@ Notable items:
 - Fix the stale `[1/hr]` comment on `SAcell{3}` in `loadBRENDAdata`.
   With the post-refactor scaling factors (SA * 1/60, MW * 1/1000)
   the unit is `[1/s]`, not `[1/hr]`.
+- Resolve the `'add'` action in `getECfromDatabase`: either implement
+  the commented-out `addMultipleMatches` branch (and drop the
+  apologetic `% I don't understand the purpose of this, let's skip
+  it for now` comment) or remove the option from the documented API.
+  geckopy currently only supports `'display'` and `'ignore'`.
+- Subset by `ecRxns` upfront in `getECfromDatabase` rather than
+  iterating every reaction and discarding the unwanted results at
+  the end. The function's own inline comment already calls this out
+  ("Probably faster to subset with ecRxns in the beginning of the
+  script, but this was at the moment simpler to implement").
+  geckopy already does this.
 
 ## get_enzyme_data subsystem
 
