@@ -95,6 +95,28 @@ Notable items:
   ("Probably faster to subset with ecRxns in the beginning of the
   script, but this was at the moment simpler to implement").
   geckopy already does this.
+- Fix the search-order/output-ranking inconsistency in
+  `fuzzyKcatMatching`. The search order inside `mainMatch` tries
+  org-SA (output rank 5) BEFORE any-organism-no-substrate-kcat
+  (output rank 4). When both are available for a reaction, MATLAB
+  returns the org-SA result and reports its origin as 5, even though
+  the docstring's origin ranking implies origin 4 should win. Either
+  swap the search order so any-no-subs-kcat is tried before org-SA,
+  or update the docstring to match the search order. geckopy
+  replicates the current MATLAB behavior with a MATLAB-COMPAT note.
+- Cap the iterative-EC-escalation loop in `fuzzyKcatMatching` at 4
+  wildcards. The current `while ~success` loop has no termination
+  condition for tokens that never match; combined with
+  `EC{k} = [EC{k}(1:dot_pos(4-wild_num)) ...]`, when `wild_num`
+  exceeds 4 the indexing becomes invalid (``dot_pos(0)``) and MATLAB
+  errors out. geckopy returns "no match" cleanly at that point.
+- Remove the dead-code `if forceWClvl == 1` block in
+  `fuzzyKcatMatching`. After the preceding `while forceWClvl > 0`
+  loop, `forceWClvl` is always 0, so the `if` never fires. Either
+  delete it or capture the original `forceWClvl` value before the
+  loop and check that.
+- Drop the unused `ids` field from the loaded `phylDistStruct` in
+  `KEGG_struct`. It is parsed but never read.
 
 ## get_enzyme_data subsystem
 
