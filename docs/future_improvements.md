@@ -75,6 +75,15 @@ Notable items:
   whose subunits both map to EC 1.1.1.1). Apply a final
   `compare_wild` pass on the intersection result, mirroring what
   geckopy does.
+- Simplify `loadBRENDAdata` signature: drop the `modelAdapter` arg
+  and `ModelAdapterManager.getDefault()` fallback; take the folder
+  path directly. The adapter resolution belongs at the call site.
+- Drop the unused 5th column from the BRENDA dump file format.
+  `loadBRENDAdata` parses it as `%q` and never reads it; observed
+  dumps consistently set it to `*`.
+- Fix the stale `[1/hr]` comment on `SAcell{3}` in `loadBRENDAdata`.
+  With the post-refactor scaling factors (SA * 1/60, MW * 1/1000)
+  the unit is `[1/s]`, not `[1/hr]`.
 
 ## get_enzyme_data subsystem
 
