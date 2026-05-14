@@ -6,6 +6,7 @@ from .complex_portal_loader import (
     load_complex_portal_json,
 )
 from .dlkcat_ignore_lists import DLKcatIgnoreLists, load_dlkcat_ignore_lists
+from .flux_data import FluxData
 from .mw import calculate_mw
 from .pax_db_loader import ProtData, load_pax_db
 from .phyl_dist import PhylDist, load_phyl_dist
@@ -16,6 +17,7 @@ __all__ = [
     "BrendaData",
     "ComplexPortalEntry",
     "DLKcatIgnoreLists",
+    "FluxData",
     "PhylDist",
     "ProtData",
     "UniprotDB",
