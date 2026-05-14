@@ -117,6 +117,14 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Fix the wildcard branch of `findMaxValue`. The current code does
+  `EC_cell{i} = EC_cell{i}(strfind(EC_cell{i},'-')-1:end);` which
+  keeps the suffix from before the first `-` to the end (yielding
+  e.g. `".-"` for `"EC1.1.1.-"`), then re-prepends `"EC"` to produce
+  `"EC.-"` and uses that as a substring-search key. No real EC code
+  starts with `"EC.-"`, so the wildcard branch matches nothing in
+  practice. Replace with a prefix match on everything before the
+  first `-` (e.g. `"EC1.1.1."` for `"EC1.1.1.-"`).
 - Delete `updateProtPool` from MATLAB GECKO. The function has been
   obsolete since GECKO 3.2.0 (all enzymes, measured and unmeasured,
   draw from the protein pool); its sole runtime behaviour on a
