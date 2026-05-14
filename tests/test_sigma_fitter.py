@@ -1,0 +1,210 @@
+"""Tests for sigma_fitter."""
+from pathlib import Path
+
+import cobra
+import numpy as np
+import pytest
+from scipy import sparse
+
+from geckopy import EcModel, ModelAdapter
+from geckopy.ec_model.ec_data import EcData
+from geckopy.kcat_sensitivity_analysis import (
+    SigmaFitterResult,
+    sigma_fitter,
+)
+
+
+# --------------------------------------------------------------------------- #
+# Tiny enzyme-constrained model fixture
+# --------------------------------------------------------------------------- #
+
+def _adapter(
+    tmp_path: Path,
+    *,
+    p_tot: float = 1.0,
+    f: float = 1.0,
+    gr_exp: float = 0.5,
+) -> ModelAdapter:
+    (tmp_path / "model_adapter.toml").write_text(
+        f'conv_gem = "dummy.xml"\n'
+        f'org_name = "test"\n'
+        f'p_tot = {p_tot}\n'
+        f'f = {f}\n'
+        f'gr_exp = {gr_exp}\n'
+    )
+    return ModelAdapter.from_folder(tmp_path)
+
+
+def _build_pool_only_model(adapter: ModelAdapter) -> EcModel:
+    """A model where bio_rxn flux is bounded only by prot_pool_exchange.
+
+    Topology:
+        prot_pool_exchange:  -> prot_pool          (UB controlled by sigma)
+        biomass:        prot_pool ->                (1 unit pool per unit growth)
+
+    So max growth = prot_pool_exchange.upper_bound = 1000 * p_tot * f * sigma.
+    With p_tot=1, f=1: growth = 1000*sigma. The optimal sigma is
+    growth_rate / 1000.
+    """
+    model = EcModel("toy", adapter=adapter)
+
+    pool = cobra.Metabolite("prot_pool", compartment="c")
+    model.add_metabolites([pool])
+
+    pool_ex = cobra.Reaction("prot_pool_exchange")
+    pool_ex.add_metabolites({pool: 1.0})
+    pool_ex.lower_bound = 0.0
+    pool_ex.upper_bound = 1000.0
+
+    bio = cobra.Reaction("biomass")
+    bio.add_metabolites({pool: -1.0})
+    bio.lower_bound = 0.0
+    bio.upper_bound = 1000.0
+
+    model.add_reactions([pool_ex, bio])
+    model.objective = "biomass"
+
+    model.ec = EcData(
+        rxns=[],
+        kcat=np.empty(0, dtype=float),
+        source=[],
+        notes=[],
+        eccodes=[],
+        rxn_enz_mat=sparse.csr_matrix((0, 0), dtype=float),
+    )
+    return model
+
+
+# --------------------------------------------------------------------------- #
+# Pre-flight
+# --------------------------------------------------------------------------- #
+
+def test_n_sigma_steps_zero_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_pool_only_model(adapter)
+    with pytest.raises(ValueError, match="n_sigma_steps"):
+        sigma_fitter(model, n_sigma_steps=0)
+
+
+def test_no_adapter_no_defaults_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_pool_only_model(adapter)
+    model.adapter = None
+    with pytest.raises(ValueError, match="adapter"):
+        sigma_fitter(model)
+
+
+# --------------------------------------------------------------------------- #
+# Best-sigma selection
+# --------------------------------------------------------------------------- #
+
+def test_best_sigma_close_to_target_growth(tmp_path):
+    """With p_tot=1, f=1, growth = 1000*sigma. Target growth 0.5 means
+    optimal sigma ~ 0.0005, but we only try sigmas 0.01..1.0, so the
+    smallest tried (0.01 -> growth=10) is still way above target.
+    The best sigma in the grid is 0.01 (closest to target's needed value).
+
+    Actually with growth_rate=10 and p_tot=1, f=1, the optimal sigma
+    is exactly 0.01. Use that as the test target."""
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model)
+    assert isinstance(result, SigmaFitterResult)
+    # growth = 1000*sigma; for growth=10, sigma=0.01.
+    assert result.sigma == pytest.approx(0.01)
+    # Error should be near zero for the best sigma.
+    best_idx = int(np.argmin(result.error_grid))
+    assert result.error_grid[best_idx] < 1e-6
+
+
+def test_growth_grid_scales_linearly_with_sigma(tmp_path):
+    """For the toy model, growth = 1000*sigma."""
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model, n_sigma_steps=10)
+    expected = result.sigma_grid * 1000.0
+    np.testing.assert_allclose(result.growth_grid, expected, rtol=1e-6)
+
+
+def test_optimal_sigma_applied_to_model_at_end(tmp_path):
+    """geckopy divergence from MATLAB: model is left at the OPTIMAL
+    sigma, not the last tried (1.0)."""
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=50.0)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model)
+    # Pool exchange ub should reflect optimal sigma:
+    # ub = p_tot * f * sigma * 1000 = 1 * 1 * sigma * 1000 = 1000*sigma
+    expected_ub = 1000.0 * result.sigma
+    assert (
+        model.reactions.get_by_id("prot_pool_exchange").upper_bound
+        == pytest.approx(expected_ub)
+    )
+
+
+def test_model_at_optimal_sigma_reaches_growth_rate(tmp_path):
+    """After fitting, the model's LP optimum should match growth_rate
+    closely."""
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=50.0)
+    model = _build_pool_only_model(adapter)
+    sigma_fitter(model)
+    sol = model.optimize()
+    assert sol.objective_value == pytest.approx(50.0, rel=1e-6)
+
+
+# --------------------------------------------------------------------------- #
+# Defaults from adapter
+# --------------------------------------------------------------------------- #
+
+def test_defaults_pulled_from_adapter(tmp_path):
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
+    model = _build_pool_only_model(adapter)
+    # Don't pass any explicit kwargs; everything should come from adapter.
+    result = sigma_fitter(model)
+    assert result.sigma == pytest.approx(0.01)
+
+
+def test_explicit_growth_rate_overrides_adapter(tmp_path):
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=999.0)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model, growth_rate=10.0)
+    assert result.sigma == pytest.approx(0.01)
+
+
+def test_explicit_p_tot_and_f_override_adapter(tmp_path):
+    adapter = _adapter(tmp_path, p_tot=999.0, f=999.0, gr_exp=10.0)
+    model = _build_pool_only_model(adapter)
+    # Override: p_tot=1, f=1 -> growth = 1000*sigma; sigma=0.01 for growth=10.
+    result = sigma_fitter(model, p_tot=1.0, f=1.0)
+    assert result.sigma == pytest.approx(0.01)
+
+
+# --------------------------------------------------------------------------- #
+# Grid shape
+# --------------------------------------------------------------------------- #
+
+def test_default_n_sigma_steps_is_100(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model)
+    assert result.sigma_grid.shape == (100,)
+    assert result.growth_grid.shape == (100,)
+    assert result.error_grid.shape == (100,)
+
+
+def test_custom_n_sigma_steps(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model, n_sigma_steps=10)
+    assert result.sigma_grid.shape == (10,)
+    np.testing.assert_allclose(
+        result.sigma_grid,
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    )
+
+
+def test_sigma_grid_starts_above_zero_ends_at_one(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_pool_only_model(adapter)
+    result = sigma_fitter(model, n_sigma_steps=20)
+    assert result.sigma_grid[0] > 0
+    assert result.sigma_grid[-1] == pytest.approx(1.0)

@@ -117,6 +117,13 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Fix `sigmaFitter` to actually apply the optimal sigma to the
+  returned model. The current implementation tries 100 sigma values
+  in a loop, picks the best, then returns the model with the LAST
+  trial (sigma=1.0) applied, not the best. The docstring claims the
+  model is adapted to the optimal sigma. Add a final
+  `model = setProtPoolSize(model, Ptot, f, sigma, modelAdapter);`
+  after the loop.
 - Fix the wildcard branch of `findMaxValue`. The current code does
   `EC_cell{i} = EC_cell{i}(strfind(EC_cell{i},'-')-1:end);` which
   keeps the suffix from before the first `-` to the end (yielding
