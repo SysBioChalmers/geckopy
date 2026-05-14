@@ -117,6 +117,15 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Fix the `all(kcatSubSystemIdx)` check in `getStandardKcat`. The
+  intent is "does the reaction's subsystem appear in our subsystem
+  list?", but `all` of a length-N boolean vector is true only when
+  every entry is true (i.e. only when the model has a single unique
+  subsystem). For any model with more than one subsystem, the
+  per-subsystem mean kcat is effectively dead code and the function
+  always falls back to the global standard kcat. Use `any(...)` (or
+  the equivalent membership check) instead. geckopy uses the
+  intended semantics.
 - Make `readDLKcatOutput`'s substrate-name match against
   `model.metNames` case-insensitive. `ismember` is case-sensitive by
   default, which can fail spuriously when an SBML loader normalizes
