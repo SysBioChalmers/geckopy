@@ -117,6 +117,12 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Make `calculateFfactor` raise (or return NaN with a warning)
+  when no proteome data is provided. Silently returning 0.5 hides
+  the absence of real data; downstream calculations using this f
+  factor look fine until they don't. geckopy's split design
+  (`load_pax_db` raises FileNotFoundError, `calculate_f_factor`
+  requires pre-loaded data) makes the missing-data case explicit.
 - Fix the `all(kcatSubSystemIdx)` check in `getStandardKcat`. The
   intent is "does the reaction's subsystem appear in our subsystem
   list?", but `all` of a length-N boolean vector is true only when

@@ -7,6 +7,7 @@ from .complex_portal_loader import (
 )
 from .dlkcat_ignore_lists import DLKcatIgnoreLists, load_dlkcat_ignore_lists
 from .mw import calculate_mw
+from .pax_db_loader import ProtData, load_pax_db
 from .phyl_dist import PhylDist, load_phyl_dist
 from .pubchem import find_met_smiles
 from .uniprot_loader import UniprotDB, load_uniprot_tsv
@@ -16,6 +17,7 @@ __all__ = [
     "ComplexPortalEntry",
     "DLKcatIgnoreLists",
     "PhylDist",
+    "ProtData",
     "UniprotDB",
     "calculate_mw",
     "find_met_smiles",
@@ -23,6 +25,7 @@ __all__ = [
     "load_brenda_data",
     "load_complex_portal_json",
     "load_dlkcat_ignore_lists",
+    "load_pax_db",
     "load_phyl_dist",
     "load_uniprot_tsv",
 ]
