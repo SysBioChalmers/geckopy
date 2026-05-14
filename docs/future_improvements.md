@@ -117,6 +117,12 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Delete `updateProtPool` from MATLAB GECKO. The function has been
+  obsolete since GECKO 3.2.0 (all enzymes, measured and unmeasured,
+  draw from the protein pool); its sole runtime behaviour on a
+  3.2.0+ model is to raise an error pointing users to
+  `setProtPoolSize`. geckopy does not port it; the recommended
+  replacement is `set_prot_pool_size` in `protein_pool.py`.
 - Make `calculateFfactor` raise (or return NaN with a warning)
   when no proteome data is provided. Silently returning 0.5 hides
   the absence of real data; downstream calculations using this f
