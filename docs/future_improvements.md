@@ -117,6 +117,15 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Fix the `rxnsToClear(ecRxns) = false` block in `writeDLKcatInput`.
+  The `rxnsToClear` array has length `numel(ecRxns)` (the count of
+  selected reactions), but `ecRxns` (after `find()`) holds indices
+  into the larger `model.ec.rxns` space. For any non-trivial
+  selection, indices will exceed the array length and MATLAB will
+  error out. The intended behaviour ("clear unselected reactions in
+  the subset matrix") is already achieved by the preceding
+  `reducedS(:, origRxnIdxs)` slice; the `rxnsToClear` block is
+  dead/buggy and should be removed.
 
 ## get_enzyme_data subsystem
 
