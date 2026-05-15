@@ -153,6 +153,21 @@ Notable items:
   always falls back to the global standard kcat. Use `any(...)` (or
   the equivalent membership check) instead. geckopy uses the
   intended semantics.
+- Fix `saveEcModel`'s default filename. The MATLAB default is
+  `'ecModel'` (no extension); combined with the dispatch on
+  `filename(end-3:end)` falling through to `writeYAMLmodel` for
+  unknown extensions, the file is written as
+  `<path>/models/ecModel` (no extension). Either default to
+  `'ecModel.yml'` or auto-append `.yml` when no extension is
+  given. geckopy defaults to `'ecModel.yml'`.
+- Drop the `e-005` -> `e-05 ` post-processing in `saveEcModel`'s
+  SBML branch. The Windows/Mac stoichiometric-coefficient
+  formatting workaround predates current libSBML, which formats
+  consistently across platforms. The backup-file dance is also a
+  footgun: if the function errors mid-way the user is left with a
+  dangling `backup.xml`. Either rely on libSBML's current output
+  directly, or fix it via a libSBML option rather than text
+  rewriting.
 - Update `writeYAMLmodel` / `readYAMLmodel` (RAVEN) to emit and
   accept the canonical geckopy YAML schema specified in
   [yaml_format.md](yaml_format.md). The conversion is purely

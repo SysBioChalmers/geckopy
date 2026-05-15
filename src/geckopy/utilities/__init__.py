@@ -14,6 +14,7 @@ from .get_subset_ec_model import get_subset_ec_model
 from .load_ec_model import load_ec_model
 from .map_rxns_to_conv import MapRxnsResult, map_rxns_to_conv
 from .report_enzyme_usage import EnzymeUsageReport, report_enzyme_usage
+from .save_ec_model import save_ec_model
 
 __all__ = [
     "AddNewRxnsResult",
@@ -30,4 +31,5 @@ __all__ = [
     "load_ec_model",
     "map_rxns_to_conv",
     "report_enzyme_usage",
+    "save_ec_model",
 ]
