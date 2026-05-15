@@ -10,4 +10,4 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
-.venv/
+.claude/
