@@ -113,7 +113,7 @@ def save_ec_model(
     yaml.default_flow_style = False
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
-        yaml.dump(doc, f)
+        yaml.dump(_to_native(doc), f)
     return path
 
 
@@ -215,6 +215,28 @@ def _build_ec_enzymes_list(ec: EcData) -> list:
             entry["concs"] = float(ec.concs[j])
         out.append(entry)
     return out
+
+
+def _to_native(value):
+    """Recursively coerce ruamel.yaml scalar wrappers (ScalarInt,
+    ScalarFloat, ...) and numpy scalars to native Python types.
+
+    cobra-py's YAML loader stores ruamel scalar types on attributes
+    like ``Metabolite.charge``; passing those through to the YAML
+    safe-dumper raises RepresenterError. Coerce at the boundary so
+    the on-disk file uses plain Python primitives.
+    """
+    if isinstance(value, dict):
+        return {_to_native(k): _to_native(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_native(v) for v in value]
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        return float(value)
+    return value
 
 
 def _eccodes_to_yaml(eccodes: str):
