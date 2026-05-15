@@ -97,3 +97,25 @@ def test_optional_fields_default_to_empty(tmp_path):
 def test_returns_dataclass_instances(tmp_path):
     entries = load_complex_portal_json(EXAMPLE_JSON)
     assert isinstance(entries[0], ComplexPortalEntry)
+
+
+def test_scalar_stochiometry_wrapped_to_list(tmp_path):
+    """ComplexPortal exports collapse single-element arrays to scalars
+    (matching MATLAB jsonencode round-trip behaviour); the loader
+    normalises them back to lists."""
+    path = _write(tmp_path / "c.json", [{
+        "complexID": "C1", "name": "n", "specie": "s",
+        "geneName": ["G1"], "protID": ["P1"], "stochiometry": 0,
+    }])
+    entries = load_complex_portal_json(path)
+    assert entries[0].stoichiometry == [0]
+
+
+def test_scalar_gene_and_protein_id_wrapped_to_list(tmp_path):
+    path = _write(tmp_path / "c.json", [{
+        "complexID": "C1", "name": "n", "specie": "s",
+        "geneName": "G1", "protID": "P1", "stochiometry": [1],
+    }])
+    entries = load_complex_portal_json(path)
+    assert entries[0].gene_names == ["G1"]
+    assert entries[0].protein_ids == ["P1"]

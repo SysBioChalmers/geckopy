@@ -83,9 +83,11 @@ def load_complex_portal_json(path: str | Path) -> list[ComplexPortalEntry]:
                 complex_id=item["complexID"],
                 name=item.get("name", ""),
                 species=item.get("specie", ""),
-                gene_names=list(item.get("geneName", [])),
-                protein_ids=list(item.get("protID", [])),
-                stoichiometry=[int(s) for s in item.get("stochiometry", [])],
+                gene_names=_as_list(item.get("geneName", [])),
+                protein_ids=_as_list(item.get("protID", [])),
+                stoichiometry=[
+                    int(s) for s in _as_list(item.get("stochiometry", []))
+                ],
             ))
         except (KeyError, TypeError, ValueError) as e:
             raise ValueError(
@@ -93,3 +95,15 @@ def load_complex_portal_json(path: str | Path) -> list[ComplexPortalEntry]:
             ) from None
 
     return entries
+
+
+def _as_list(value):
+    """Wrap a scalar in a single-element list; pass lists through.
+
+    ComplexPortal exports collapse single-element arrays to scalars
+    (matching MATLAB's `jsonencode` round-trip behaviour); this
+    normalises them back to lists.
+    """
+    if isinstance(value, list):
+        return value
+    return [value]
