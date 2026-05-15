@@ -153,6 +153,22 @@ Notable items:
   always falls back to the global standard kcat. Use `any(...)` (or
   the equivalent membership check) instead. geckopy uses the
   intended semantics.
+- Update `writeYAMLmodel` / `readYAMLmodel` (RAVEN) to emit and
+  accept the canonical geckopy YAML schema specified in
+  [yaml_format.md](yaml_format.md). The conversion is purely
+  cosmetic (drop the outer sequence wrapper; drop all `!!omap`
+  tags; flatten `compartments`, per-met / per-rxn / per-gene
+  entries, `reactions[].metabolites`, and `ec-rxns[].enzymes`;
+  lift `id` and `name` out of `metaData` to top-level; move
+  `geckoLight` out of `metaData` into a top-level boolean
+  `gecko_light`; move per-met `smiles` into `annotation:
+  {smiles: [...]}`; coerce annotation values to single-element
+  lists). Once both implementations agree on the canonical
+  format, ecModels become directly exchangeable between MATLAB
+  GECKO and geckopy with no translator. As an interim measure,
+  ship a one-off conversion script (`legacy_to_canonical.py` or
+  similar in `docs/` or `scripts/`) for rewriting existing
+  RAVEN-format YAMLs (e.g. the published `ecYeastGEM.yml`).
 - Make `readDLKcatOutput`'s substrate-name match against
   `model.metNames` case-insensitive. `ismember` is case-sensitive by
   default, which can fail spuriously when an SBML loader normalizes
