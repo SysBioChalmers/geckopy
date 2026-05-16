@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_FILENAME = "ecModel.yml"
 _YAML_SUFFIXES = {".yml", ".yaml"}
+_SBML_SUFFIXES = {".xml", ".sbml"}
 
 
 def save_ec_model(
@@ -103,6 +104,12 @@ def save_ec_model(
     )
     path = _resolve_path(filename, resolved_adapter)
 
+    if path.suffix.lower() in _SBML_SUFFIXES:
+        from ..io.sbml import write_sbml_ec_model
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_sbml_ec_model(model, path)
+        return path
+
     doc = model_to_dict(model)
     doc["gecko_light"] = bool(model.ec.gecko_light)
     doc["metaData"] = _build_metadata(model)
@@ -128,12 +135,13 @@ def _resolve_path(
     if filename is None:
         filename = _DEFAULT_FILENAME
     path = Path(filename)
-    if path.suffix.lower() not in _YAML_SUFFIXES:
+    if (
+        path.suffix.lower() not in _YAML_SUFFIXES
+        and path.suffix.lower() not in _SBML_SUFFIXES
+    ):
         raise ValueError(
-            "ecModels are saved in YAML format only "
-            f"(.yml/.yaml). Got: {path.suffix!r}. To save SBML use "
-            "`cobra.io.write_sbml_model` directly (note: ec data "
-            "will not be preserved)."
+            "ecModels are saved in YAML or SBML format only "
+            f"(.yml/.yaml/.xml/.sbml). Got: {path.suffix!r}."
         )
     if not path.is_absolute():
         if adapter is None:

@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_FILENAME = "ecModel.yml"
 _YAML_SUFFIXES = {".yml", ".yaml"}
+_SBML_SUFFIXES = {".xml", ".sbml"}
 
 
 def load_ec_model(
@@ -87,6 +88,9 @@ def load_ec_model(
         If the resolved file does not exist.
     """
     path = _resolve_path(filename, adapter)
+    if path.suffix.lower() in _SBML_SUFFIXES:
+        from ..io.sbml import read_sbml_ec_model
+        return read_sbml_ec_model(path, adapter=adapter)
     data = _read_yaml(path)
 
     ec_rxns_raw = data.pop("ec-rxns", None)
@@ -123,11 +127,13 @@ def _resolve_path(
     if filename is None:
         filename = _DEFAULT_FILENAME
     path = Path(filename)
-    if path.suffix.lower() not in _YAML_SUFFIXES:
+    if (
+        path.suffix.lower() not in _YAML_SUFFIXES
+        and path.suffix.lower() not in _SBML_SUFFIXES
+    ):
         raise ValueError(
-            "ecModels should be distributed in YAML file format "
-            f"(.yml/.yaml). Got: {path.suffix!r}. To load an SBML "
-            "model use `cobra.io.read_sbml_model` directly."
+            "ecModels are distributed in YAML or SBML format "
+            f"(.yml/.yaml/.xml/.sbml). Got: {path.suffix!r}."
         )
     if not path.is_absolute():
         if adapter is None:
