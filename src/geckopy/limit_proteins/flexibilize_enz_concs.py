@@ -137,18 +137,24 @@ def flexibilize_enz_concs(
         flexibilize), or if ``model.adapter`` is None and
         ``exp_growth`` is also None.
     """
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="flexibilize_enz_concs reads params.bio_rxn (and "
+        "params.gr_exp when `exp_growth` is not passed) from the adapter",
+    )
     if exp_growth is None:
-        if model.adapter is None or model.adapter.params.gr_exp is None:
+        if adapter.params.gr_exp is None:
             raise ValueError(
                 "exp_growth not provided and model.adapter.params.gr_exp "
-                "is unavailable."
+                "is unset."
             )
-        exp_growth = float(model.adapter.params.gr_exp)
+        exp_growth = float(adapter.params.gr_exp)
 
     if iter_per_enzyme == 0:
         iter_per_enzyme = math.inf
 
-    bio_rxn_id = model.adapter.params.bio_rxn
+    bio_rxn_id = adapter.params.bio_rxn
     bio_rxn = model.reactions.get_by_id(bio_rxn_id)
     if bio_rxn.upper_bound < exp_growth:
         logger.info(

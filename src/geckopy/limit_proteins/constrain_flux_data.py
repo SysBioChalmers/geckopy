@@ -98,11 +98,12 @@ def apply_flux_data_constraints(
     IndexError
         If ``condition`` (as int) is out of range.
     """
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; apply_flux_data_constraints needs an "
-            "adapter for params.bio_rxn / params.c_source."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="apply_flux_data_constraints reads params.bio_rxn "
+        "and params.c_source from the adapter",
+    )
     if max_min_growth not in ("max", "min"):
         raise ValueError(
             f"max_min_growth must be 'max' or 'min', got {max_min_growth!r}"
@@ -143,7 +144,7 @@ def apply_flux_data_constraints(
             f"present in the model (examples: {preview})"
         )
 
-    params = model.adapter.params
+    params = adapter.params
     if params.c_source:
         try:
             c_source_rxn = model.reactions.get_by_id(params.c_source)

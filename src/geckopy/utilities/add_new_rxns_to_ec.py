@@ -137,10 +137,11 @@ def add_new_rxns_to_ec(
         raise NotImplementedError(
             "add_new_rxns_to_ec does not support gecko-light models."
         )
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; needed for params.enzyme_comp."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="add_new_rxns_to_ec reads params.enzyme_comp from the adapter",
+    )
 
     new_enzymes = _filter_existing_enzymes(model, new_enzymes)
     enz_added = [e.enzyme for e in new_enzymes]
@@ -149,7 +150,7 @@ def add_new_rxns_to_ec(
 
     if new_enzymes:
         comp_id = _resolve_enzyme_compartment_id(
-            model, model.adapter.params.enzyme_comp,
+            model, adapter.params.enzyme_comp,
         )
         _add_protein_pseudometabolites(model, new_enzymes, comp_id)
 

@@ -118,11 +118,12 @@ def fill_eccodes_from_database(
             f"action must be 'display' or 'ignore', got {action!r}"
         )
 
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; fill_eccodes_from_database needs an "
-            "adapter to transform gene IDs."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="fill_eccodes_from_database transforms gene IDs to "
+        "UniProt-compatible form via the adapter",
+    )
 
     n = model.ec.n_rxns
     if n == 0:
@@ -146,7 +147,7 @@ def fill_eccodes_from_database(
         return
 
     gene_to_protein_indices = _build_gene_to_protein_indices(
-        model.ec.genes, uniprot_db, model.adapter,
+        model.ec.genes, uniprot_db, adapter,
     )
 
     db_eccodes = uniprot_db.eccodes

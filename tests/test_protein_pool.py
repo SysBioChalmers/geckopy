@@ -418,7 +418,7 @@ def test_set_prot_pool_size_raises_without_adapter_when_args_missing(tmp_path):
     """If the adapter is absent and an arg is missing, raise."""
     ec_model = _tiny_ec_model_with_pool(tmp_path)
     ec_model.adapter = None
-    with pytest.raises(ValueError, match="adapter is None"):
+    with pytest.raises(ValueError, match="No ModelAdapter available"):
         set_prot_pool_size(ec_model)  # all three args missing
 
 

@@ -85,11 +85,14 @@ def apply_complex_data(
     """
     if complex_data is None:
         if path is None:
-            if model.adapter is None:
-                raise ValueError(
-                    "model.adapter is None and no path or complex_data given."
-                )
-            path = model.adapter.params.path / "data" / "ComplexPortal.json"
+            from ...adapter import resolve_adapter
+            adapter = resolve_adapter(
+                model,
+                purpose="apply_complex_data needs a ComplexPortal JSON "
+                "(pass `path=` explicitly, or rely on the adapter's "
+                "default `<path>/data/ComplexPortal.json`)",
+            )
+            path = adapter.params.path / "data" / "ComplexPortal.json"
         complex_data = load_complex_portal_json(path)
 
     if not complex_data:

@@ -171,17 +171,17 @@ def fuzzy_kcat_matching(
         origin       (Int64) output origin 1..6, or NA if no match
         ============ ============================================================
     """
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; fuzzy_kcat_matching needs an "
-            "adapter for params.org_name."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="fuzzy_kcat_matching reads params.org_name from the adapter",
+    )
     if force_wildcard_level < 0:
         raise ValueError(
             f"force_wildcard_level must be >= 0, got {force_wildcard_level}"
         )
 
-    organism_name = (model.adapter.params.org_name or "").strip()
+    organism_name = (adapter.params.org_name or "").strip()
 
     n = model.ec.n_rxns
     if n == 0:

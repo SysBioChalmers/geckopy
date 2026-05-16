@@ -142,12 +142,18 @@ def sensitivity_tuning(
         )
 
     if desired_growth_rate is None:
-        if model.adapter is None or model.adapter.params.gr_exp is None:
+        from ..adapter import resolve_adapter
+        adapter = resolve_adapter(
+            model,
+            purpose="sensitivity_tuning needs `desired_growth_rate` "
+            "(pass it explicitly, or rely on params.gr_exp from the adapter)",
+        )
+        if adapter.params.gr_exp is None:
             raise ValueError(
                 "desired_growth_rate not provided and "
-                "model.adapter.params.gr_exp is unavailable."
+                "model.adapter.params.gr_exp is unset."
             )
-        desired_growth_rate = float(model.adapter.params.gr_exp)
+        desired_growth_rate = float(adapter.params.gr_exp)
 
     if prot_to_ignore is None:
         prot_to_ignore = []

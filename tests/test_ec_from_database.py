@@ -270,7 +270,7 @@ def test_no_adapter_raises(tmp_path):
     model = _build_ec_model(_minimal_adapter(tmp_path), ["r1"], ["g1"], [[0]])
     model.adapter = None
     db = _uniprot([("P1", "g1", "1.1.1.1", 100.0)])
-    with pytest.raises(ValueError, match="adapter is None"):
+    with pytest.raises(ValueError, match="No ModelAdapter available"):
         fill_eccodes_from_database(model, db)
 
 

@@ -105,11 +105,12 @@ def assign_standard_kcat(
     ValueError
         If ``model.adapter`` is None.
     """
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; assign_standard_kcat needs an adapter "
-            "for params.enzyme_comp and the spontaneous-reactions list."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="assign_standard_kcat reads params.enzyme_comp and the "
+        "spontaneous-reactions list from the adapter",
+    )
 
     standard_mw = _compute_standard_mw(uniprot_db)
     standard_kcat = _compute_standard_kcat(model.ec.kcat)
@@ -117,7 +118,7 @@ def assign_standard_kcat(
 
     rxns_missing = _find_reactions_missing_enzyme(model)
 
-    custom_ignored = _load_custom_pseudo_rxns(model.adapter)
+    custom_ignored = _load_custom_pseudo_rxns(adapter)
     ignore = _classify_reactions_to_ignore(model, custom_ignored)
     rxns_missing = [r for r in rxns_missing if r not in ignore]
 

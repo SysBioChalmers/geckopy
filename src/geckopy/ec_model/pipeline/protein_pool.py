@@ -67,15 +67,19 @@ def add_protein_pseudometabolites(model: "EcModel") -> list[str]:
     """Stage 9: add ``prot_<enzyme>`` pseudometabolites to the model.
     ... (docstring unchanged) ...
     """
-    if model.adapter is None:
-        raise ValueError("EcModel.adapter is None; cannot resolve enzyme_comp.")
+    from ...adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="add_protein_pseudometabolites reads "
+        "params.enzyme_comp from the adapter",
+    )
 
     unique_enzymes = sorted(set(model.ec.enzymes))
     if not unique_enzymes:
         return []
 
     comp_id = _resolve_enzyme_compartment_id(
-        model, model.adapter.params.enzyme_comp
+        model, adapter.params.enzyme_comp
     )
 
     new_mets: list[cobra.Metabolite] = []
@@ -113,14 +117,18 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
     model
         An EcModel with adapter set. Mutated in place.
     """
-    if model.adapter is None:
-        raise ValueError("EcModel.adapter is None; cannot resolve enzyme_comp.")
+    from ...adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="add_protein_pool_pseudometabolite reads "
+        "params.enzyme_comp from the adapter",
+    )
 
     if _POOL_ID in {m.id for m in model.metabolites}:
         return  # idempotent
 
     comp_id = _resolve_enzyme_compartment_id(
-        model, model.adapter.params.enzyme_comp
+        model, adapter.params.enzyme_comp
     )
 
     pool = cobra.Metabolite(
@@ -306,12 +314,13 @@ def set_prot_pool_size(
         ``prot_pool_exchange`` is not in the model.
     """
     if p_tot is None or f is None or sigma is None:
-        if model.adapter is None:
-            raise ValueError(
-                "model.adapter is None; cannot look up p_tot/f/sigma "
-                "defaults. Either attach an adapter or pass explicit values."
-            )
-        params = model.adapter.params
+        from ...adapter import resolve_adapter
+        adapter = resolve_adapter(
+            model,
+            purpose="set_prot_pool_size reads p_tot / f / sigma "
+            "defaults from the adapter (or pass them explicitly)",
+        )
+        params = adapter.params
         if p_tot is None:
             p_tot = params.p_tot
         if f is None:

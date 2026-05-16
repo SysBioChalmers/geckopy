@@ -294,7 +294,7 @@ def test_stage7_raises_without_adapter():
     allocate_ec_for_catalyzed_reactions(ec_model)
 
     db = _synthetic_uniprot([("P1", "g1", 10.0, "S")])
-    with pytest.raises(ValueError, match="adapter is None"):
+    with pytest.raises(ValueError, match="No ModelAdapter available"):
         populate_enzyme_data(ec_model, db)
 
 

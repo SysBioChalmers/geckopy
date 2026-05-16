@@ -131,15 +131,15 @@ def ec_fseof(
     -------
     EcFseofResult
     """
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; ec_fseof needs an adapter for "
-            "params.bio_rxn."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="ec_fseof reads params.bio_rxn from the adapter",
+    )
     if n_steps < 2:
         raise ValueError(f"n_steps must be >= 2, got {n_steps}")
 
-    bio_rxn_id = model.adapter.params.bio_rxn
+    bio_rxn_id = adapter.params.bio_rxn
     bio_rxn = model.reactions.get_by_id(bio_rxn_id)
     prod_rxn = model.reactions.get_by_id(prod_target_rxn)
     cs_rxn_obj = model.reactions.get_by_id(cs_rxn)
