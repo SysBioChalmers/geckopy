@@ -398,5 +398,189 @@ print(f"Starting GEM growth rate: {sol_conv.objective_value:.4f} /hour")
 # %%
 save_ec_model(ec_model, "ecYeastGEM_stage4.yml", adapter=adapter)
 
-print("Stage 4 complete. Stage 5 (simulation + analysis) "
-      "follows in a separate phase.")
+# %% [markdown]
+# ## STAGE 5: Simulation and analysis
+#
+# **STEP 66** Reload the ecModel WITHOUT proteomics integration
+# (the canonical `ecYeastGEM.yml` from STEP 52). The proteomics-
+# constrained model from Stage 4 is kept separately as
+# `ecModelProt` for the FVA comparison below.
+
+# %%
+ecModelProt = ec_model
+ec_model = load_ec_model("ecYeastGEM.yml", adapter=adapter)
+
+# %% [markdown]
+# **STEP 67-68** Simulate Crabtree effect. The plot helpers live
+# in `tutorials/full_ecModel/code/`; we add that directory to
+# `sys.path` once so the imports below work.
+
+# %%
+import sys
+
+import matplotlib
+matplotlib.use("Agg")  # headless backend; plots are saved to PDF
+
+sys.path.insert(0, str(params.path / "code"))
+from plot_crabtree import plot_crabtree   # noqa: E402
+from plot_ec_fva import plot_ec_fva       # noqa: E402
+
+output_dir = params.path / "output"
+output_dir.mkdir(exist_ok=True)
+
+# %%
+plot_crabtree(
+    ec_model,
+    data_path=params.path / "data" / "vanHoek1998.tsv",
+    save_path=output_dir / "crabtree.pdf",
+)
+
+# %% [markdown]
+# For comparison, run the same simulation with an unconstrained
+# protein pool (mimicking a conventional GEM). Crabtree effect
+# should disappear.
+
+# %%
+import math
+
+ec_model_inf = load_ec_model("ecYeastGEM.yml", adapter=adapter)
+set_prot_pool_size(ec_model_inf, p_tot=math.inf)
+plot_crabtree(
+    ec_model_inf,
+    data_path=params.path / "data" / "vanHoek1998.tsv",
+    save_path=output_dir / "crabtree_infProt.pdf",
+)
+
+# %% [markdown]
+# And on the pre-tuning ecModel from Stage 2 (before sensitivity
+# tuning relaxed the kcat values). The model should get
+# constrained at too low growth rates, with no feasible solutions
+# at high growth.
+
+# %%
+ec_model_preTuning = load_ec_model("ecYeastGEM_stage2.yml", adapter=adapter)
+ec_model_preTuning.reactions.get_by_id(params.c_source).lower_bound = -1000
+plot_crabtree(
+    ec_model_preTuning,
+    data_path=params.path / "data" / "vanHoek1998.tsv",
+    save_path=output_dir / "crabtree_preTuning.pdf",
+)
+
+# %% [markdown]
+# **STEP 69-70** Selecting objective functions. Solve for max
+# growth, then constrain growth to 99% of that and minimise
+# protein-pool usage.
+
+# %%
+ec_model.objective = params.bio_rxn
+sol = ec_model.optimize()
+max_growth = sol.fluxes[params.bio_rxn]
+print(f"Max growth rate: {max_growth:.4f} /hour")
+
+ec_model.reactions.get_by_id(params.bio_rxn).lower_bound = 0.99 * max_growth
+ec_model.objective = {
+    ec_model.reactions.get_by_id("prot_pool_exchange"): -1.0,
+}
+sol = ec_model.optimize()
+print(f"Minimum protein pool usage at 99% of max growth: "
+      f"{abs(sol.fluxes['prot_pool_exchange']):.2f} mg/gDCW")
+
+# %% [markdown]
+# **STEP 71** Inspect enzyme usage at a non-trivial growth rate.
+
+# %%
+from geckopy.utilities import enzyme_usage, report_enzyme_usage
+
+ec_model.objective = "r_1714"  # max glucose uptake
+ec_model.reactions.get_by_id(params.bio_rxn).lower_bound = 0.25
+sol = ec_model.optimize()
+usage = enzyme_usage(ec_model, sol.fluxes)
+report = report_enzyme_usage(ec_model, usage)
+print("Top 10 enzymes by absolute usage:")
+print(report.top_abs_usage.head(10))
+
+# %% [markdown]
+# **STEP 72** Compare ecModel fluxes to a conventional GEM by
+# mapping ec-rxn fluxes back via `map_rxns_to_conv`.
+
+# %%
+from geckopy.utilities import map_rxns_to_conv
+
+sol = ec_model.optimize()
+mapped = map_rxns_to_conv(ec_model, conv_model, sol.fluxes)
+print(f"Mapped fluxes shape: {mapped.mapped_flux.shape}; "
+      f"conv model reactions: {len(conv_model.reactions)}")
+
+# %% [markdown]
+# **STEP 73-75 (deferred)** Three-way FVA across bare GEM,
+# full ecModel, and ecModel + proteomics integration is the
+# original MATLAB step. With the default open-source solver (GLPK)
+# this takes well over an hour on yeast-GEM-sized models: ~4000
+# canonical reactions x 3 models x 2 LPs each. The code below is
+# kept commented out; rerun once a faster solver (Gurobi or CPLEX)
+# is configured via `ec_model.solver = "gurobi"`. The `plot_ec_fva`
+# helper in `code/plot_ec_fva.py` is already in place to render
+# the CDF comparison once FVA results are available.
+#
+# ```python
+# from geckopy.utilities import ec_fva
+#
+# model_bare = load_conventional_gem(adapter)
+# model_bare.adapter = adapter
+# ec_model_bare = load_ec_model("ecYeastGEM.yml", adapter=adapter)
+#
+# # Cap target growth at what the proteomics-constrained model can
+# # reach, and apply the same exchange constraints to all three.
+# flux_data.gr_rate[0] = 0.088
+# for m in (model_bare, ec_model_bare, ecModelProt):
+#     constrain_flux_data(
+#         m, flux_data,
+#         condition=0, max_min_growth="max", loose_strict_flux="loose",
+#     )
+#
+# fva_bare = ec_fva(ec_model_bare, model_bare)
+# fva_full = ec_fva(ec_model_bare, model_bare)
+# fva_prot = ec_fva(ecModelProt, model_bare)
+#
+# import pandas as pd
+# fva_all = pd.DataFrame({
+#     "rxn_id": fva_bare.index,
+#     "minFlux_bare": fva_bare["min_flux"].values,
+#     "maxFlux_bare": fva_bare["max_flux"].values,
+#     "minFlux_ec": fva_full["min_flux"].values,
+#     "maxFlux_ec": fva_full["max_flux"].values,
+#     "minFlux_ecProt": fva_prot["min_flux"].values,
+#     "maxFlux_ecProt": fva_prot["max_flux"].values,
+# })
+# fva_all.to_csv(output_dir / "ecFVA.tsv", sep="\t", index=False)
+#
+# import numpy as np
+# min_flux_mat = np.column_stack([
+#     fva_bare["min_flux"].values,
+#     fva_full["min_flux"].values,
+#     fva_prot["min_flux"].values,
+# ])
+# max_flux_mat = np.column_stack([
+#     fva_bare["max_flux"].values,
+#     fva_full["max_flux"].values,
+#     fva_prot["max_flux"].values,
+# ])
+# plot_ec_fva(
+#     min_flux_mat, max_flux_mat,
+#     labels=["bare GEM", "ecModel", "ecModel + proteomics"],
+#     save_path=output_dir / "ecFVA.pdf",
+# )
+# ```
+
+# %% [markdown]
+# **STEP 76-77 skipped:** light vs full ecModel comparison
+# requires the light variant of `make_ec_model`, which is not yet
+# ported (the existing code path raises `NotImplementedError` for
+# `gecko_light=True`).
+#
+# **STEP 78-79 skipped:** these refer to the
+# `tutorials/light_ecModel` protocol which is out of scope for
+# this tutorial.
+
+print("Stage 5 complete. Outputs written to "
+      f"{output_dir.relative_to(Path.cwd()) if output_dir.is_relative_to(Path.cwd()) else output_dir}/")
