@@ -11,7 +11,6 @@ import re
 from typing import TYPE_CHECKING
 
 import numpy as np
-from scipy import sparse
 
 if TYPE_CHECKING:
     import cobra

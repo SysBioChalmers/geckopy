@@ -290,7 +290,7 @@ def test_rxn_without_gpr_not_added_to_ec_rxns(tmp_path):
     model.add_metabolites([B_c])
 
     rxn = _make_rxn("R_no_gpr", metabolites={A_c: -1.0, B_c: 1.0})
-    result = add_new_rxns_to_ec(model, [rxn], [])
+    add_new_rxns_to_ec(model, [rxn], [])
     assert "R_no_gpr" in {r.id for r in model.reactions}
     assert "R_no_gpr" not in model.ec.rxns
 

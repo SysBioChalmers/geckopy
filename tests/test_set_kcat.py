@@ -132,7 +132,7 @@ def test_multiple_ids_with_per_input_kcat_list():
     """A list whose length equals len(rxn_ids) gives one value per input,
     broadcasting if that input expanded to multiple matches."""
     ec_model = _ectestgem_ec_model()
-    updated = set_kcat_for_reactions(
+    set_kcat_for_reactions(
         ec_model,
         ["R3", "R5"],
         [10.0, 20.0],

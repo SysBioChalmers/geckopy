@@ -352,7 +352,6 @@ def test_fuzzy_prio1_row_blocks_dlkcat_rows_for_same_reaction():
 def test_output_can_feed_select_kcat_value(tmp_path):
     """End-to-end: a merged DataFrame should pass through
     select_kcat_value without column adjustments."""
-    import cobra
     import numpy as np
     from scipy import sparse
 

@@ -1,5 +1,4 @@
 """Tests for load_dlkcat_ignore_lists."""
-from pathlib import Path
 
 from geckopy.databases import DLKcatIgnoreLists, load_dlkcat_ignore_lists
 from geckopy.databases.dlkcat_ignore_lists import _normalize

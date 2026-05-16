@@ -2,7 +2,6 @@
 import logging
 
 import numpy as np
-import pytest
 
 from geckopy.get_enzyme_data import find_ec_in_db
 from geckopy.get_enzyme_data.find_ec_in_db import (

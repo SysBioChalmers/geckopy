@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from geckopy import ModelAdapter, ModelParameters
+from geckopy import ModelAdapter
 
 
 MINIMAL_TOML = """\

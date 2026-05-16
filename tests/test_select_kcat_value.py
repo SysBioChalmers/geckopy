@@ -1,5 +1,4 @@
 """Tests for select_kcat_value."""
-import cobra
 import numpy as np
 import pandas as pd
 import pytest
