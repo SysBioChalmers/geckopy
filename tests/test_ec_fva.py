@@ -190,3 +190,49 @@ def test_min_flux_within_rxn_lower_bound():
     for rxn_id in fva.index:
         rxn = conv.reactions.get_by_id(rxn_id)
         assert fva.loc[rxn_id, "min_flux"] >= rxn.lower_bound - 1e-9
+
+
+# --------------------------------------------------------------------------- #
+# Parallel execution
+# --------------------------------------------------------------------------- #
+
+def test_progress_off_smoke():
+    """progress=False suppresses the bar but produces the same result."""
+    ec, conv = _build_simple_ec()
+    fva_quiet = ec_fva(ec, conv, progress=False, n_proc=1)
+    fva_loud = ec_fva(ec, conv, progress=True, n_proc=1)
+    pd.testing.assert_frame_equal(fva_quiet, fva_loud)
+
+
+def test_n_proc_default_resolves_to_cobra_config():
+    """n_proc=None should pick up cobra.Configuration().processes."""
+    # Smoke: just verify the default code path runs and returns a frame.
+    ec, conv = _build_simple_ec()
+    fva = ec_fva(ec, conv, progress=False, n_proc=None)
+    assert isinstance(fva, pd.DataFrame)
+    assert not fva.empty
+
+
+def test_parallel_matches_serial():
+    """n_proc=2 must yield the same DataFrame as n_proc=1 (within 1e-6).
+
+    The parallel path pickles the model, runs in a spawn Pool, and
+    reassembles by conv id; numerical results must be identical modulo
+    solver tolerance.
+    """
+    ec, conv = _build_simple_ec()
+    fva_serial = ec_fva(ec, conv, progress=False, n_proc=1)
+    fva_parallel = ec_fva(ec, conv, progress=False, n_proc=2)
+    # Same shape + index
+    assert list(fva_serial.index) == list(fva_parallel.index)
+    # Numerical agreement
+    np.testing.assert_allclose(
+        fva_serial["min_flux"].values,
+        fva_parallel["min_flux"].values,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        fva_serial["max_flux"].values,
+        fva_parallel["max_flux"].values,
+        atol=1e-6,
+    )
