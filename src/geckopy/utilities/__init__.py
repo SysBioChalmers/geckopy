@@ -14,6 +14,7 @@ from .get_subset_ec_model import get_subset_ec_model
 from .load_conventional_gem import load_conventional_gem
 from .load_ec_model import load_ec_model
 from .map_rxns_to_conv import MapRxnsResult, map_rxns_to_conv
+from .pfba_enzymes import pfba_enzymes
 from .report_enzyme_usage import EnzymeUsageReport, report_enzyme_usage
 from .save_ec_model import save_ec_model
 
@@ -32,6 +33,7 @@ __all__ = [
     "load_conventional_gem",
     "load_ec_model",
     "map_rxns_to_conv",
+    "pfba_enzymes",
     "report_enzyme_usage",
     "save_ec_model",
 ]
