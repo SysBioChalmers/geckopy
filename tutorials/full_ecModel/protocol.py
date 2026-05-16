@@ -297,5 +297,106 @@ save_ec_model(ec_model, "ecYeastGEM_stage3.yml", adapter=adapter)
 # %%
 save_ec_model(ec_model, "ecYeastGEM.yml", adapter=adapter)
 
-print("Stage 3 complete. Stages 4-5 (proteomics integration and "
-      "simulation / analysis) follow in a separate phase.")
+# %% [markdown]
+# ## STAGE 4: Integration of proteomics data into the ecModel
+#
+# To resume from disk, uncomment:
+# ```python
+# ec_model = load_ec_model("ecYeastGEM_stage3.yml", adapter=adapter)
+# ```
+
+# %% [markdown]
+# **STEP 53-57** Load proteomics data and constrain the ecModel.
+# `data/proteomics.tsv` has 3 replicates of a single condition,
+# expressed as `[3]` in geckopy (a list with one element per
+# condition).
+
+# %%
+from geckopy.databases import load_flux_data, load_prot_data
+from geckopy.limit_proteins import (
+    calculate_f_factor,
+    constrain_enz_concs,
+    constrain_flux_data,
+    fill_enz_concs,
+    flexibilize_enz_concs,
+)
+
+prot_data = load_prot_data(
+    params.path / "data" / "proteomics.tsv", repl_per_cond=[3],
+)
+fill_enz_concs(ec_model, prot_data)
+constrain_enz_concs(ec_model)
+n_constrained = int((~np.isnan(ec_model.ec.concs)).sum())
+print(f"Constrained {n_constrained} of {len(ec_model.ec.enzymes)} enzymes "
+      f"with measured concentrations")
+
+# %% [markdown]
+# **STEP 58** Update protein pool. The f-factor can be
+# recomputed from the proteomics data, then `set_prot_pool_size`
+# is re-applied using the condition-specific total protein content
+# from `fluxData.tsv`.
+
+# %%
+f_pdata = calculate_f_factor(ec_model, prot_data)
+flux_data = load_flux_data(params.path / "data" / "fluxData.tsv")
+set_prot_pool_size(
+    ec_model, p_tot=float(flux_data.p_tot[0]), f=f_pdata,
+)
+print(f"Recomputed f-factor: {f_pdata:.3f} "
+      f"(adapter default: {params.f:.3f}); "
+      f"Ptot from flux data: {float(flux_data.p_tot[0]):.3f}")
+
+# %% [markdown]
+# **STEP 59-63** Constrain exchange fluxes from the flux data.
+
+# %%
+constrain_flux_data(
+    ec_model, flux_data,
+    condition=0, max_min_growth="max", loose_strict_flux="loose",
+)
+sol = ec_model.optimize()
+print(f"Growth rate after flux constraints: {sol.objective_value:.4f} /hour "
+      f"(target: {float(flux_data.gr_rate[0]):.4f})")
+
+# %% [markdown]
+# **STEP 64-65** Flexibilize enzyme concentrations until the
+# experimental growth rate is reached.
+
+# %%
+flex_result = flexibilize_enz_concs(
+    ec_model, exp_growth=float(flux_data.gr_rate[0]), fold_change=10.0,
+)
+sol = ec_model.optimize()
+print(f"Growth rate after flexibilizing: {sol.objective_value:.4f} /hour")
+print(f"Flexibilized {len(flex_result.uniprot_ids)} enzymes "
+      f"(showing top 5 by fold-increase):")
+for i in np.argsort(flex_result.ratio_incr)[::-1][:5]:
+    print(f"  {flex_result.uniprot_ids[i]}: "
+          f"{flex_result.old_concs[i]:.3g} -> "
+          f"{flex_result.flex_concs[i]:.3g} "
+          f"(x{flex_result.ratio_incr[i]:.1f})")
+
+# %% [markdown]
+# As a sanity check, confirm the starting (non-ec) GEM also can't
+# reach the experimental growth rate when given the same exchange
+# constraints. If it can't, the measurement set itself is
+# overconstraining; the ecModel will only be able to match what
+# the metabolic network allows.
+
+# %%
+conv_model = load_conventional_gem(adapter)
+# constrain_flux_data reads bio_rxn / c_source from `model.adapter`;
+# attach the same adapter so it works on the plain cobra.Model too.
+conv_model.adapter = adapter
+constrain_flux_data(
+    conv_model, flux_data,
+    condition=0, max_min_growth="max", loose_strict_flux="loose",
+)
+sol_conv = conv_model.optimize()
+print(f"Starting GEM growth rate: {sol_conv.objective_value:.4f} /hour")
+
+# %%
+save_ec_model(ec_model, "ecYeastGEM_stage4.yml", adapter=adapter)
+
+print("Stage 4 complete. Stage 5 (simulation + analysis) "
+      "follows in a separate phase.")
