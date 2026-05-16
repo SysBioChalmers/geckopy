@@ -240,6 +240,36 @@ def test_gecko_light_blocks_kcats_setter():
         enz.kcats["R3"] = 10.0
 
 
+def test_gecko_light_allows_read_only_metadata():
+    """Read-only metadata (mw, gene, sequence, concentration, kcats[r])
+    works on light models because it reads from `model.ec.*` arrays
+    that exist in both layouts. Only the per-enzyme prot/usage
+    machinery is missing."""
+    model = _ectestgem_ec_model()
+    model.ec.gecko_light = True
+    enz = model.enzymes.get_by_id("P4")
+    # All of these should work without raising.
+    assert enz.id == "P4"
+    assert enz.gene == "G4"
+    assert isinstance(enz.mw, float)
+    assert enz.sequence == "MDFM"
+
+
+def test_gecko_light_blocks_full_model_only_attrs():
+    """Attributes that require the per-enzyme `prot_<id>` met and
+    `usage_prot_<id>` reaction (which only the full layout has)
+    raise a clear NotImplementedError on a light model."""
+    model = _ectestgem_ec_model()
+    model.ec.gecko_light = True
+    enz = model.enzymes.get_by_id("P4")
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        _ = enz.prot_metabolite
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        _ = enz.usage_reaction
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        _ = enz.shadow_price
+
+
 # --------------------------------------------------------------------------- #
 # repr smoke
 # --------------------------------------------------------------------------- #

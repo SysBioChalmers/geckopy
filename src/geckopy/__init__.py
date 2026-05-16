@@ -146,9 +146,16 @@ from geckopy.utilities import (
 # so this should always succeed. The try/except is belt-and-braces so
 # a broken libsbml install doesn't break the top-level import.
 try:
-    from geckopy.io import read_sbml_ec_model, write_sbml_ec_model
+    from geckopy.io import (
+        read_sbml,
+        read_sbml_ec_model,
+        write_sbml,
+        write_sbml_ec_model,
+    )
 except ImportError:  # pragma: no cover
+    read_sbml = None  # type: ignore[assignment]
     read_sbml_ec_model = None  # type: ignore[assignment]
+    write_sbml = None  # type: ignore[assignment]
     write_sbml_ec_model = None  # type: ignore[assignment]
 
 __all__ = [
@@ -239,7 +246,9 @@ __all__ = [
     "report_enzyme_usage",
     "save_ec_model",
     # SBML I/O
+    "read_sbml",
     "read_sbml_ec_model",
+    "write_sbml",
     "write_sbml_ec_model",
     # Deprecated aliases (kept reachable so old `from geckopy import X` still works)
     "constrain_flux_data",  # -> apply_flux_data_constraints

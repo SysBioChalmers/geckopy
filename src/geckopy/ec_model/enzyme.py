@@ -81,11 +81,33 @@ class Enzyme:
 
     @property
     def prot_metabolite(self) -> cobra.Metabolite:
+        self._require_full_model("prot_metabolite")
         return self._model.metabolites.get_by_id(self.prot_metabolite_id)
 
     @property
     def usage_reaction(self) -> cobra.Reaction:
+        self._require_full_model("usage_reaction")
         return self._model.reactions.get_by_id(self.usage_reaction_id)
+
+    def _require_full_model(self, attr_name: str) -> None:
+        """Raise NotImplementedError if the model is a light ecModel.
+
+        Light models do not have per-enzyme ``prot_<id>`` metabolites
+        or ``usage_prot_<id>`` reactions, so the proxy attributes
+        that depend on those (``flux``, ``cap_usage``, ``upper_bound``,
+        ``shadow_price``, ``prot_metabolite``, ``usage_reaction``)
+        are unavailable on light models. Read-only metadata
+        (``mw``, ``gene``, ``sequence``, ``concentration``, ``kcats``)
+        works in both layouts because it reads from ``model.ec.*``
+        arrays that exist in both.
+        """
+        if self._model.ec.gecko_light:
+            raise NotImplementedError(
+                f"Enzyme.{attr_name} is unavailable for gecko-light "
+                f"models (light models have no per-enzyme prot/usage "
+                f"machinery). Read-only metadata (mw, gene, sequence, "
+                f"concentration, kcats) is available."
+            )
 
     # ---- per-enzyme scalar data (live indexing into model.ec) ----
     @property
@@ -166,6 +188,7 @@ class Enzyme:
     @property
     def shadow_price(self) -> float:
         """Dual of the prot_<id> mass-balance constraint."""
+        self._require_full_model("shadow_price")
         return float(self._model.constraints[self.prot_metabolite_id].dual)
 
     @property
