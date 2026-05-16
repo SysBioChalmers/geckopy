@@ -1,0 +1,28 @@
+# Adapter parameters for the full_ecModel tutorial.
+# Mirrors GECKO MATLAB tutorials/full_ecModel/YeastGEMAdapter.m.
+
+conv_gem = "models/yeast-GEM.yml"
+
+org_name = "saccharomyces cerevisiae"
+
+sigma = 0.5
+p_tot = 0.5
+f = 0.5
+gr_exp = 0.41
+
+c_source = "r_1714"
+bio_rxn = "r_4041"
+enzyme_comp = "cytoplasm"
+
+[kegg]
+id = "sce"
+gene_id = "kegg"
+
+[uniprot]
+type = "proteome"
+id = "UP000002311"
+gene_id_field = "gene_oln"
+reviewed = true
+
+[complex]
+taxonomic_id = 559292

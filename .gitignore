@@ -11,3 +11,7 @@ build/
 .coverage
 htmlcov/
 .claude/
+
+# Tutorial build outputs (the source yeast-GEM.yml is tracked).
+tutorials/full_ecModel/models/ecYeastGEM*.yml
+tutorials/full_ecModel/output/
