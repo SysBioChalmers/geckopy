@@ -34,7 +34,7 @@ from geckopy.databases import find_met_smiles
 from geckopy.ec_model.pipeline.apply_complex_data import apply_complex_data
 from geckopy.ec_model.pipeline.apply_custom_kcats import apply_custom_kcats
 from geckopy.ec_model.pipeline.apply_kcat import apply_kcat_constraints
-from geckopy.ec_model.pipeline.fill_kcats import get_kcat_across_isozymes
+from geckopy.ec_model.pipeline.fill_kcats import fill_kcats_from_isozymes
 from geckopy.ec_model.pipeline.protein_pool import set_prot_pool_size
 from geckopy.ec_model.pipeline.set_kcat import set_kcat_for_reactions
 from geckopy.gather_kcats.fuzzy_kcat_matching import fuzzy_kcat_matching
@@ -200,7 +200,7 @@ apply_custom_kcats(ec_model, path=params.path / "data" / "customKcats.tsv")
 # enzymes that catalyse the same reaction).
 
 # %%
-get_kcat_across_isozymes(ec_model)
+fill_kcats_from_isozymes(ec_model)
 
 # %% [markdown]
 # **STEP 30** Get standard kcat. Assigns a protein cost to

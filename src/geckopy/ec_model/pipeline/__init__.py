@@ -3,7 +3,7 @@ from .apply_complex_data import apply_complex_data
 from .apply_custom_kcats import apply_custom_kcats
 from .apply_kcat import apply_kcat_constraints
 from .expand import expand_model
-from .fill_kcats import get_kcat_across_isozymes
+from .fill_kcats import fill_kcats_from_isozymes, get_kcat_across_isozymes
 from .populate_ec import (
     allocate_ec_for_catalyzed_reactions,
     build_rxn_enzyme_coupling,
@@ -36,7 +36,8 @@ __all__ = [
     "build_rxn_enzyme_coupling",
     "convert_to_irreversible",
     "expand_model",
-    "get_kcat_across_isozymes",
+    "fill_kcats_from_isozymes",
+    "get_kcat_across_isozymes",  # deprecated; alias of fill_kcats_from_isozymes
     "get_reactions_from_enzyme",
     "invert_backwards_only_reactions",
     "populate_enzyme_data",
