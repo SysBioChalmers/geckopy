@@ -14,6 +14,12 @@ import pandas as pd
 
 from .map_rxns_to_conv import map_rxns_to_conv
 
+try:
+    from tqdm import tqdm
+except ImportError:  # pragma: no cover - tqdm is a soft dep
+    def tqdm(it, **_kwargs):  # type: ignore[no-redef]
+        return it
+
 if TYPE_CHECKING:
     import cobra
 
@@ -28,6 +34,8 @@ _EXP_RE = re.compile(r"_EXP_\d+")
 def ec_fva(
     ec_model: "EcModel",
     model: "cobra.Model",
+    *,
+    progress: bool = True,
 ) -> pd.DataFrame:
     """Flux variability analysis on an ecModel, mapped to conventional rxns.
 
@@ -62,6 +70,9 @@ def ec_fva(
     model
         The non-ec model to which the fluxes are mapped. Must be the
         same model that was used to build ``ec_model``.
+    progress
+        Show a tqdm progress bar over the per-canonical-rxn LP
+        solves. Defaults to True; set False to silence output.
 
     Returns
     -------
@@ -90,7 +101,10 @@ def ec_fva(
     sol_max_all = np.full((n_ec, n_groups), np.nan, dtype=float)
     sol_min_all = np.full((n_ec, n_groups), np.nan, dtype=float)
 
-    for k, conv_id in enumerate(canonical_ids):
+    iterator = enumerate(canonical_ids)
+    if progress:
+        iterator = enumerate(tqdm(canonical_ids, desc="ec_fva", unit="rxn"))
+    for k, conv_id in iterator:
         rxn_indices = canonical_groups[conv_id]
         forward = [i for i in rxn_indices if not is_reverse[i]]
         reverse = [i for i in rxn_indices if is_reverse[i]]
