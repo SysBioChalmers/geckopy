@@ -1,0 +1,62 @@
+name: release
+
+# Builds a wheel + sdist when a release is published, attaches them to
+# the GitHub release, and (commented-out below) would publish to PyPI.
+#
+# PyPI publishing is intentionally NOT enabled yet: the `geckopy` name
+# is currently taken on PyPI by another project. Once the name is
+# released or transferred, uncomment the `pypi-publish` job and add a
+# `PYPI_API_TOKEN` repository secret (or configure trusted publishing
+# at https://pypi.org/manage/account/publishing/ and switch the
+# pypa/gh-action-pypi-publish step to OIDC).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # allow manual builds without a release for testing
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Attach to GitHub release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+
+  # pypi-publish:
+  #   name: Publish to PyPI
+  #   needs: build
+  #   if: github.event_name == 'release'
+  #   runs-on: ubuntu-latest
+  #   environment: pypi  # configure in repo settings -> Environments
+  #   permissions:
+  #     id-token: write  # OIDC trusted publishing; no API token needed
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: dist/
+  #     - uses: pypa/gh-action-pypi-publish@release/v1
