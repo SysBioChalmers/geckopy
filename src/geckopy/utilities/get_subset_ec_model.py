@@ -51,7 +51,7 @@ def get_subset_ec_model(
     1. Copy ``big_ec_model``.
     2. Compute genes to remove (`big.genes` minus `small_gem.genes`,
        preserving the ``standard`` pseudo-gene from
-       ``get_standard_kcat``).
+       ``assign_standard_kcat``).
     3. Remove reactions blocked by that gene removal (cobra's
        ``GPR.eval(knockouts=...)``).
     4. Remove the genes from `model.genes`.

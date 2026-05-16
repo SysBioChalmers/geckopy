@@ -5,14 +5,15 @@ directory.
 """
 from .find_max_value import find_max_value
 from .sensitivity_tuning import TunedKcatsResult, sensitivity_tuning
-from .sigma_fitter import SigmaFitterResult, sigma_fitter
+from .sigma_fitter import SigmaFitterResult, fit_sigma, sigma_fitter
 from .truncate_values import truncate_values
 
 __all__ = [
     "SigmaFitterResult",
     "TunedKcatsResult",
     "find_max_value",
+    "fit_sigma",
     "sensitivity_tuning",
-    "sigma_fitter",
+    "sigma_fitter",  # deprecated; alias of fit_sigma
     "truncate_values",
 ]

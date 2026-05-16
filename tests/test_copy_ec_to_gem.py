@@ -5,7 +5,7 @@ from scipy import sparse
 
 from geckopy.ec_model import EcModel
 from geckopy.ec_model.ec_data import EcData
-from geckopy.get_enzyme_data import copy_ec_to_gem, get_ec_from_gem
+from geckopy.get_enzyme_data import copy_ec_to_gem, fill_eccodes_from_gem
 
 
 # --------------------------------------------------------------------------- #
@@ -193,11 +193,11 @@ def test_gecko_light_strips_4char_prefix_to_find_reaction():
 
 
 # --------------------------------------------------------------------------- #
-# Round-trip with get_ec_from_gem
+# Round-trip with fill_eccodes_from_gem
 # --------------------------------------------------------------------------- #
 
-def test_round_trip_with_get_ec_from_gem_is_stable():
-    """copy_ec_to_gem (writes list) followed by get_ec_from_gem (reads
+def test_round_trip_with_fill_eccodes_from_gem_is_stable():
+    """copy_ec_to_gem (writes list) followed by fill_eccodes_from_gem (reads
     list and joins with `;`) yields the same ec.eccodes string."""
     model = _make_ec_model(
         [("r1", None), ("r2", None)],
@@ -205,7 +205,7 @@ def test_round_trip_with_get_ec_from_gem_is_stable():
     )
     original = list(model.ec.eccodes)
     copy_ec_to_gem(model)
-    # Wipe ec.eccodes; expect get_ec_from_gem to reconstitute it.
+    # Wipe ec.eccodes; expect fill_eccodes_from_gem to reconstitute it.
     model.ec.eccodes = ["", ""]
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == original

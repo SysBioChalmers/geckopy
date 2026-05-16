@@ -240,17 +240,17 @@ def test_blank_lines_skipped(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Integration with constrain_flux_data
+# Integration with apply_flux_data_constraints
 # --------------------------------------------------------------------------- #
 
-def test_loaded_data_can_feed_constrain_flux_data(tmp_path):
+def test_loaded_data_can_feed_apply_flux_data_constraints(tmp_path):
     """End-to-end: load a fluxData.tsv, constrain a model with it."""
     import cobra
     from scipy import sparse
 
     from geckopy import EcModel, ModelAdapter
     from geckopy.ec_model.ec_data import EcData
-    from geckopy.limit_proteins import constrain_flux_data
+    from geckopy.limit_proteins import apply_flux_data_constraints
 
     (tmp_path / "model_adapter.toml").write_text(
         'conv_gem = "dummy.xml"\n'
@@ -286,6 +286,6 @@ def test_loaded_data_can_feed_constrain_flux_data(tmp_path):
         ["c1", "0.5", "0.4", "-5.0"],
     ])
     fd = load_flux_data(p)
-    constrain_flux_data(model, fd)
+    apply_flux_data_constraints(model, fd)
     assert model.reactions.get_by_id("EX_glc").lower_bound == -5.0
     assert model.reactions.get_by_id("biomass").upper_bound == pytest.approx(0.4)

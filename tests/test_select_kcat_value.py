@@ -1,4 +1,4 @@
-"""Tests for select_kcat_value."""
+"""Tests for apply_kcat_list."""
 import numpy as np
 import pandas as pd
 import pytest
@@ -6,7 +6,7 @@ from scipy import sparse
 
 from geckopy.ec_model import EcModel
 from geckopy.ec_model.ec_data import EcData
-from geckopy.gather_kcats import select_kcat_value
+from geckopy.gather_kcats import apply_kcat_list
 
 
 # --------------------------------------------------------------------------- #
@@ -48,14 +48,14 @@ def _kcat_list(rows: list[tuple[str, float, str]]) -> pd.DataFrame:
 
 def test_empty_kcat_list_returns_empty_no_updates():
     model = _ec_model(["r1"])
-    updated = select_kcat_value(model, _kcat_list([]))
+    updated = apply_kcat_list(model, _kcat_list([]))
     assert updated == []
     assert np.isnan(model.ec.kcat[0])
 
 
 def test_all_zero_kcats_no_updates():
     model = _ec_model(["r1"])
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model, _kcat_list([("r1", 0.0, "brenda")]),
     )
     assert updated == []
@@ -64,7 +64,7 @@ def test_all_zero_kcats_no_updates():
 
 def test_single_kcat_per_reaction_basic():
     model = _ec_model(["r1", "r2"])
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model,
         _kcat_list([("r1", 5.0, "brenda"), ("r2", 7.0, "brenda")]),
     )
@@ -75,7 +75,7 @@ def test_single_kcat_per_reaction_basic():
 
 def test_only_reactions_in_list_are_updated():
     model = _ec_model(["r1", "r2", "r3"], initial_kcat=[1.0, 1.0, 1.0])
-    select_kcat_value(model, _kcat_list([("r2", 5.0, "brenda")]))
+    apply_kcat_list(model, _kcat_list([("r2", 5.0, "brenda")]))
     np.testing.assert_array_equal(model.ec.kcat, [1.0, 5.0, 1.0])
 
 
@@ -85,7 +85,7 @@ def test_only_reactions_in_list_are_updated():
 
 def test_criteria_max_picks_largest():
     model = _ec_model(["r1"])
-    select_kcat_value(
+    apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 1.0, "src1"),
@@ -100,7 +100,7 @@ def test_criteria_max_picks_largest():
 
 def test_criteria_min_picks_smallest():
     model = _ec_model(["r1"])
-    select_kcat_value(
+    apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 5.0, "src1"),
@@ -115,7 +115,7 @@ def test_criteria_min_picks_smallest():
 
 def test_criteria_median_picks_median_value():
     model = _ec_model(["r1"])
-    select_kcat_value(
+    apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 1.0, "src_first"),
@@ -131,7 +131,7 @@ def test_criteria_median_attributes_source_to_first_row():
     """MATLAB-compat: median/mean source comes from the first row of
     the group, not the median sample itself."""
     model = _ec_model(["r1"])
-    select_kcat_value(
+    apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 1.0, "src_first"),
@@ -145,7 +145,7 @@ def test_criteria_median_attributes_source_to_first_row():
 
 def test_criteria_mean_picks_average():
     model = _ec_model(["r1"])
-    select_kcat_value(
+    apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 2.0, "a"),
@@ -159,7 +159,7 @@ def test_criteria_mean_picks_average():
 
 def test_criteria_mean_attributes_source_to_first_row():
     model = _ec_model(["r1"])
-    select_kcat_value(
+    apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 2.0, "src_first"),
@@ -173,7 +173,7 @@ def test_criteria_mean_attributes_source_to_first_row():
 def test_criteria_invalid_raises():
     model = _ec_model(["r1"])
     with pytest.raises(ValueError, match="criteria must be"):
-        select_kcat_value(
+        apply_kcat_list(
             model, _kcat_list([("r1", 5.0, "a")]), criteria="nonsense",
         )
 
@@ -184,7 +184,7 @@ def test_criteria_invalid_raises():
 
 def test_overwrite_true_replaces_existing():
     model = _ec_model(["r1"], initial_kcat=[10.0], initial_source=["old"])
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model, _kcat_list([("r1", 5.0, "new")]), overwrite=True,
     )
     assert updated == ["r1"]
@@ -198,7 +198,7 @@ def test_overwrite_false_only_updates_zero_or_nan():
         initial_kcat=[10.0, 0.0, np.nan],
         initial_source=["old1", "old2", "old3"],
     )
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 100.0, "new1"),
@@ -219,7 +219,7 @@ def test_overwrite_if_higher_only_replaces_when_strictly_higher():
         initial_kcat=[10.0, 10.0, 10.0],
         initial_source=["old1", "old2", "old3"],
     )
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 5.0, "lower"),    # 5 < 10 -> skip
@@ -240,7 +240,7 @@ def test_overwrite_if_higher_treats_zero_or_nan_as_unset():
         initial_kcat=[0.0, np.nan],
         initial_source=["old1", "old2"],
     )
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model,
         _kcat_list([("r1", 5.0, "new1"), ("r2", 5.0, "new2")]),
         overwrite="if_higher",
@@ -253,7 +253,7 @@ def test_overwrite_if_higher_treats_zero_or_nan_as_unset():
 def test_overwrite_invalid_raises():
     model = _ec_model(["r1"])
     with pytest.raises(ValueError, match="overwrite must be"):
-        select_kcat_value(
+        apply_kcat_list(
             model, _kcat_list([("r1", 5.0, "a")]), overwrite="nonsense",
         )
 
@@ -265,14 +265,14 @@ def test_overwrite_invalid_raises():
 def test_unknown_rxn_id_raises():
     model = _ec_model(["r1"])
     with pytest.raises(ValueError, match="not present in model.ec.rxns"):
-        select_kcat_value(model, _kcat_list([("nonexistent", 5.0, "a")]))
+        apply_kcat_list(model, _kcat_list([("nonexistent", 5.0, "a")]))
 
 
 def test_missing_column_raises():
     model = _ec_model(["r1"])
     bad_list = pd.DataFrame({"rxn_id": ["r1"], "kcat": [5.0]})  # no source
     with pytest.raises(KeyError, match="source"):
-        select_kcat_value(model, bad_list)
+        apply_kcat_list(model, bad_list)
 
 
 # --------------------------------------------------------------------------- #
@@ -281,7 +281,7 @@ def test_missing_column_raises():
 
 def test_return_value_is_list_of_rxn_ids():
     model = _ec_model(["r1", "r2"])
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model,
         _kcat_list([("r1", 5.0, "a"), ("r2", 7.0, "b")]),
     )
@@ -292,7 +292,7 @@ def test_return_value_is_list_of_rxn_ids():
 
 def test_return_value_omits_reactions_not_updated_under_if_higher():
     model = _ec_model(["r1"], initial_kcat=[10.0])
-    updated = select_kcat_value(
+    updated = apply_kcat_list(
         model, _kcat_list([("r1", 5.0, "lower")]), overwrite="if_higher",
     )
     assert updated == []
@@ -316,7 +316,7 @@ def test_consumes_fuzzy_kcat_matching_schema_directly():
         "wildcard_level": pd.array([0, 1, 0], dtype="Int64"),
         "origin": pd.array([1, 3, 1], dtype="Int64"),
     })
-    updated = select_kcat_value(model, df, criteria="max")
+    updated = apply_kcat_list(model, df, criteria="max")
     assert sorted(updated) == ["r1", "r2"]
     # r1 had two entries (5.0, 9.0); max is 9.0.
     assert model.ec.kcat[0] == 9.0

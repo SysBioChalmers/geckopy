@@ -1,5 +1,5 @@
 """Remove the "standard" pseudoenzyme and standard kcat assignments
-added by `get_standard_kcat`.
+added by `assign_standard_kcat`.
 
 Ported from GECKO MATLAB:
 src/geckomat/gather_kcats/removeStandardKcat.m.
@@ -28,7 +28,7 @@ def remove_standard_kcat(model: "EcModel") -> None:
     Ported from GECKO MATLAB:
     src/geckomat/gather_kcats/removeStandardKcat.m.
 
-    Inverse of ``get_standard_kcat``. Cleans up:
+    Inverse of ``assign_standard_kcat``. Cleans up:
 
     1. Reactions in ``ec.rxns`` whose row in ``rxn_enz_mat`` points to
        the "standard" pseudoenzyme are dropped from all per-reaction
@@ -52,7 +52,7 @@ def remove_standard_kcat(model: "EcModel") -> None:
     ----------
     model
         EcModel with a standard pseudoenzyme installed by
-        ``get_standard_kcat``. Mutated in place.
+        ``assign_standard_kcat``. Mutated in place.
     """
     _remove_standard_pseudoenzyme(model)
     affected = _reset_standard_source_rxns(model)

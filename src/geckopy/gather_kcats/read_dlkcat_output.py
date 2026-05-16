@@ -46,7 +46,7 @@ def read_dlkcat_output(
 
     The output DataFrame matches the schema produced by
     ``fuzzy_kcat_matching`` so downstream functions
-    (``select_kcat_value``, ``merge_dlkcat_and_fuzzy_kcats``) can
+    (``apply_kcat_list``, ``merge_dlkcat_and_fuzzy_kcats``) can
     consume both interchangeably. Columns not produced by DLKcat
     (``eccode``, ``wildcard_level``, ``origin``) are filled with
     ``""`` / ``<NA>``.

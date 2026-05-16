@@ -238,12 +238,12 @@ def test_unknown_substrate_in_na_row_still_raises(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Integration with select_kcat_value
+# Integration with apply_kcat_list
 # --------------------------------------------------------------------------- #
 
-def test_output_can_feed_select_kcat_value(tmp_path):
-    """End-to-end: read_dlkcat_output -> select_kcat_value flow."""
-    from geckopy.gather_kcats import select_kcat_value
+def test_output_can_feed_apply_kcat_list(tmp_path):
+    """End-to-end: read_dlkcat_output -> apply_kcat_list flow."""
+    from geckopy.gather_kcats import apply_kcat_list
 
     model = _ec_model(["r1", "r2"], ["alpha", "beta"])
     p = _write_dlkcat_output(tmp_path, [
@@ -251,7 +251,7 @@ def test_output_can_feed_select_kcat_value(tmp_path):
         ("r2", "g2", "beta", "CN", "M", "7.0"),
     ])
     df = read_dlkcat_output(model, p)
-    updated = select_kcat_value(model, df)
+    updated = apply_kcat_list(model, df)
     assert sorted(updated) == ["r1", "r2"]
     assert model.ec.source == ["DLKcat", "DLKcat"]
     np.testing.assert_array_equal(model.ec.kcat, [5.0, 7.0])

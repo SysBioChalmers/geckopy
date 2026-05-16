@@ -115,7 +115,7 @@ def fuzzy_kcat_matching(
 
     MATLAB-COMPAT: GECKO MATLAB returns a struct of parallel arrays;
     geckopy returns a ``pandas.DataFrame`` for compatibility with the
-    downstream ``select_kcat_value`` and ``merge_dlkcat_and_fuzzy_kcats``
+    downstream ``apply_kcat_list`` and ``merge_dlkcat_and_fuzzy_kcats``
     functions, both of which are inherently relational operations.
 
     MATLAB-COMPAT: GECKO MATLAB tracks per-(origin, wildcard) match

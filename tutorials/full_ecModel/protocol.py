@@ -38,15 +38,15 @@ from geckopy.ec_model.pipeline.fill_kcats import fill_kcats_from_isozymes
 from geckopy.ec_model.pipeline.protein_pool import set_prot_pool_size
 from geckopy.ec_model.pipeline.set_kcat import set_kcat_for_reactions
 from geckopy.gather_kcats.fuzzy_kcat_matching import fuzzy_kcat_matching
-from geckopy.gather_kcats.get_standard_kcat import get_standard_kcat
+from geckopy.gather_kcats.get_standard_kcat import assign_standard_kcat
 from geckopy.gather_kcats.merge_dlkcat_and_fuzzy_kcats import (
     merge_dlkcat_and_fuzzy_kcats,
 )
 from geckopy.gather_kcats.read_dlkcat_output import read_dlkcat_output
-from geckopy.gather_kcats.select_kcat_value import select_kcat_value
+from geckopy.gather_kcats.select_kcat_value import apply_kcat_list
 from geckopy.gather_kcats.write_dlkcat_input import write_dlkcat_input
-from geckopy.get_enzyme_data.ec_from_database import get_ec_from_database
-from geckopy.get_enzyme_data.ec_from_gem import get_ec_from_gem
+from geckopy.get_enzyme_data.ec_from_database import fill_eccodes_from_database
+from geckopy.get_enzyme_data.ec_from_gem import fill_eccodes_from_gem
 from geckopy.utilities import (
     load_conventional_gem,
     load_ec_model,
@@ -123,7 +123,7 @@ save_ec_model(ec_model, "ecYeastGEM_stage1.yml", adapter=adapter)
 # same.
 
 # %%
-get_ec_from_database(ec_model, uniprot_db)
+fill_eccodes_from_database(ec_model, uniprot_db)
 
 # %% [markdown]
 # **STEP 18-19** Gather kcat values from BRENDA via fuzzy matching.
@@ -186,7 +186,7 @@ kcat_list_merged = merge_dlkcat_and_fuzzy_kcats(
 # **STEP 27** Populate `ec_model.ec.kcat` from the merged list.
 
 # %%
-select_kcat_value(ec_model, kcat_list_merged)
+apply_kcat_list(ec_model, kcat_list_merged)
 
 # %% [markdown]
 # **STEP 28** Apply manually-curated kcat values from
@@ -209,7 +209,7 @@ fill_kcats_from_isozymes(ec_model)
 # `data/pseudoRxns.tsv`.
 
 # %%
-get_standard_kcat(ec_model, uniprot_db)
+assign_standard_kcat(ec_model, uniprot_db)
 
 # %% [markdown]
 # **STEP 31** Apply kcat constraints to the stoichiometric matrix.
@@ -316,7 +316,7 @@ from geckopy.databases import load_flux_data, load_prot_data
 from geckopy.limit_proteins import (
     calculate_f_factor,
     constrain_enz_concs,
-    constrain_flux_data,
+    apply_flux_data_constraints,
     fill_enz_concs,
     flexibilize_enz_concs,
 )
@@ -350,7 +350,7 @@ print(f"Recomputed f-factor: {f_pdata:.3f} "
 # **STEP 59-63** Constrain exchange fluxes from the flux data.
 
 # %%
-constrain_flux_data(
+apply_flux_data_constraints(
     ec_model, flux_data,
     condition=0, max_min_growth="max", loose_strict_flux="loose",
 )
@@ -385,10 +385,10 @@ for i in np.argsort(flex_result.ratio_incr)[::-1][:5]:
 
 # %%
 conv_model = load_conventional_gem(adapter)
-# constrain_flux_data reads bio_rxn / c_source from `model.adapter`;
+# apply_flux_data_constraints reads bio_rxn / c_source from `model.adapter`;
 # attach the same adapter so it works on the plain cobra.Model too.
 conv_model.adapter = adapter
-constrain_flux_data(
+apply_flux_data_constraints(
     conv_model, flux_data,
     condition=0, max_min_growth="max", loose_strict_flux="loose",
 )
@@ -533,7 +533,7 @@ print(f"Mapped fluxes shape: {mapped.mapped_flux.shape}; "
 # # reach, and apply the same exchange constraints to all three.
 # flux_data.gr_rate[0] = 0.088
 # for m in (model_bare, ec_model_bare, ecModelProt):
-#     constrain_flux_data(
+#     apply_flux_data_constraints(
 #         m, flux_data,
 #         condition=0, max_min_growth="max", loose_strict_flux="loose",
 #     )

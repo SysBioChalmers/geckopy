@@ -30,7 +30,7 @@ _STANDARD_USAGE_RXN_ID = "usage_prot_standard"
 from ..ec_model.constants import POOL_ID as _PROT_POOL_ID
 
 
-def get_standard_kcat(
+def assign_standard_kcat(
     model: "EcModel",
     uniprot_db: "UniprotDB",
     *,
@@ -107,7 +107,7 @@ def get_standard_kcat(
     """
     if model.adapter is None:
         raise ValueError(
-            "EcModel.adapter is None; get_standard_kcat needs an adapter "
+            "EcModel.adapter is None; assign_standard_kcat needs an adapter "
             "for params.enzyme_comp and the spontaneous-reactions list."
         )
 
@@ -133,7 +133,7 @@ def get_standard_kcat(
         rxns_filled = []
 
     logger.info(
-        "get_standard_kcat: standard MW = %.4g g/mmol, standard kcat = "
+        "assign_standard_kcat: standard MW = %.4g g/mmol, standard kcat = "
         "%.4g 1/s. Assigned standard pseudoenzyme to %d reaction(s); "
         "filled %d zero/NaN kcat entry(ies).",
         standard_mw, standard_kcat, len(rxns_added), len(rxns_filled),
@@ -434,3 +434,30 @@ def _fill_zero_kcats(model: "EcModel", standard_kcat: float) -> list[str]:
     for i in indices:
         model.ec.source[int(i)] = "standard"
     return [model.ec.rxns[int(i)] for i in indices]
+
+
+def get_standard_kcat(
+    model: "EcModel",
+    uniprot_db: "UniprotDB",
+    *,
+    threshold: int = 10,
+    fill_zero_kcat: bool = True,
+) -> None:
+    """Deprecated alias for :func:`assign_standard_kcat`.
+
+    Kept for backward compatibility with the original MATLAB name.
+    Will be removed in a future release; switch to
+    ``assign_standard_kcat``.
+    """
+    import warnings
+
+    warnings.warn(
+        "get_standard_kcat is deprecated; use assign_standard_kcat "
+        "instead. The old name will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return assign_standard_kcat(
+        model, uniprot_db,
+        threshold=threshold, fill_zero_kcat=fill_zero_kcat,
+    )

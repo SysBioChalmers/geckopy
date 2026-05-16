@@ -53,7 +53,7 @@ def copy_ec_to_gem(model: "EcModel", *, overwrite: bool = False) -> None:
 
     MATLAB-COMPAT: GECKO MATLAB writes the raw ``;``-joined string
     into the cell. geckopy splits on ``;`` and writes a ``list[str]``
-    (cobrapy idiom). Round-trip with ``get_ec_from_gem`` is stable
+    (cobrapy idiom). Round-trip with ``fill_eccodes_from_gem`` is stable
     because that function's ``_normalize_annotation`` joins lists
     back to ``;``-separated strings.
 
@@ -73,7 +73,7 @@ def copy_ec_to_gem(model: "EcModel", *, overwrite: bool = False) -> None:
     model
         EcModel with populated ``model.ec.rxns`` and
         ``model.ec.eccodes`` (typically by some combination of
-        ``get_ec_from_gem``, ``get_ec_from_database``, etc.).
+        ``fill_eccodes_from_gem``, ``fill_eccodes_from_database``, etc.).
         Mutated in place.
     overwrite
         See above.
