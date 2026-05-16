@@ -24,9 +24,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-_PROT_PREFIX = "prot_"
-_USAGE_PREFIX = "usage_prot_"
-_POOL_ID = "prot_pool"
+from ..ec_model.constants import (
+    POOL_ID as _POOL_ID,
+    PROT_PREFIX as _PROT_PREFIX,
+    USAGE_PREFIX as _USAGE_PREFIX,
+)
 
 
 @dataclass

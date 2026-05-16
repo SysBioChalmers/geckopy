@@ -20,8 +20,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-_USAGE_PREFIX = "usage_prot_"
-_PROT_PREFIX = "prot_"
+from ..ec_model.constants import (
+    PROT_PREFIX as _PROT_PREFIX,
+    USAGE_PREFIX as _USAGE_PREFIX,
+)
+
 _STANDARD_GPR = "standard"
 _BIOMASS_INFEASIBLE_THRESHOLD = 1e-8
 _TOP_QUANTILE = 0.75

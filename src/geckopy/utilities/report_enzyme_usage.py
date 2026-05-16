@@ -18,8 +18,11 @@ if TYPE_CHECKING:
     from .enzyme_usage import EnzymeUsageResult
 
 
-_PROT_PREFIX = "prot_"
-_POOL_EXCHANGE_ID = "prot_pool_exchange"
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
+    PROT_PREFIX as _PROT_PREFIX,
+)
+
 _FLUX_THRESHOLD = 1e-7
 _PLACEHOLDER = "==="
 

@@ -13,7 +13,8 @@ if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
 
-_USAGE_PREFIX = "usage_prot_"
+from ..ec_model.constants import USAGE_PREFIX as _USAGE_PREFIX
+
 _GROWTH_DELTA_THRESHOLD = 1e-10
 
 

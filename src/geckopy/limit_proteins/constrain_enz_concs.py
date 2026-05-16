@@ -13,8 +13,10 @@ if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
 
-_USAGE_PREFIX = "usage_prot_"
-_PROT_POOL_ID = "prot_pool"
+from ..ec_model.constants import (
+    POOL_ID as _PROT_POOL_ID,
+    USAGE_PREFIX as _USAGE_PREFIX,
+)
 
 
 def constrain_enz_concs(

@@ -37,8 +37,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_USAGE_PREFIX = "usage_prot_"
-_POOL_EXCHANGE_ID = "prot_pool_exchange"
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
+    USAGE_PREFIX as _USAGE_PREFIX,
+)
 _POOL_TARGET_NAME = "prot_pool"
 _GROWTH_DELTA_THRESHOLD = 1e-3
 _CONTROL_COEFF_LIMIT = 0.75

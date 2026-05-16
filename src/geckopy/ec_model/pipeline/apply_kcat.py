@@ -15,8 +15,7 @@ if TYPE_CHECKING:
     from ..ec_model import EcModel
 
 
-_PROT_PREFIX = "prot_"
-_POOL_ID = "prot_pool"
+from ..constants import POOL_ID as _POOL_ID, PROT_PREFIX as _PROT_PREFIX
 
 
 def apply_kcat_constraints(

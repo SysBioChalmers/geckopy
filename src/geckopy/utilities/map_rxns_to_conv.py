@@ -22,8 +22,11 @@ if TYPE_CHECKING:
 _REV_SUFFIX = "_REV"
 _REV_EXP_INFIX = "_REV_EXP_"
 _EXP_RE = re.compile(r"_EXP_\d+")
-_USAGE_PREFIX = "usage_prot_"
-_POOL_EXCHANGE_ID = "prot_pool_exchange"
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
+    USAGE_PREFIX as _USAGE_PREFIX,
+)
+
 _POOL_LABEL = "pool"
 
 
