@@ -18,6 +18,38 @@ that are deferred until after the initial port is complete.
   format with a "user_overrides" section. Decision deferred until
   after the basic port is complete.
 
+## Third-party library gotchas
+
+A scratchpad of brittle behaviours observed in geckopy's hard
+dependencies. Each is worked around in source today; the entries
+exist so the next person hitting the same wall can find the fix
+quickly, and so we know what to test on dependency upgrades.
+
+- **`libsbml.Species.appendNotes` returns -5 on cobra-written
+  documents.** Tried both `<html>` and `<notes>` wrappers; both
+  silently fail with status `LIBSBML_INVALID_OBJECT`. Workaround
+  in `geckopy.io.sbml._annotate_mw`: write per-enzyme MW into
+  `cobra.Metabolite.notes["mw"]` before calling
+  `cobra.io.write_sbml_model`, since cobra serialises that dict
+  into SBML `<notes>` reliably. Tested with libsbml 5.21.1.
+
+- **`multiprocessing.Pool(context="spawn")` deadlocks on some
+  WSL kernels.** Even a trivial `Pool(2)` with a `lambda x: x*2`
+  worker hangs forever; no error, no timeout. The plan for
+  parallel `ec_fva` called for `spawn` because it's the only
+  option on Windows. Workaround in
+  `geckopy.utilities.ec_fva.ec_fva`: use `fork` on POSIX (which
+  is also faster, no module re-import), `spawn` on Windows.
+
+- **`ruamel.yaml`'s `ScalarInt`/`ScalarFloat` leak out of cobra
+  YAML loads** as attribute types on `Metabolite.charge`, and
+  the safe-dumper has no representer for them so writing fails
+  with `RepresenterError: cannot represent an object: 0`.
+  Workaround in `geckopy.utilities.save_ec_model._to_native`: a
+  recursive coercion to native Python primitives at the write
+  boundary. Affects any YAML-to-YAML round-trip of a
+  cobra-loaded model.
+
 ## API simplification
 
 - **Mode B in `apply_custom_kcats`.** The "proteins only, no rxns"
