@@ -7,6 +7,7 @@ from .add_new_rxns_to_ec import (
     NewEnzyme,
     add_new_rxns_to_ec,
 )
+from .bottlenecks import get_enzyme_bottlenecks
 from .ec_fseof import EcFseofResult, ec_fseof
 from .ec_fva import ec_fva
 from .enzyme_usage import EnzymeUsageResult, enzyme_usage
@@ -29,6 +30,7 @@ __all__ = [
     "ec_fseof",
     "ec_fva",
     "enzyme_usage",
+    "get_enzyme_bottlenecks",
     "get_subset_ec_model",
     "load_conventional_gem",
     "load_ec_model",
