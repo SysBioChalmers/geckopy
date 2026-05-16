@@ -1,6 +1,8 @@
 """Identify enzymes limiting the current objective.
 
-Ported from geckopy_old/geckopy/flux_analysis.py:275-281
+Ported from the legacy geckopy package described in Carrasco et al.
+(2023, https://doi.org/10.1128/spectrum.01705-23), file
+geckopy/flux_analysis.py:275-281
 (get_protein_bottlenecks), adapted to use the Enzyme proxy.
 """
 from __future__ import annotations
@@ -22,7 +24,9 @@ def get_enzyme_bottlenecks(model: "EcModel", *, top: int = 10) -> pd.DataFrame:
 
     Raises ``RuntimeError`` if the solve is not optimal.
 
-    Ported from geckopy_old/geckopy/flux_analysis.py:275-281.
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/flux_analysis.py:275-281.
     """
     sol = model.optimize()
     if sol.status != "optimal":

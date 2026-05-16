@@ -1,6 +1,8 @@
 """Stateless ``Enzyme`` proxy over the EcModel's ec arrays + usage rxns.
 
-Ported from geckopy_old/geckopy/protein.py:43-454 (Protein class),
+Ported from the legacy geckopy package described in Carrasco et al.
+(2023, https://doi.org/10.1128/spectrum.01705-23), file
+geckopy/protein.py:43-454 (Protein class),
 re-implemented as a proxy rather than a cobra.Object subclass. The
 new package already represents enzymes as ``prot_<id>`` metabolites
 plus ``usage_prot_<id>`` reactions, so the proxy only needs to
@@ -25,7 +27,9 @@ class Enzyme:
     cobra model. Do not cache instances; rebuild via
     ``model.enzymes.get_by_id(uniprot)``.
 
-    Ported from geckopy_old/geckopy/protein.py:43-454 (Protein class).
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/protein.py:43-454 (Protein class).
     """
 
     __slots__ = ("_model", "_uniprot")
@@ -203,7 +207,9 @@ class Kcats:
     ``model.ec.kcat[idx]`` and call ``apply_kcat_constraints``
     themselves.
 
-    Ported from geckopy_old/geckopy/protein.py:456-558 (Kcats class).
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/protein.py:456-558 (Kcats class).
     """
 
     __slots__ = ("_enzyme",)

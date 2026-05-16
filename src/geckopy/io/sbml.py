@@ -1,6 +1,8 @@
 """SBML I/O for EcModel using the MW_KCAT encoding (GECKO 3 standard).
 
-Ported from geckopy_old/geckopy/io/sbml.py, simplified to a single
+Ported from the legacy geckopy package described in Carrasco et al.
+(2023, https://doi.org/10.1128/spectrum.01705-23), file
+geckopy/io/sbml.py, simplified to a single
 encoding (no `EcStoichiometry` enum, no dual KCAT mode). Enzymes are
 encoded as regular metabolites (``prot_<uniprot>``) grouped in an
 SBML ``Group`` named ``Protein``; MW is carried in species notes;
@@ -50,7 +52,9 @@ def write_sbml_ec_model(model: "EcModel", filename: str | Path) -> None:
     GECKO-specific extensions and are silently ignored by such
     tools.
 
-    Ported from geckopy_old/geckopy/io/sbml.py:799-1190
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/io/sbml.py:799-1190
     (write_sbml_ec_model), simplified to MW_KCAT encoding only.
     """
     filename = str(filename)
@@ -153,7 +157,9 @@ def read_sbml_ec_model(
         ModelAdapter to attach to the returned EcModel. Required;
         downstream functions need it for organism parameters.
 
-    Ported from geckopy_old/geckopy/io/sbml.py:95-700
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/io/sbml.py:95-700
     (read_sbml_ec_model), simplified to MW_KCAT only.
     """
     from ..ec_model.ec_data import EcData
@@ -251,7 +257,9 @@ def _populate_ec_from_sbml(
     ``kcat = -mw / (coef * 3600)``. Subunits are assumed 1; the
     coefficient already encodes the per-reaction stoichiometry.
 
-    Ported in concept from geckopy_old/geckopy/io/sbml.py:540-787.
+    Ported in concept from the legacy geckopy package
+    (Carrasco et al., 2023, https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/io/sbml.py:540-787.
     """
     from ..ec_model.ec_data import EcData
 

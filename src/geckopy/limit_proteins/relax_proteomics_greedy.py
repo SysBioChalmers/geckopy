@@ -1,6 +1,8 @@
 """Greedy shadow-price-ordered relaxation of proteomics constraints.
 
-Ported from geckopy_old/geckopy/experimental/relaxation.py
+Ported from the legacy geckopy package described in Carrasco et al.
+(2023, https://doi.org/10.1128/spectrum.01705-23), file
+geckopy/experimental/relaxation.py
 (relax_proteomics_greedy), adapted to the new substrate.
 
 Algorithm: while the model can't reach ``minimal_growth``, find
@@ -82,8 +84,9 @@ def relax_proteomics_greedy(
         each step; ``converged`` is True iff
         ``final_growth >= minimal_growth``.
 
-    Ported from geckopy_old/geckopy/experimental/relaxation.py
-    (relax_proteomics_greedy).
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/experimental/relaxation.py (relax_proteomics_greedy).
     """
     candidates = _eligible_enzymes(model, enzyme_set, default_upper_bound)
     relaxed: dict[str, float] = {}

@@ -1,8 +1,9 @@
 """Parsimonious FBA minimising enzyme usage.
 
-Ported from geckopy_old/geckopy/flux_analysis.py:342-386
-(pfba_protein), adapted to the new substrate (``usage_prot_<id>``
-reactions instead of a Protein DictList).
+Ported from the legacy geckopy package described in Carrasco et al.
+(2023, https://doi.org/10.1128/spectrum.01705-23), file
+geckopy/flux_analysis.py:342-386 (pfba_protein), adapted to the new
+substrate (``usage_prot_<id>`` reactions instead of a Protein DictList).
 """
 from __future__ import annotations
 
@@ -37,7 +38,9 @@ def pfba_enzymes(
 
     Returns a standard ``cobra.Solution`` over all reactions.
 
-    Ported from geckopy_old/geckopy/flux_analysis.py:342-386.
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/flux_analysis.py:342-386.
     """
     if model.ec.gecko_light:
         raise NotImplementedError(
