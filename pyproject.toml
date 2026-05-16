@@ -6,8 +6,32 @@ build-backend = "hatchling.build"
 name = "geckopy"
 version = "0.1.0"
 description = "Enzyme-constrained genome-scale metabolic modeling in Python, inspired by the GECKO Toolbox"
+readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [
+    { name = "Eduard Kerkhoven", email = "eduardk@chalmers.se" },
+]
+keywords = [
+    "ecmodel",
+    "enzyme-constrained",
+    "gecko",
+    "metabolic-model",
+    "cobra",
+    "systems-biology",
+    "constraint-based-modeling",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
     "cobra>=0.29",
     "numpy>=1.21",
@@ -23,10 +47,17 @@ dependencies = [
 dev = [
     "pytest>=7",
     "pytest-cov",
+    "ruff>=0.4",
 ]
 tutorial = [
     "matplotlib>=3.5",
 ]
+
+[project.urls]
+Homepage = "https://github.com/edkerk/geckopy"
+Source = "https://github.com/edkerk/geckopy"
+Issues = "https://github.com/edkerk/geckopy/issues"
+"GECKO MATLAB" = "https://github.com/SysBioChalmers/GECKO"
 
 [project.scripts]
 geckopy = "geckopy.cli:main"
@@ -36,3 +67,21 @@ packages = ["src/geckopy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tutorials/"]
+
+[tool.ruff.lint]
+# Start with actual-error rules only; modernization (I, UP, B) and
+# import sorting can be enabled in a follow-up PR after a one-shot
+# `ruff check --fix && ruff format` cleanup pass.
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line length handled separately by formatter, not lint
+    "E702",  # `R.lower_bound = 0; R.upper_bound = 1000` is intentional in test fixtures
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # allow late imports in test files
