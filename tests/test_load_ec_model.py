@@ -122,9 +122,10 @@ def test_default_filename_without_adapter_raises(tmp_path):
         load_ec_model(adapter=None)
 
 
-def test_non_yaml_extension_raises(tmp_path):
-    with pytest.raises(ValueError, match="YAML"):
-        load_ec_model("ecModel.xml", adapter=None)
+def test_unknown_extension_raises(tmp_path):
+    """Anything outside YAML/SBML is rejected."""
+    with pytest.raises(ValueError, match="YAML or SBML"):
+        load_ec_model("ecModel.txt", adapter=None)
 
 
 def test_missing_file_raises(tmp_path):
