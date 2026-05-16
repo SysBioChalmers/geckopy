@@ -14,12 +14,23 @@ EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 # Fixtures
 # --------------------------------------------------------------------------- #
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    """Load the ecTestGEM fixture through make_ec_model."""
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model = make_ec_model(cobra_model, adapter)
-    return ec_model
+    """Load the ecTestGEM fixture through make_ec_model.
+
+    The build is cached at module scope; each call returns a fresh
+    deep copy so tests can mutate freely without leaking into each
+    other. Building from scratch is ~3 s; deep-copy is <0.1 s.
+    """
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _get_s_coef(rxn: cobra.Reaction, met_id: str) -> float:

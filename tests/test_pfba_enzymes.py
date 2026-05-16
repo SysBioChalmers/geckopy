@@ -12,17 +12,24 @@ from geckopy.utilities import pfba_enzymes
 EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model_with_kcats() -> EcModel:
-    """ecTestGEM with realistic kcats so usage flows."""
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model = make_ec_model(cobra_model, adapter)
-    # Default all kcats to 10 /s so usage coefficients are non-zero.
-    ec_model.ec.kcat[:] = 10.0
-    apply_kcat_constraints(ec_model)
-    # Pick an objective: maximize R3.
-    ec_model.objective = "R3"
-    return ec_model
+    """ecTestGEM with realistic kcats so usage flows. Cached at module
+    scope; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        ec_model = make_ec_model(cobra_model, adapter)
+        # All kcats default to 10 /s so usage coefficients are non-zero.
+        ec_model.ec.kcat[:] = 10.0
+        apply_kcat_constraints(ec_model)
+        ec_model.objective = "R3"  # maximise R3
+        _ECTESTGEM_CACHE = ec_model
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _total_usage(sol: cobra.Solution) -> float:

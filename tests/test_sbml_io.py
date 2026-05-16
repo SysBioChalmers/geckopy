@@ -16,15 +16,25 @@ DATA_DIR = Path(__file__).parent / "data"
 LEGACY_EC_COLI_CORE = DATA_DIR / "ec_coli_core.xml"
 
 
-def _ectestgem_ec_model_with_kcats() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    model = make_ec_model(cobra_model, adapter)
-    model.ec.kcat[:] = 10.0
-    model.ec.concs[:] = np.nan
-    apply_kcat_constraints(model)
-    model.objective = "R3"
-    return model, adapter
+_ECTESTGEM_CACHE: tuple[EcModel, ModelAdapter] | None = None
+
+
+def _ectestgem_ec_model_with_kcats() -> tuple[EcModel, ModelAdapter]:
+    """Cached build of the ecTestGEM ecModel with kcat=10 + R3 objective;
+    deep-copied per call (only the model -- the adapter is shared)."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        model = make_ec_model(cobra_model, adapter)
+        model.ec.kcat[:] = 10.0
+        model.ec.concs[:] = np.nan
+        apply_kcat_constraints(model)
+        model.objective = "R3"
+        _ECTESTGEM_CACHE = (model, adapter)
+    cached_model, adapter = _ECTESTGEM_CACHE
+    return _copy.deepcopy(cached_model), adapter
 
 
 # --------------------------------------------------------------------------- #

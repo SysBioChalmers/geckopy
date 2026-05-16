@@ -1,4 +1,4 @@
-"""Tests for get_kcat_across_isozymes."""
+"""Tests for fill_kcats_from_isozymes."""
 import logging
 from pathlib import Path
 
@@ -8,7 +8,7 @@ import pytest
 
 from geckopy import EcModel, ModelAdapter, make_ec_model
 from geckopy.ec_model.pipeline import (
-    get_kcat_across_isozymes,
+    fill_kcats_from_isozymes,
     set_kcat_for_reactions,
 )
 
@@ -19,10 +19,18 @@ EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 # Helpers
 # --------------------------------------------------------------------------- #
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    return make_ec_model(cobra_model, adapter)
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _kcat(model: EcModel, rxn_id: str) -> float:
@@ -43,7 +51,7 @@ def test_fills_single_missing_isozyme_with_sibling_kcat():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _kcat(ec_model, "R2_EXP_1") == 100.0
     assert _kcat(ec_model, "R2_EXP_2") == 100.0
@@ -65,7 +73,7 @@ def test_fills_with_mean_of_multiple_known_siblings():
     # and set R2_REV_EXP_1 = 50. The average of {50} is 50.
     set_kcat_for_reactions(ec_model, ["R2_REV_EXP_1"], 50.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _kcat(ec_model, "R2_REV_EXP_2") == 50.0
     # The forward R2 kcats already had values, so they should be unchanged.
@@ -78,7 +86,7 @@ def test_does_not_overwrite_known_kcats():
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
     set_kcat_for_reactions(ec_model, ["R2_EXP_2"], 200.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _kcat(ec_model, "R2_EXP_1") == 100.0
     assert _kcat(ec_model, "R2_EXP_2") == 200.0
@@ -97,7 +105,7 @@ def test_rev_direction_is_not_a_sibling_of_forward():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert np.isnan(_kcat(ec_model, "R2_REV_EXP_1"))
     assert np.isnan(_kcat(ec_model, "R2_REV_EXP_2"))
@@ -108,7 +116,7 @@ def test_rev_isozymes_share_among_themselves():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_REV_EXP_1"], 75.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _kcat(ec_model, "R2_REV_EXP_2") == 75.0
     assert np.isnan(_kcat(ec_model, "R2_EXP_1"))
@@ -124,7 +132,7 @@ def test_single_isozyme_reaction_stays_nan():
     With NaN kcat and no siblings, it should stay NaN."""
     ec_model = _ectestgem_ec_model()
     # All NaN, including R3. R3 has no _EXP_ siblings.
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
     assert np.isnan(_kcat(ec_model, "R3"))
 
 
@@ -133,7 +141,7 @@ def test_single_isozyme_does_not_fill_itself():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R3"], 10.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _kcat(ec_model, "R3") == 10.0
     assert _source(ec_model, "R3") != "isozymes"
@@ -146,7 +154,7 @@ def test_single_isozyme_does_not_fill_itself():
 def test_all_nan_kcats_does_nothing(caplog):
     ec_model = _ectestgem_ec_model()
     with caplog.at_level(logging.WARNING):
-        get_kcat_across_isozymes(ec_model, apply=False)
+        fill_kcats_from_isozymes(ec_model, apply=False)
     assert "no known values" in caplog.text
     assert np.isnan(ec_model.ec.kcat).all()
 
@@ -158,7 +166,7 @@ def test_no_missing_to_fill_logs_info(caplog):
     ec_model.ec.kcat[:] = 50.0  # all set
 
     with caplog.at_level(logging.INFO):
-        get_kcat_across_isozymes(ec_model, apply=False)
+        fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert np.all(ec_model.ec.kcat == 50.0)
 
@@ -167,14 +175,14 @@ def test_gecko_light_raises():
     ec_model = _ectestgem_ec_model()
     ec_model.ec.gecko_light = True
     with pytest.raises(NotImplementedError, match="gecko-light"):
-        get_kcat_across_isozymes(ec_model)
+        fill_kcats_from_isozymes(ec_model)
 
 
 def test_empty_ec_model():
     """A freshly-constructed EcModel (no make_ec_model run) should not crash."""
     ec_model = EcModel("empty")
     # ec.kcat is shape (0,), nothing to iterate.
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
     assert ec_model.ec.kcat.shape == (0,)
 
 
@@ -186,7 +194,7 @@ def test_apply_true_writes_to_s_matrix():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=True)
+    fill_kcats_from_isozymes(ec_model, apply=True)
 
     r = ec_model.reactions.get_by_id("R2_EXP_2")
     coef_p3 = next(
@@ -199,7 +207,7 @@ def test_apply_false_leaves_s_matrix_unchanged():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     r = ec_model.reactions.get_by_id("R2_EXP_2")
     coef_p3 = next(
@@ -216,8 +224,29 @@ def test_filled_kcats_have_isozymes_source():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
 
-    get_kcat_across_isozymes(ec_model, apply=False)
+    fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _source(ec_model, "R2_EXP_2") == "isozymes"
     # The source of the originally-set reaction should still be 'manual'.
     assert _source(ec_model, "R2_EXP_1") == "manual"
+
+
+def test_deprecated_alias_still_works():
+    """``get_kcat_across_isozymes`` is the legacy name. It now emits
+    a DeprecationWarning but still forwards to
+    ``fill_kcats_from_isozymes`` so old callers don't break."""
+    import warnings
+
+    from geckopy.ec_model.pipeline import get_kcat_across_isozymes
+
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        get_kcat_across_isozymes(ec_model, apply=False)
+    assert any(
+        issubclass(w.category, DeprecationWarning)
+        and "fill_kcats_from_isozymes" in str(w.message)
+        for w in recorded
+    )
+    assert _source(ec_model, "R2_EXP_2") == "isozymes"

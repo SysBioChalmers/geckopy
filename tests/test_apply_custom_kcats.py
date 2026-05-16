@@ -18,10 +18,18 @@ HEADER = "proteins\tgenes\tgene_name\tkcat\trxns\tnotes\tstoicho\n"
 # Helpers
 # --------------------------------------------------------------------------- #
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    return make_ec_model(cobra_model, adapter)
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _kcat(model: EcModel, rxn_id: str) -> float:

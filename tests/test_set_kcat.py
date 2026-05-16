@@ -18,11 +18,18 @@ EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 # Fixtures
 # --------------------------------------------------------------------------- #
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model = make_ec_model(cobra_model, adapter)
-    return ec_model
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _kcat_at(model: EcModel, rxn_id: str) -> float:
