@@ -1,4 +1,22 @@
-"""Top-level orchestrator: build an EcModel from a conventional GEM.
+"""Build an EcModel from a conventional GEM.
+
+``make_ec_model`` is the top-level entry point for turning a plain
+cobra metabolic model into an enzyme-constrained model. It runs
+the 12-stage GECKO pipeline (preprocess, expand isozymes, look up
+UniProt data, add protein pseudometabolites, set up the shared
+pool, ...) and returns a populated ``EcModel``.
+
+Note that kcat values are NOT set by this function. You usually
+follow up with one of:
+
+- ``geckopy.gather_kcats`` functions (fetch from BRENDA, DLKcat,
+  custom files), then ``apply_kcat_constraints`` to push the
+  values into the LP, or
+- ``ec_model.pipeline.set_kcat.set_kcat_for_reactions`` for a
+  small manual set.
+
+The MATLAB tutorials in
+``tutorials/full_ecModel/protocol.py`` show the full flow.
 
 Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
 """
@@ -39,52 +57,72 @@ def make_ec_model(
     gecko_light: bool = False,
     uniprot_db: Optional[UniprotDB] = None,
 ) -> EcModel:
-    """Expand a conventional GEM into a basic enzyme-constrained model.
+    """Build an enzyme-constrained model from a conventional GEM.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
+    Runs the 12-stage GECKO pipeline end to end and returns the
+    populated ``EcModel``. The output has:
 
-    Runs the full 12-stage pipeline and returns the populated EcModel.
-    Genes that could not be matched to a UniProt entry are reported as
-    a logged warning and individually annotated on each affected
-    reaction via ``rxn.notes["geckopy_warning"]`` (set by stage 7).
+    - Reactions split per isozyme where applicable (``_EXP_<N>``
+      suffix) and per direction for reversible ones (``_REV``).
+    - One ``prot_<uniprot>`` pseudo-metabolite per enzyme.
+    - One ``usage_prot_<uniprot>`` reaction per enzyme drawing
+      from the shared protein pool.
+    - A ``prot_pool`` pseudo-metabolite and a
+      ``prot_pool_exchange`` reaction acting as the global
+      protein budget.
+    - A populated ``model.ec`` substructure (kcats, MW, sequences,
+      coupling matrix).
 
-    MATLAB-COMPAT: GECKO MATLAB returns the list of unmatched genes as
-    a separate output (``noUniprot``). geckopy logs a warning summary
-    instead, since the per-reaction annotations are typically more
-    useful for debugging than the flat list.
-
-    kcat values are not set here. Call apply_kcat_constraints (after
-    populating ec.kcat with values from gather_kcats functions, or via
-    set_kcat_for_reactions).
+    The kcat values themselves are NOT filled in here — they stay
+    NaN until you populate them via the ``gather_kcats`` functions
+    (BRENDA / DLKcat / custom files) and call
+    ``apply_kcat_constraints``, or set them manually via
+    ``set_kcat_for_reactions``.
 
     Parameters
     ----------
     model
-        A conventional cobra.Model. Mutated in place by stages 1-5 and
-        then wrapped as an EcModel for stages 6-12.
+        A conventional cobra.Model (the starting GEM). Mutated in
+        place by stages 1-5 (preprocessing + isozyme expansion)
+        and then wrapped as an EcModel for stages 6-12.
     adapter
-        Loaded ModelAdapter providing organism parameters and the
-        location of the UniProt TSV.
+        A loaded ModelAdapter. Carries organism parameters (taxonomy
+        id, biomass reaction, sigma factor, ...) and the path to
+        the UniProt cache.
     gecko_light
-        Not yet implemented; raises NotImplementedError.
+        Build a light ecModel instead of a full one. Not yet
+        implemented in geckopy; raises NotImplementedError. See
+        ``docs/gecko_light_status.md``.
     uniprot_db
-        Pre-loaded UniprotDB. If None, loaded from
-        ``adapter.params.path / "data" / "uniprot.tsv"``.
+        Pre-loaded UniprotDB. If None, the function looks for
+        ``adapter.params.path / "data" / "uniprot.tsv"`` and loads
+        it automatically.
 
     Returns
     -------
     EcModel
-        An EcModel with populated ec substructure, protein
-        pseudometabolites, and pool machinery.
+        The built ecModel. ``model.ec.kcat`` is all NaN; fill it in
+        before solving.
 
     Raises
     ------
     NotImplementedError
-        If ``gecko_light`` is True.
+        If ``gecko_light`` is True (not yet supported).
     FileNotFoundError
-        If ``uniprot_db`` is None and no uniprot.tsv is found.
+        If ``uniprot_db`` is None and no ``uniprot.tsv`` is found
+        under the adapter's data folder.
     ValueError
-        Propagated from individual stages on consistency errors.
+        Propagated from individual pipeline stages on
+        inconsistencies (e.g. genes referenced in GPRs that don't
+        exist in the model).
+
+    MATLAB-COMPAT: GECKO MATLAB returns the list of unmatched
+    genes as a second output (``noUniprot``). geckopy logs a
+    warning summary instead and annotates each affected reaction
+    via ``rxn.notes["geckopy_warning"]`` — the annotations are
+    usually more useful for debugging than the flat list.
+
+    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
     """
     if gecko_light:
         raise NotImplementedError(

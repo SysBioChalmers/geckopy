@@ -1,16 +1,21 @@
-"""Enzyme-constraint data container for ecModels.
+"""The enzyme-constraint data attached to every ecModel.
 
-Mirrors the `model.ec` substructure in GECKO MATLAB. Two groups of fields:
+An ``EcModel`` is a regular cobra model with an extra ``.ec``
+attribute that holds the enzyme-related information GECKO needs.
+That attribute is an ``EcData`` (this dataclass). It mirrors the
+``model.ec`` substructure in GECKO MATLAB.
 
-Per-reaction fields (length N_rxns, one entry per catalyzed reaction or
-isozyme-specific reaction):
-    rxns, kcat, source, notes, eccodes
+The fields fall into three groups:
 
-Per-enzyme fields (length N_enzymes, one entry per unique enzyme):
-    genes, enzymes, mw, sequence, concs
-
-Coupling between them (shape N_rxns x N_enzymes):
-    rxn_enz_mat
+- **Per-reaction** (length N_rxns, one entry per catalysed
+  reaction; also per isozyme when reactions get split):
+  ``rxns``, ``kcat``, ``source``, ``notes``, ``eccodes``.
+- **Per-enzyme** (length N_enzymes, one entry per unique enzyme):
+  ``genes``, ``enzymes``, ``mw``, ``sequence``, ``concs``.
+- **Coupling** (shape N_rxns x N_enzymes): ``rxn_enz_mat`` is a
+  sparse matrix where ``rxn_enz_mat[i, j]`` gives the subunit
+  count of enzyme ``j`` in reaction ``i`` (zero if that enzyme
+  does not catalyse that reaction).
 """
 from __future__ import annotations
 
@@ -24,18 +29,19 @@ from scipy import sparse
 class EcData:
     """Enzyme-constraint data attached to an EcModel.
 
-    Full vs light models differ in the semantics of `rxns`:
+    Full and light models lay out ``rxns`` differently:
 
-    Full model
-        Model reactions are duplicated per isozyme by expandModel, and
-        `rxns` contains one entry per catalyzed reaction. Length of
-        `rxns` equals the number of such reactions in the host model.
+    - **Full model.** ``expand_model`` duplicates each catalysed
+      reaction per isozyme (giving each variant a `_EXP_<N>` suffix
+      in the cobra model). ``rxns`` then contains one entry per such
+      variant, with ids matching the cobra reactions exactly.
+    - **Light model.** Reactions are not duplicated. ``rxns``
+      contains duplicate entries per isozyme, with ids carrying a
+      `###_` counter prefix (see
+      `docs/gecko_light_status.md`).
 
-    Light model
-        Model reactions are not duplicated. `rxns` contains duplicate
-        entries per isozyme, ordered the same as model.reactions.
-
-    Per-enzyme fields and rxn_enz_mat have identical semantics in both.
+    Per-enzyme fields and ``rxn_enz_mat`` have identical semantics
+    in both layouts.
     """
 
     gecko_light: bool = False

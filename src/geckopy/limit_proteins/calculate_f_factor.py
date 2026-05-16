@@ -1,4 +1,20 @@
-"""Compute the f-factor: mass fraction of model enzymes vs total proteome.
+"""Compute the f-factor for an ecModel.
+
+The f-factor is the fraction of the cell's total protein mass
+that the enzymes in the model account for. (The rest is ribosomes,
+structural proteins, transcription factors, etc. — proteins that
+don't catalyse a metabolic reaction in the model.)
+
+The protein pool's upper bound is set to
+``P_tot * f * sigma``, so getting f right matters: too low and
+the model is under-constrained (artificially easy to grow); too
+high and it's over-constrained (artificially hard).
+
+geckopy computes f from proteomics data (a ``ProtData`` table
+loaded by ``load_pax_db`` or similar): for each measured protein,
+check whether it's in the model, sum the masses, divide by the
+total. A default value of 0.5 is a reasonable starting point when
+no proteomics data is available.
 
 Ported from GECKO MATLAB:
 src/geckomat/limit_proteins/calculateFfactor.m.

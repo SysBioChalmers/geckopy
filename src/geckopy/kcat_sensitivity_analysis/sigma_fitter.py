@@ -1,5 +1,15 @@
-"""Fit the average enzyme saturation factor (sigma) by minimising the
-deviation between predicted and experimental growth.
+"""Fit the average enzyme saturation factor (``sigma``).
+
+The protein pool's upper bound is set to ``P_tot * f * sigma``,
+where ``sigma`` is the average enzyme saturation factor — a
+fudge factor between 0 and 1 capturing the fact that enzymes
+don't usually run at their full Vmax in vivo. The default value
+is 0.5; this function fits a better one.
+
+The algorithm: try a range of sigma values, set the protein-pool
+bound at each, solve the model, compare the predicted growth
+rate to the experimental one, pick the sigma that minimises the
+difference.
 
 Ported from GECKO MATLAB:
 src/geckomat/kcat_sensitivity_analysis/sigmaFitter.m.

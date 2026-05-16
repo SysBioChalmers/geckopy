@@ -1,9 +1,20 @@
-"""Identify enzymes limiting the current objective.
+"""Find the enzymes that are limiting the current objective.
+
+When you solve an ecModel, some enzymes are saturated and some
+have spare capacity. The saturated ones are the ones whose
+removal (or whose increased availability) would shift the
+objective — they're the *bottlenecks*. The LP's shadow price for
+each ``prot_<id>`` mass-balance constraint quantifies that
+sensitivity directly.
+
+``get_enzyme_bottlenecks`` runs the solve, ranks every enzyme by
+absolute shadow price, and returns the top N as a DataFrame. The
+top row is the enzyme whose extra availability would help the
+objective the most.
 
 Ported from the legacy geckopy package described in Carrasco et al.
 (2023, https://doi.org/10.1128/spectrum.01705-23), file
-geckopy/flux_analysis.py:275-281
-(get_protein_bottlenecks), adapted to use the Enzyme proxy.
+geckopy/flux_analysis.py:275-281 (get_protein_bottlenecks).
 """
 from __future__ import annotations
 

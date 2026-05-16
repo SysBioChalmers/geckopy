@@ -1,4 +1,30 @@
-"""Base class for ecModel adapters."""
+"""Project-level configuration for a geckopy ecModel.
+
+A ``ModelAdapter`` bundles everything that's specific to *this*
+ecModel project: the organism's name and taxonomy id, the path
+to the starting GEM, the path to UniProt and other cached data,
+the biomass reaction, the assumed enzyme saturation factor, and so
+on. Downstream geckopy functions take an adapter as input rather
+than dozens of separate keyword arguments.
+
+A project lives in a folder containing:
+
+- ``model_adapter.toml`` — the parameters (see
+  ``geckopy.adapter.params.ModelParameters`` for the schema).
+- ``models/`` — the starting GEM and any ecModel outputs.
+- ``data/`` — cached databases (UniProt, BRENDA, ComplexPortal,
+  proteomics, etc.).
+
+Then:
+
+.. code-block:: python
+
+    adapter = ModelAdapter.from_folder("my_project")
+
+For most users that's all you need. Subclass ``ModelAdapter``
+only when an organism needs custom logic — typically a custom
+``get_spontaneous_reactions`` or a custom gene-id mapping.
+"""
 from __future__ import annotations
 
 import tomllib
@@ -12,13 +38,17 @@ if TYPE_CHECKING:
 
 
 class ModelAdapter:
-    """Holds organism-specific parameters and overridable behavior for an ecModel.
+    """Holds the organism-specific parameters and overridable
+    helpers for one ecModel project.
 
-    Most users do not need to subclass this. Instead they create a folder
-    containing `model_adapter.toml` and call `ModelAdapter.from_folder()`.
+    Most users don't subclass this directly: they make a folder
+    with a ``model_adapter.toml`` and call
+    ``ModelAdapter.from_folder(folder)``.
 
-    Subclass only when custom logic is needed, typically for
-    `get_spontaneous_reactions` or gene ID mapping.
+    Subclass only when a particular organism needs custom logic
+    (e.g. an unusual way to identify spontaneous reactions, or a
+    bespoke gene-id mapping that the default UniProt-table-driven
+    one can't handle).
     """
 
     def __init__(self, params: ModelParameters):
