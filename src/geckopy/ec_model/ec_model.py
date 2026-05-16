@@ -38,6 +38,10 @@ class EcModel(cobra.Model):
         super().__init__(id_or_model, name)
         self.ec: EcData = EcData(gecko_light=gecko_light)
         self.adapter: Optional["ModelAdapter"] = adapter
+        # Deferred import: enzyme.py uses EcModel only under TYPE_CHECKING,
+        # but EnzymeView(self) needs the class at runtime.
+        from .enzyme import EnzymeView
+        self.enzymes = EnzymeView(self)
 
     @classmethod
     def from_cobra(
