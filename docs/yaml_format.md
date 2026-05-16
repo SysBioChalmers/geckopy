@@ -1,59 +1,80 @@
 # geckopy ecModel YAML format
 
-This document specifies the canonical on-disk YAML format for geckopy
-ecModels. The format is also intended to be the target for MATLAB
-GECKO once `writeYAMLmodel`/`readYAMLmodel` are updated; until then,
-the MATLAB-side legacy format (RAVEN / `!!omap`) and the geckopy-side
-canonical format are different. See the migration table at the bottom
-of this document.
+This document defines the YAML format that geckopy uses to save and
+load ecModels.
+
+## Why a custom format
+
+Standard cobrapy already has its own YAML format for ordinary
+metabolic models. But an ecModel carries extra information that
+cobrapy doesn't know about: a list of kcat values, a list of
+enzymes with molecular weights and protein concentrations, and
+the matrix that links reactions to the enzymes that catalyse them.
+
+We had two options:
+
+1. Match the legacy MATLAB / RAVEN YAML format used by GECKO MATLAB
+   today, so files exchange perfectly between MATLAB and Python.
+2. Match cobrapy's YAML format, then add the ec-specific data as
+   extra top-level keys.
+
+We picked option 2. cobrapy already serialises metabolic models in
+a clean schema; reusing it means any cobrapy-aware tool (escher,
+memote, etc.) can load the cobra portion of a geckopy file and
+just ignore the GECKO extras. The trade-off is that MATLAB GECKO
+needs an update to read the format. The required MATLAB changes
+are listed in [future_improvements.md](future_improvements.md).
 
 ## Design goals
 
-1. **Round-trippable with MATLAB GECKO** so that ecModels can be
-   exchanged between the two implementations without lossy
-   conversion. (Requires the MATLAB-side updates listed in
-   [future_improvements.md](future_improvements.md).)
-2. **Compatible with cobra-py's `cobra.io.dict.model_from_dict`** so
-   the cobra-shaped portion of the file can be loaded by any
-   cobra-py-based tool (escher, memote, etc.) with no additional
-   readers, with the GECKO-specific extensions being silently ignored
-   by those tools.
-3. **Human-readable.** Plain YAML mappings everywhere; no `!!omap`
-   tags; sparse-by-omission allowed for empty / `NaN` fields.
+1. **Compatible with cobrapy.** The cobra-shaped portion of the
+   file is exactly what `cobra.io.dict.model_from_dict` produces;
+   loading it doesn't need a custom parser.
+2. **Round-trippable with MATLAB GECKO** once the MATLAB-side
+   writer is updated. The conversion is purely cosmetic; no
+   information is lost.
+3. **Human-readable.** Plain YAML mappings, no `!!omap` tags. Empty
+   strings and NaN values can be omitted; the reader fills in the
+   defaults.
 
 ## Top-level structure
 
-The document is a single YAML mapping with these keys:
+The whole file is one YAML mapping (a top-level dictionary). It
+contains the following keys:
 
-| Key | Required? | Owner | Description |
+| Key | Required? | Owner | What it holds |
 |---|---|---|---|
 | `id` | yes | cobra | Model id |
 | `name` | optional | cobra | Human-readable name |
 | `version` | optional | cobra | cobra schema version (omit if unused) |
 | `compartments` | optional | cobra | Mapping of compartment id -> name |
-| `metabolites` | yes | cobra | List of metabolite mappings (see below) |
-| `reactions` | yes | cobra | List of reaction mappings (see below) |
-| `genes` | yes | cobra | List of gene mappings (see below) |
-| `ec-rxns` | yes (for ecModel) | geckopy | Per-rxn ec data (see below) |
+| `metabolites` | yes | cobra | List of metabolite entries (see below) |
+| `reactions` | yes | cobra | List of reaction entries (see below) |
+| `genes` | yes | cobra | List of gene entries (see below) |
+| `ec-rxns` | yes (for ecModel) | geckopy | Per-reaction ec data (see below) |
 | `ec-enzymes` | yes (for ecModel) | geckopy | Per-enzyme ec data (see below) |
 | `gecko_light` | optional | geckopy | Boolean flag; defaults to `false` |
 | `metaData` | optional | geckopy | Free-form provenance: version, date, author, taxonomy, note |
 
-Tools that consume the cobra-shaped portion of the file (cobra-py,
-escher, memote, ...) silently ignore the geckopy-specific top-level
-keys (`ec-rxns`, `ec-enzymes`, `gecko_light`, `metaData`).
+The "Owner" column says which library the field belongs to. Tools
+that only understand the cobra side (cobrapy, escher, memote, ...)
+silently ignore the geckopy-specific keys (`ec-rxns`, `ec-enzymes`,
+`gecko_light`, `metaData`), so a geckopy YAML loads cleanly as a
+plain cobra model in those tools — you just lose the ec layer.
 
 ## Cobra-shaped section
 
-Identical to the schema produced by `cobra.io.dict.model_to_dict`.
-Notable conventions:
+This is exactly the schema produced by
+`cobra.io.dict.model_to_dict`. A few conventions worth noting:
 
-- `compartments` is a flat mapping, not a sequence.
-- `metabolites`, `reactions`, `genes` are sequences of plain
-  mappings.
-- `reactions[].metabolites` is a flat mapping `met_id -> stoich`.
-- `annotation` is a mapping `key -> [list, of, strings]`. For the
-  SMILES convention used by RAVEN, the SMILES string lives at
+- `compartments` is a flat mapping (`{c: cytosol, e: extracellular}`),
+  not a list.
+- `metabolites`, `reactions`, `genes` are lists of plain mappings
+  (one per metabolite/reaction/gene).
+- A reaction's `metabolites` field is a flat mapping
+  `met_id -> stoichiometric_coefficient`.
+- `annotation` is a mapping `key -> [list, of, strings]`. RAVEN's
+  per-metabolite `smiles` field lives at
   `annotation: {smiles: ["..."]}`.
 
 Example metabolite:
@@ -90,19 +111,21 @@ Example reaction:
     kegg.reaction: ["R00196"]
 ```
 
-## GECKO ec-rxns section
+## `ec-rxns`: per-reaction ec data
 
-`ec-rxns` is a sequence of mappings, one per catalysed (or
-isozyme-expanded, or reversibility-split) reaction. Each entry:
+A list, one entry per catalysed reaction. When the build pipeline
+splits a reaction across isozymes (`_EXP_<N>` suffix) or into
+forward/reverse pairs (`_REV` suffix), each variant gets its own
+entry here. Fields:
 
 | Field | Type | Required? | Notes |
 |---|---|---|---|
 | `id` | string | yes | Matches a model reaction id; may carry `_EXP_<N>` and/or `_REV` suffixes |
-| `kcat` | number | yes | s^-1; serialise NaN as `.nan` |
-| `source` | string | optional | Provenance tag (`"brenda"`, `"dlkcat"`, `"manual"`, ...). Default `""` |
+| `kcat` | number | yes | Turnover number in s^-1; write NaN as `.nan` |
+| `source` | string | optional | Where the kcat came from (`"brenda"`, `"dlkcat"`, `"manual"`, ...). Default `""` |
 | `notes` | string | optional | Free-form note. Default `""` |
-| `eccodes` | string \| list of strings | optional | Single EC code as string (e.g. `"1.1.2.4"`), or a list when multiple ECs apply. Default `""` |
-| `enzymes` | mapping `enzyme_id -> stoich` | yes | Encodes the rxn_enz_mat row. Each `enzyme_id` must appear in `ec-enzymes` |
+| `eccodes` | string \| list | optional | One EC code as a string (`"1.1.2.4"`), or a list when several apply. Default `""` |
+| `enzymes` | mapping `enzyme_id -> stoich` | yes | Which enzymes catalyse this reaction, and the subunit count of each. Every key must appear in `ec-enzymes` |
 
 Example:
 
@@ -116,21 +139,20 @@ Example:
     P32891: 1
 ```
 
-## GECKO ec-enzymes section
+## `ec-enzymes`: per-enzyme ec data
 
-`ec-enzymes` is a sequence of mappings, one per unique enzyme. Each
-entry:
+A list, one entry per unique enzyme. Fields:
 
 | Field | Type | Required? | Notes |
 |---|---|---|---|
-| `genes` | string | yes | Gene id (matches a `genes[].id` from the cobra section) |
-| `enzymes` | string | yes | Enzyme id (typically a UniProt accession) |
-| `mw` | number | optional | Da; serialise NaN as `.nan`. Default NaN |
+| `genes` | string | yes | Gene id; must match a `genes[].id` from the cobra section |
+| `enzymes` | string | yes | Enzyme id (usually a UniProt accession) |
+| `mw` | number | optional | Molecular weight in Da. Write NaN as `.nan`. Default NaN |
 | `sequence` | string | optional | Amino acid sequence. Default `""` |
-| `concs` | number | optional | Measured concentration in mmol/gDW; serialise NaN as `.nan`. Default NaN |
+| `concs` | number | optional | Measured concentration in mmol/gDW (from proteomics). Write NaN as `.nan`. Default NaN |
 
 The `standard` pseudo-gene (added by `get_standard_kcat` to cover
-reactions without enzyme assignment) appears as both `genes:
+reactions without a real gene assignment) appears as both `genes:
 "standard"` and `enzymes: "standard"`.
 
 Example:
@@ -142,15 +164,22 @@ Example:
   sequence: "MVQRWLYSTNAKDIAVLY..."
 ```
 
-## Sparse / NaN handling
+## Sparse defaults
 
-Writers may omit any field whose value is the documented default
-(empty string, NaN). Readers must fill back in the defaults when
-loading. For numerical fields where NaN must be present (e.g. a
-deliberately missing kcat), serialise as `.nan` (the YAML 1.1
-standard NaN representation).
+To keep files compact, writers can omit any field that takes the
+documented default (empty string, NaN). Readers fill the defaults
+back in when loading. The exception is numeric NaN that you want
+to keep explicit (e.g. "this kcat is deliberately unknown"): write
+it as `.nan` so the reader sees it.
 
 ## Migration table: legacy MATLAB / RAVEN -> canonical
+
+The legacy YAML written by current MATLAB GECKO (via RAVEN's
+`writeYAMLmodel`) differs cosmetically from the format above. Both
+hold the same information; the legacy writer just shapes it
+differently. The table below summarises what changes in each
+direction, so the MATLAB-side writer can be updated and a one-off
+conversion script can rewrite existing files.
 
 | Aspect | Legacy MATLAB / RAVEN | Canonical (this spec) | MATLAB-side action |
 |---|---|---|---|
@@ -167,6 +196,5 @@ standard NaN representation).
 | Annotation values | scalar strings | list of strings | Wrap each value in a single-element list |
 | Reaction `ec-code` annotation | not exposed (only `ec-rxns[].eccodes`) | exposed at `reactions[].annotation.ec-code` if known | Optional: emit per-rxn `ec-code` annotation |
 
-The conversion is purely cosmetic; no GECKO data is lost or
-reinterpreted. A one-off conversion script can rewrite legacy
-`ecYeastGEM.yml`-style files into the canonical format.
+None of these changes lose information. The conversion is purely
+about how the same data is laid out on disk.
