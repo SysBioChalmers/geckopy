@@ -363,3 +363,66 @@ def test_metabolite_annotation_loaded(tmp_path):
     a_c = model.metabolites.get_by_id("A_c")
     assert a_c.annotation.get("kegg.compound") == ["C00001"]
     assert a_c.annotation.get("smiles") == ["O"]
+
+
+def test_autoflip_legacy_reverse_direction(tmp_path):
+    """Older MATLAB ecModels stored usage_prot_* and prot_pool_exchange
+    in the reverse direction (lb < 0, ub == 0, stoichiometry signs
+    flipped). load_ec_model should detect that on the fly, warn, and
+    flip the affected reactions back to the forward convention.
+    """
+    import warnings
+
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    # Mutate the protein reactions into the legacy reverse shape, keeping
+    # the effective cap by mapping (lb=0, ub=U) -> (lb=-U, ub=0).
+    for rxn in doc["reactions"]:
+        if rxn["id"].startswith("usage_prot_") or rxn["id"] == "prot_pool_exchange":
+            rxn["lower_bound"] = -rxn["upper_bound"]
+            rxn["upper_bound"] = 0.0
+            rxn["metabolites"] = {k: -v for k, v in rxn["metabolites"].items()}
+
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        flipped = load_ec_model("ecModel.yml", adapter=adapter)
+
+    msgs = [str(w.message) for w in caught]
+    assert any("forward convention" in m for m in msgs), (
+        f"expected a flip warning, got: {msgs}"
+    )
+
+    # Every flipped reaction should now look like the canonical fixture.
+    canonical_doc = _canonical_yaml()
+    expected = {
+        r["id"]: (r["lower_bound"], r["upper_bound"], dict(r["metabolites"]))
+        for r in canonical_doc["reactions"]
+        if r["id"].startswith("usage_prot_") or r["id"] == "prot_pool_exchange"
+    }
+    for rxn in flipped.reactions:
+        if rxn.id not in expected:
+            continue
+        lb_exp, ub_exp, mets_exp = expected[rxn.id]
+        assert rxn.lower_bound == lb_exp, rxn.id
+        assert rxn.upper_bound == ub_exp, rxn.id
+        got = {m.id: c for m, c in rxn.metabolites.items()}
+        assert got == mets_exp, (rxn.id, got, mets_exp)
+
+
+def test_autoflip_no_warning_when_already_forward(tmp_path):
+    """A model that already uses the forward convention must load
+    without the flip warning."""
+    import warnings
+
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        load_ec_model(adapter=adapter)
+    msgs = [str(w.message) for w in caught]
+    assert not any("forward convention" in m for m in msgs), (
+        f"unexpected flip warning on already-forward model: {msgs}"
+    )

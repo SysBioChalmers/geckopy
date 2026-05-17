@@ -14,25 +14,29 @@ the matrix that links reactions to the enzymes that catalyse them.
 We had two options:
 
 1. Match the legacy MATLAB / RAVEN YAML format used by GECKO MATLAB
-   today, so files exchange perfectly between MATLAB and Python.
+   at the time, so files exchange perfectly between MATLAB and
+   Python.
 2. Match cobrapy's YAML format, then add the ec-specific data as
    extra top-level keys.
 
 We picked option 2. cobrapy already serialises metabolic models in
-a clean schema; reusing it means any cobrapy-aware tool (escher,
-memote, etc.) can load the cobra portion of a geckopy file and
-just ignore the GECKO extras. The trade-off is that MATLAB GECKO
-needs an update to read the format. The required MATLAB changes
-are listed in [future_improvements.md](future_improvements.md).
+a clean schema; reusing it means any cobrapy-aware tool (Escher,
+Memote, etc.) can load the cobra portion of a geckopy file and
+just ignore the GECKO extras. MATLAB GECKO and RAVEN (via
+`writeYAMLmodel` / `readYAMLmodel`) now emit and accept the same
+format, so ecModels exchange directly between the two toolboxes
+with no translator. RAVEN's reader still loads the older
+`---` / `!!omap` files as well, so existing distributions keep
+working.
 
 ## Design goals
 
 1. **Compatible with cobrapy.** The cobra-shaped portion of the
    file is exactly what `cobra.io.dict.model_from_dict` produces;
    loading it doesn't need a custom parser.
-2. **Round-trippable with MATLAB GECKO** once the MATLAB-side
-   writer is updated. The conversion is purely cosmetic; no
-   information is lost.
+2. **Round-trippable with MATLAB GECKO.** RAVEN's `writeYAMLmodel`
+   and `readYAMLmodel` emit and accept this same format, so
+   ecModels move between the two toolboxes without conversion.
 3. **Human-readable.** Plain YAML mappings, no `!!omap` tags. Empty
    strings and NaN values can be omitted; the reader fills in the
    defaults.
@@ -172,29 +176,34 @@ back in when loading. The exception is numeric NaN that you want
 to keep explicit (e.g. "this kcat is deliberately unknown"): write
 it as `.nan` so the reader sees it.
 
-## Migration table: legacy MATLAB / RAVEN -> canonical
+## Legacy MATLAB / RAVEN format
 
-The legacy YAML written by current MATLAB GECKO (via RAVEN's
-`writeYAMLmodel`) differs cosmetically from the format above. Both
-hold the same information; the legacy writer just shapes it
-differently. The table below summarises what changes in each
-direction, so the MATLAB-side writer can be updated and a one-off
-conversion script can rewrite existing files.
+Older RAVEN releases wrote YAML in a different on-disk layout
+(outer `---` / `!!omap` wrapper, `!!omap` tags throughout,
+`id`/`name`/`geckoLight` nested under `metaData`, scalar
+annotation values, ...). Files in that older shape still load via
+RAVEN's `readYAMLmodel` (it auto-detects the layout); geckopy's
+own loader only accepts the cobrapy-style format, so if you need
+to bring an older RAVEN/GECKO YAML into geckopy, re-save it once
+from MATLAB (`writeYAMLmodel` now produces the cobrapy layout) or
+run a one-off conversion script.
 
-| Aspect | Legacy MATLAB / RAVEN | Canonical (this spec) | MATLAB-side action |
-|---|---|---|---|
-| Top-level shape | YAML sequence of single-key mappings | YAML mapping | Drop outer sequence wrapper |
-| Ordered-map tags | `!!omap` everywhere | none (relies on Python 3.7+ / YAML 1.2 ordered mappings) | Stop emitting `!!omap` tags |
-| `compartments` | sequence of single-key mappings | flat mapping | Flatten |
-| `metabolites[]`, `reactions[]`, `genes[]` | each entry is `!!omap` | each entry is a plain mapping | Emit plain mappings |
-| `reactions[].metabolites` | `!!omap` list | flat mapping `met_id -> stoich` | Flatten |
-| `ec-rxns[].enzymes` | `!!omap` list | flat mapping `enzyme_id -> stoich` | Flatten |
-| Top-level `id` / `name` | nested under `metaData` | top-level | Lift `id` and `name` out of `metaData` |
-| `metaData` provenance fields (`version`, `date`, `givenName`, ...) | inside `metaData` | inside `metaData` (unchanged) | No change; cobra-py ignores |
-| `metaData.geckoLight` | inside `metaData`, string `"true"`/`"false"` | top-level `gecko_light: <bool>` | Move out of `metaData`, switch to native boolean |
-| `smiles` per metabolite | top-level metabolite key | nested under `annotation` as `{smiles: ["..."]}` | Move into annotation |
-| Annotation values | scalar strings | list of strings | Wrap each value in a single-element list |
-| Reaction `ec-code` annotation | not exposed (only `ec-rxns[].eccodes`) | exposed at `reactions[].annotation.ec-code` if known | Optional: emit per-rxn `ec-code` annotation |
+For reference, the cosmetic differences between the two layouts:
 
-None of these changes lose information. The conversion is purely
-about how the same data is laid out on disk.
+| Aspect | Legacy MATLAB / RAVEN | Current (cobrapy / this spec) |
+|---|---|---|
+| Top-level shape | YAML sequence of single-key mappings | YAML mapping |
+| Ordered-map tags | `!!omap` everywhere | none |
+| `compartments` | sequence of single-key mappings | flat mapping |
+| `metabolites[]`, `reactions[]`, `genes[]` | each entry is `!!omap` | each entry is a plain mapping |
+| `reactions[].metabolites` | `!!omap` list | flat mapping `met_id -> stoich` |
+| `ec-rxns[].enzymes` | `!!omap` list | flat mapping `enzyme_id -> stoich` |
+| Top-level `id` / `name` | nested under `metaData` | top-level |
+| `metaData` provenance fields | inside `metaData` | inside `metaData` (unchanged) |
+| `metaData.geckoLight` | inside `metaData`, string `"true"`/`"false"` | top-level `gecko_light: <bool>` |
+| `smiles` per metabolite | top-level metabolite key | nested under `annotation` as `{smiles: ["..."]}` |
+| Annotation values | scalar strings | list of strings |
+| Reaction `ec-code` annotation | not exposed (only `ec-rxns[].eccodes`) | exposed at `reactions[].annotation.ec-code` if known |
+
+The two layouts hold the same information; the difference is
+purely in how it is shaped on disk.

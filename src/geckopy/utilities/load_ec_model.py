@@ -1,6 +1,6 @@
 """Load an ecModel from a YAML file.
 
-Reads the geckopy canonical YAML format documented in
+Reads the cobrapy-style YAML format documented in
 ``docs/yaml_format.md`` and rebuilds an ``EcModel``. Most of the
 heavy lifting is delegated to cobra-py
 (``cobra.io.dict.model_from_dict`` handles the reactions /
@@ -12,12 +12,16 @@ The loader also dispatches SBML files (`.xml` / `.sbml`) to
 ``geckopy.io.sbml.read_sbml_ec_model``, so the same call works
 for both formats.
 
-The legacy MATLAB / RAVEN YAML format (with ``!!omap`` tags and an
-outer sequence wrapper) is NOT supported. Once MATLAB-side
-``writeYAMLmodel`` is updated to match the canonical schema, the
-two implementations will round-trip. Until then, legacy files need
-a one-off conversion (see ``docs/yaml_format.md`` for the
-migration table).
+The pre-2026 MATLAB / RAVEN YAML format (with ``!!omap`` tags and
+an outer sequence wrapper) is NOT supported by this loader -- only
+RAVEN's own ``readYAMLmodel`` reads those. Re-save the file from
+MATLAB to convert it.
+
+ecModels written before MATLAB GECKO switched ``usage_prot_*`` and
+``prot_pool_exchange`` to the forward direction (positive flux)
+used the opposite sign convention. The loader detects that case
+on load and flips the affected reactions in place, so downstream
+geckopy code always sees the current convention.
 
 MATLAB-COMPAT: the MATLAB ``loadEcModel`` validates
 ``endsWith(filename, {'yml','yaml'})`` and then has a dead
@@ -33,6 +37,7 @@ Ported from GECKO MATLAB: src/geckomat/utilities/loadEcModel.m.
 """
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -114,6 +119,7 @@ def load_ec_model(
     data.pop("metaData", None)  # preserved on disk; ignored on load
 
     cobra_model = model_from_dict(data)
+    _flip_legacy_prot_direction(cobra_model)
     ec_data = _build_ec_data(
         ec_rxns_raw, ec_enzymes_raw, gecko_light=gecko_light,
     )
@@ -227,6 +233,48 @@ def _build_ec_data(
         concs=concs,
         rxn_enz_mat=mat.tocsr(),
     )
+
+
+def _flip_legacy_prot_direction(model) -> None:
+    """Detect and flip pre-forward-direction protein reactions in place.
+
+    Older MATLAB GECKO ecModels defined ``usage_prot_*`` and
+    ``prot_pool_exchange`` as "reverse" reactions: their flux was
+    negative, and the stoichiometry signs were correspondingly
+    swapped. The current convention (in both geckopy and recent
+    MATLAB GECKO) treats them as ordinary forward reactions, with
+    positive flux. When a loaded model still uses the older
+    convention we flip the affected reactions in place so the rest
+    of geckopy never has to handle two shapes.
+
+    The signature we look for is any ``usage_prot_*`` or
+    ``prot_pool_exchange`` reaction whose lower bound is negative.
+    """
+    flipped: list[str] = []
+    for rxn in model.reactions:
+        if not (
+            rxn.id.startswith("usage_prot_")
+            or rxn.id == "prot_pool_exchange"
+        ):
+            continue
+        if rxn.lower_bound >= -1e-9:
+            continue
+        # Swap stoichiometry: subtract 2*current to land at -current.
+        rxn.add_metabolites(
+            {met: -2.0 * coef for met, coef in rxn.metabolites.items()},
+            combine=True,
+        )
+        lb, ub = rxn.lower_bound, rxn.upper_bound
+        rxn.lower_bound = -ub
+        rxn.upper_bound = -lb
+        flipped.append(rxn.id)
+    if flipped:
+        warnings.warn(
+            f"ecModel uses the older reverse-direction convention "
+            f"for {len(flipped)} protein usage/pool reaction(s); "
+            "flipping to the current forward convention.",
+            stacklevel=3,
+        )
 
 
 def _canonicalize_eccodes(value) -> str:
