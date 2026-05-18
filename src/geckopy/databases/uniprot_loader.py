@@ -56,13 +56,23 @@ def load_uniprot_tsv(
     path: str | Path,
     *,
     split_gene_cells: bool = False,
+    uniprot_id: str | int | None = None,
+    id_type: str = "taxonomy_id",
+    gene_id_field: str = "gene_oln",
+    reviewed: bool = True,
+    auto_download: bool = True,
 ) -> UniprotDB:
     """Parse a uniprot.tsv file into a UniprotDB.
+
+    Mirrors the KEGG-loader / MATLAB convention: if ``path`` does
+    not exist and ``uniprot_id`` is given and ``auto_download`` is
+    True, ``download_uniprot`` is invoked first.
 
     Parameters
     ----------
     path
-        Path to uniprot.tsv. Must exist.
+        Path to uniprot.tsv. May not exist if ``uniprot_id`` triggers
+        an auto-download.
     split_gene_cells
         If True, rows whose Gene Names cell contains whitespace-separated
         multiple names are expanded into one row per gene name. All other
@@ -80,6 +90,22 @@ def load_uniprot_tsv(
 
         If False (the default and MATLAB-equivalent behavior), the cell
         is stored verbatim, including any embedded whitespace.
+    uniprot_id
+        UniProt-side identifier (e.g. NCBI taxonomy ID). Required
+        for auto-download; otherwise unused.
+    id_type
+        UniProt query field type for ``uniprot_id``. Default
+        ``"taxonomy_id"``.
+    gene_id_field
+        UniProt field that becomes the Gene Names column. Default
+        ``"gene_oln"``.
+    reviewed
+        If True (default), restrict the auto-download query to
+        reviewed (Swiss-Prot) entries.
+    auto_download
+        If True (default) and ``path`` is missing, trigger
+        ``download_uniprot`` before parsing. Set to False to keep
+        the loader pure (e.g. tests).
 
     Returns
     -------
@@ -89,7 +115,8 @@ def load_uniprot_tsv(
     Raises
     ------
     FileNotFoundError
-        If ``path`` does not exist.
+        If ``path`` does not exist and either ``auto_download`` is
+        False or ``uniprot_id`` is None.
     ValueError
         If the file has duplicate Entry values, or if the header does
         not have at least 5 tab-delimited fields.
@@ -102,7 +129,19 @@ def load_uniprot_tsv(
     """
     path = Path(path)
     if not path.is_file():
-        raise FileNotFoundError(f"uniprot.tsv not found: {path}")
+        if not auto_download or uniprot_id is None:
+            raise FileNotFoundError(
+                f"uniprot.tsv not found: {path}. "
+                f"Pass uniprot_id=... to trigger an auto-download, "
+                f"or run `geckopy uniprot-download` first."
+            )
+        from .uniprot_download import download_uniprot
+        download_uniprot(
+            uniprot_id, path,
+            id_type=id_type,
+            gene_id_field=gene_id_field,
+            reviewed=reviewed,
+        )
 
     ids: list[str] = []
     genes: list[str] = []

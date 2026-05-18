@@ -15,6 +15,7 @@ from .find_ec_in_db import find_ec_in_db
 if TYPE_CHECKING:
     from ..adapter import ModelAdapter
     from ..databases import UniprotDB
+    from ..databases.kegg_loader import KeggDB
     from ..ec_model.ec_model import EcModel
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ def fill_eccodes_from_database(
     model: "EcModel",
     uniprot_db: "UniprotDB",
     *,
+    kegg_db: Optional["KeggDB"] = None,
     ec_rxns: Optional[Iterable[str]] = None,
     action: Literal["display", "ignore"] = "display",
 ) -> None:
@@ -65,10 +67,10 @@ def fill_eccodes_from_database(
     resolves it via ``ModelAdapterManager.getDefault()``. geckopy
     reads the adapter from ``model.adapter``.
 
-    MATLAB-COMPAT: GECKO MATLAB falls back to a KEGG lookup when the
-    UniProt match is empty or has a trailing ``-``. geckopy does not
-    yet implement the KEGG fallback (no ``KeggDB`` ported); the
-    UniProt result is used as-is.
+    If ``kegg_db`` is supplied, the KEGG fallback fires for any
+    reaction whose UniProt-derived EC is empty or ends with ``-``
+    (a wildcard). The KEGG hit replaces the UniProt result when
+    non-empty. Matches MATLAB ``getECfromDatabase.m`` lines 95-104.
 
     MATLAB-COMPAT: GECKO MATLAB exposes three actions: ``'display'``
     (raise), ``'ignore'`` (silent), ``'add'`` (commented-out dead
@@ -149,6 +151,11 @@ def fill_eccodes_from_database(
     gene_to_protein_indices = _build_gene_to_protein_indices(
         model.ec.genes, uniprot_db, adapter,
     )
+    kegg_gene_to_indices: dict[str, list[int]] = {}
+    if kegg_db is not None:
+        kegg_gene_to_indices = _build_kegg_gene_to_indices(
+            model.ec.genes, kegg_db, adapter,
+        )
 
     db_eccodes = uniprot_db.eccodes
     db_mw = uniprot_db.mw
@@ -165,22 +172,41 @@ def fill_eccodes_from_database(
         gene_set = [model.ec.genes[j] for j in gene_indices]
 
         rxn_conflicts: list[tuple[str, list[int]]] = []
-        new_eccodes[i] = find_ec_in_db(
+        ec_from_uniprot = find_ec_in_db(
             gene_set, db_eccodes, db_mw, gene_to_protein_indices,
             conflicts=rxn_conflicts,
         )
+        chosen_ec = ec_from_uniprot
+        chosen_db = "uniprot"
+
+        if kegg_db is not None and (
+            not ec_from_uniprot or ec_from_uniprot.endswith("-")
+        ):
+            kegg_conflicts: list[tuple[str, list[int]]] = []
+            ec_from_kegg = find_ec_in_db(
+                gene_set, kegg_db.eccodes, kegg_db.mw,
+                kegg_gene_to_indices,
+                conflicts=kegg_conflicts,
+            )
+            if ec_from_kegg:
+                chosen_ec = ec_from_kegg
+                chosen_db = "kegg"
+                rxn_conflicts = kegg_conflicts
+
+        new_eccodes[i] = chosen_ec
 
         for gene, protein_indices in rxn_conflicts:
             conflicts.append(_Conflict(
                 rxn_idx=i,
                 gene=gene,
                 protein_indices=protein_indices,
+                db_name=chosen_db,
             ))
 
     model.ec.eccodes = new_eccodes
 
     if action == "display" and conflicts:
-        logger.warning(_format_conflict_message(conflicts, uniprot_db, model))
+        logger.warning(_format_conflict_message(conflicts, uniprot_db, kegg_db, model))
 
 
 def _build_gene_to_protein_indices(
@@ -224,9 +250,31 @@ def _build_gene_to_protein_indices(
     return result
 
 
+def _build_kegg_gene_to_indices(
+    model_genes: list[str],
+    kegg_db: "KeggDB",
+    adapter: "ModelAdapter",
+) -> dict[str, list[int]]:
+    """Build the gene -> KEGG-row-indices map used by ``find_ec_in_db``."""
+    if not model_genes:
+        return {}
+    transformed = adapter.get_kegg_compatible_genes(model_genes)
+    name_to_indices: dict[str, list[int]] = {}
+    for i, g in enumerate(kegg_db.genes):
+        if g:
+            name_to_indices.setdefault(g, []).append(i)
+    result: dict[str, list[int]] = {}
+    for original, name in zip(model_genes, transformed):
+        indices = name_to_indices.get(name)
+        if indices:
+            result[original] = list(indices)
+    return result
+
+
 def _format_conflict_message(
     conflicts: list[_Conflict],
     uniprot_db: "UniprotDB",
+    kegg_db: Optional["KeggDB"],
     model: "EcModel",
 ) -> str:
     """Build the aggregated multi-line message for action='display'."""
@@ -234,14 +282,20 @@ def _format_conflict_message(
     lines = [
         f"fill_eccodes_from_database: {len(conflicts)} gene-protein conflict(s) "
         f"found across {rxn_count} reaction(s). Resolve by editing your "
-        f"UniProt data, or call fill_eccodes_from_database with "
+        f"UniProt or KEGG data, or call fill_eccodes_from_database with "
         f"action='ignore' to silently use the first match per gene:",
     ]
     for c in conflicts:
         rxn_id = model.ec.rxns[c.rxn_idx]
-        protein_ids = [uniprot_db.ids[p] for p in c.protein_indices]
+        if c.db_name == "kegg" and kegg_db is not None:
+            protein_ids = [
+                kegg_db.uniprot_ids[p] or kegg_db.kegg_genes[p]
+                for p in c.protein_indices
+            ]
+        else:
+            protein_ids = [uniprot_db.ids[p] for p in c.protein_indices]
         lines.append(
-            f"  - rxn {rxn_id!r} / gene {c.gene!r}: "
+            f"  - rxn {rxn_id!r} / gene {c.gene!r} ({c.db_name}): "
             f"proteins {', '.join(protein_ids)}"
         )
     return "\n".join(lines)
@@ -251,6 +305,7 @@ def get_ec_from_database(
     model: "EcModel",
     uniprot_db: "UniprotDB",
     *,
+    kegg_db: Optional["KeggDB"] = None,
     ec_rxns: Optional[Iterable[str]] = None,
     action: Literal["display", "ignore"] = "display",
 ) -> None:
@@ -270,5 +325,5 @@ def get_ec_from_database(
         stacklevel=2,
     )
     return fill_eccodes_from_database(
-        model, uniprot_db, ec_rxns=ec_rxns, action=action,
+        model, uniprot_db, kegg_db=kegg_db, ec_rxns=ec_rxns, action=action,
     )

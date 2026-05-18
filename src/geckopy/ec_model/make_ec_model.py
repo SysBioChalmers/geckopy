@@ -45,6 +45,7 @@ from .pipeline import (
 
 if TYPE_CHECKING:
     from ..adapter import ModelAdapter
+    from ..databases.kegg_loader import KeggDB
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ def make_ec_model(
     *,
     gecko_light: bool = False,
     uniprot_db: Optional[UniprotDB] = None,
+    kegg_db: "Optional[KeggDB]" = None,
 ) -> EcModel:
     """Build an enzyme-constrained model from a conventional GEM.
 
@@ -97,6 +99,15 @@ def make_ec_model(
         Pre-loaded UniprotDB. If None, the function looks for
         ``adapter.params.path / "data" / "uniprot.tsv"`` and loads
         it automatically.
+    kegg_db
+        Pre-loaded KeggDB. Optional fallback source for protein
+        information and EC numbers. When provided, stage 7 fills
+        genes that UniProt missed (with ``ec.enzymes`` set to the
+        UniProt accession carried in the KEGG row, or to the KEGG
+        gene id when that accession is empty), and the EC-number
+        lookup (``fill_eccodes_from_database``) consults KEGG when
+        the UniProt result is empty or ends with ``-``. If None,
+        KEGG is not used.
 
     Returns
     -------
@@ -151,7 +162,7 @@ def make_ec_model(
         uniprot_path = adapter.params.path / "data" / "uniprot.tsv"
         uniprot_db = load_uniprot_tsv(uniprot_path)
 
-    no_uniprot = populate_enzyme_data(ec_model, uniprot_db)
+    no_uniprot = populate_enzyme_data(ec_model, uniprot_db, kegg_db=kegg_db)
     build_rxn_enzyme_coupling(ec_model)
 
     # Stages 9-12: protein pool machinery.

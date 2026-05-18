@@ -28,6 +28,7 @@ from scipy import sparse
 
 if TYPE_CHECKING:
     from ...databases import UniprotDB
+    from ...databases.kegg_loader import KeggDB
     from ..ec_model import EcModel
 
 
@@ -80,11 +81,16 @@ def allocate_ec_for_catalyzed_reactions(model: "EcModel") -> list[str]:
 _UNCONSTRAINED_NOTE_KEY = "geckopy_warning"
 
 
-def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]:
-    """Stage 7: fill per-enzyme fields from a UniprotDB lookup.
+def populate_enzyme_data(
+    model: "EcModel",
+    uniprot_db: "UniprotDB",
+    *,
+    kegg_db: "KeggDB | None" = None,
+) -> list[str]:
+    """Stage 7: fill per-enzyme fields from UniProt (with optional KEGG fallback).
 
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 7).
+    (stage 7), extended with a KEGG fallback that MATLAB does not have.
 
     MATLAB-COMPAT: GECKO MATLAB iterates model.genes in their original
     model order. geckopy iterates them in alphabetical order so that
@@ -106,6 +112,14 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
     ec.sequence (same length as ec.genes), and ec.concs is allocated as
     NaN of matching length. Unmatched genes are returned as a list
     (the equivalent of MATLAB's ``noUniprot``).
+
+    When ``kegg_db`` is supplied, each gene UniProt could not match is
+    looked up in the KEGG database via
+    ``adapter.get_kegg_compatible_genes``. KEGG hits feed ec.enzymes
+    with the UniProt accession stored on the KEGG entry; if that is
+    empty, the bare KEGG gene ID (``KeggDB.kegg_genes``) is used as a
+    fallback identifier. The returned ``no_uniprot`` list then names
+    only the genes that neither source could fill.
 
     MATLAB-COMPAT: GECKO MATLAB only returns the noUniprot list and
     does not annotate the affected reactions. geckopy additionally
@@ -165,22 +179,44 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
     matched_enzymes: list[str] = []
     matched_mw: list[float] = []
     matched_seq: list[str] = []
-    no_uniprot: list[str] = []
+    unmatched: list[str] = []
+    kegg_filled: list[str] = []
 
-    for gene, row_idx in zip(model_genes, matches):
-        if row_idx is None:
-            no_uniprot.append(gene)
-        else:
+    kegg_lookup: dict[str, int] = {}
+    kegg_transformed: list[str] = []
+    if kegg_db is not None and len(kegg_db) > 0:
+        kegg_transformed = adapter.get_kegg_compatible_genes(model_genes)
+        for i, g in enumerate(kegg_db.genes):
+            if g and g not in kegg_lookup:
+                kegg_lookup[g] = i
+
+    for idx, (gene, row_idx) in enumerate(zip(model_genes, matches)):
+        if row_idx is not None:
             matched_genes.append(gene)
             matched_enzymes.append(uniprot_db.ids[row_idx])
             matched_mw.append(uniprot_db.mw[row_idx])
             matched_seq.append(uniprot_db.sequences[row_idx])
+            continue
+        kegg_idx: int | None = None
+        if kegg_lookup:
+            kegg_idx = kegg_lookup.get(kegg_transformed[idx])
+        if kegg_idx is None:
+            unmatched.append(gene)
+            continue
+        # KEGG fallback hit.
+        enzyme_id = kegg_db.uniprot_ids[kegg_idx] or kegg_db.kegg_genes[kegg_idx]
+        matched_genes.append(gene)
+        matched_enzymes.append(enzyme_id)
+        matched_mw.append(float(kegg_db.mw[kegg_idx]))
+        matched_seq.append(kegg_db.sequences[kegg_idx])
+        kegg_filled.append(gene)
 
     if not matched_genes:
         raise ValueError(
             "None of the model genes matched an entry in the UniProt "
-            "database. Check adapter.params.uniprot.* and, if needed, "
-            "provide a data/uniprotConversion.tsv file."
+            "database (or KEGG, if provided). Check "
+            "adapter.params.uniprot.* / adapter.params.kegg.* and, "
+            "if needed, provide a data/uniprotConversion.tsv file."
         )
 
     model.ec.genes = matched_genes
@@ -189,9 +225,18 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
     model.ec.sequence = matched_seq
     model.ec.concs = np.full(len(matched_genes), np.nan, dtype=float)
 
+    if kegg_filled:
+        import logging
+        logging.getLogger(__name__).info(
+            "populate_enzyme_data: %d gene(s) resolved via KEGG fallback "
+            "(UniProt had no entry): %s",
+            len(kegg_filled),
+            ", ".join(kegg_filled[:10]) + ("..." if len(kegg_filled) > 10 else ""),
+        )
+
     # Annotate reactions whose GPR mentions any unmatched gene.
-    if no_uniprot:
-        unmatched_set = set(no_uniprot)
+    if unmatched:
+        unmatched_set = set(unmatched)
         for rxn in model.reactions:
             if not rxn.genes:
                 continue
@@ -200,11 +245,11 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
             )
             if missing:
                 rxn.notes[_UNCONSTRAINED_NOTE_KEY] = (
-                    "geckopy: no ec-constraint due to no uniprot match "
+                    "geckopy: no ec-constraint due to no uniprot/kegg match "
                     "for gene(s): " + ", ".join(missing)
                 )
 
-    return no_uniprot
+    return unmatched
 
 
 # --------------------------------------------------------------------------- #

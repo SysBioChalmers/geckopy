@@ -12,6 +12,8 @@ from geckopy.databases.brenda.download import (
     BrendaDownloadError,
     ensure_brenda_json,
 )
+from geckopy.databases.kegg_download import download_kegg
+from geckopy.databases.uniprot_download import download_uniprot
 
 
 ADAPTER_PY_STUB = '''\
@@ -132,8 +134,70 @@ def main(argv: list[str] | None = None) -> int:
     )
     brenda_parser.set_defaults(func=cmd_brenda_refresh)
 
+    uniprot_parser = sub.add_parser(
+        "uniprot-download",
+        help="Download an organism-specific UniProt TSV via the REST API",
+    )
+    uniprot_parser.add_argument(
+        "uniprot_id",
+        help="UniProt query identifier (e.g. NCBI taxonomy id 559292)",
+    )
+    uniprot_parser.add_argument(
+        "out_path", help="Destination TSV path",
+    )
+    uniprot_parser.add_argument(
+        "--id-type", default="taxonomy_id",
+        help="UniProt query field for uniprot_id (default: taxonomy_id)",
+    )
+    uniprot_parser.add_argument(
+        "--gene-id-field", default="gene_oln",
+        help="UniProt field for the Gene Names column (default: gene_oln)",
+    )
+    uniprot_parser.add_argument(
+        "--include-unreviewed", action="store_true",
+        help="Include unreviewed (TrEMBL) entries (default: reviewed only)",
+    )
+    uniprot_parser.set_defaults(func=cmd_uniprot_download)
+
+    kegg_parser = sub.add_parser(
+        "kegg-download",
+        help="Download organism-specific protein info via the KEGG REST API",
+    )
+    kegg_parser.add_argument(
+        "kegg_id", help="KEGG organism code (e.g. sce)",
+    )
+    kegg_parser.add_argument(
+        "out_path", help="Destination CSV path",
+    )
+    kegg_parser.add_argument(
+        "--gene-id-field", default="kegg",
+        help="KEGG entry field to use as the gene matching key (default: kegg)",
+    )
+    kegg_parser.set_defaults(func=cmd_kegg_download)
+
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def cmd_uniprot_download(args: argparse.Namespace) -> int:
+    out = Path(args.out_path).resolve()
+    download_uniprot(
+        args.uniprot_id, out,
+        id_type=args.id_type,
+        gene_id_field=args.gene_id_field,
+        reviewed=not args.include_unreviewed,
+    )
+    print(f"Wrote {out}")
+    return 0
+
+
+def cmd_kegg_download(args: argparse.Namespace) -> int:
+    out = Path(args.out_path).resolve()
+    download_kegg(
+        args.kegg_id, out, gene_id_field=args.gene_id_field,
+    )
+    print(f"Wrote {out}")
+    return 0
 
 
 if __name__ == "__main__":

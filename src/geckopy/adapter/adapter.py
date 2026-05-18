@@ -158,6 +158,15 @@ class ModelAdapter:
 
         return [mapping.get(g, g) for g in model_genes]
 
+    def get_kegg_compatible_genes(self, in_genes: list[str]) -> list[str]:
+        """Map model gene IDs to IDs usable in KEGG ``genes`` column lookups.
+
+        The default returns the input unchanged. Override when the model
+        uses gene identifiers that need transformation before KEGG
+        lookup. Parallels ``get_uniprot_compatible_genes``.
+        """
+        return list(in_genes)
+
     def get_brenda_db_folder(self) -> Path:
         """Return the folder where the BRENDA database files are stored.
 

@@ -132,3 +132,61 @@ def test_cli_brenda_refresh_end_to_end(tmp_path, capsys):
     assert "BRENDA release 2026.1" in output
     for name in ("max_kcat.tsv", "max_sa.tsv", "max_mw.tsv"):
         assert (out / name).exists()
+
+
+def test_cli_uniprot_download_invokes_function(tmp_path, monkeypatch, capsys):
+    calls = {}
+
+    def fake_download(uid, path, *, id_type, gene_id_field, reviewed):
+        calls["args"] = (uid, str(path), id_type, gene_id_field, reviewed)
+        Path(path).write_text("Entry\tGene\tEC\tMass\tSequence\n")
+        return path
+
+    monkeypatch.setattr(
+        "geckopy.cli.download_uniprot", fake_download,
+    )
+    out = tmp_path / "u.tsv"
+    rc = main(["uniprot-download", "559292", str(out)])
+    assert rc == 0
+    assert calls["args"][0] == "559292"
+    assert calls["args"][2] == "taxonomy_id"
+    assert calls["args"][3] == "gene_oln"
+    assert calls["args"][4] is True
+    assert out.exists()
+
+
+def test_cli_uniprot_download_include_unreviewed(tmp_path, monkeypatch):
+    calls = {}
+
+    def fake_download(uid, path, *, id_type, gene_id_field, reviewed):
+        calls["reviewed"] = reviewed
+        Path(path).write_text("")
+        return path
+
+    monkeypatch.setattr(
+        "geckopy.cli.download_uniprot", fake_download,
+    )
+    main([
+        "uniprot-download", "559292", str(tmp_path / "u.tsv"),
+        "--include-unreviewed",
+    ])
+    assert calls["reviewed"] is False
+
+
+def test_cli_kegg_download_invokes_function(tmp_path, monkeypatch, capsys):
+    calls = {}
+
+    def fake_download(kid, path, *, gene_id_field):
+        calls["args"] = (kid, str(path), gene_id_field)
+        Path(path).write_text("P1,G1,K1,1.1.1.1,10000,p,SEQ\n")
+        return path
+
+    monkeypatch.setattr(
+        "geckopy.cli.download_kegg", fake_download,
+    )
+    out = tmp_path / "k.tsv"
+    rc = main(["kegg-download", "sce", str(out)])
+    assert rc == 0
+    assert calls["args"][0] == "sce"
+    assert calls["args"][2] == "kegg"
+    assert out.exists()

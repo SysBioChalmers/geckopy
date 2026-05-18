@@ -371,3 +371,78 @@ def test_conflicts_aggregated_across_multiple_reactions(tmp_path, caplog):
     assert "across 2 reaction" in caplog.text
     assert "rxn 'r1'" in caplog.text
     assert "rxn 'r2'" in caplog.text
+
+
+# --------------------------------------------------------------------------- #
+# KEGG fallback
+# --------------------------------------------------------------------------- #
+
+def _kegg(rows: list[tuple[str, str, str, str, float]]) -> "object":
+    """Build a KeggDB from ``(uniprot_id, gene, kegg_gene, ec, mw)`` rows."""
+    from geckopy.databases.kegg_loader import KeggDB
+    return KeggDB(
+        uniprot_ids=[r[0] for r in rows],
+        genes=[r[1] for r in rows],
+        kegg_genes=[r[2] for r in rows],
+        eccodes=[r[3] for r in rows],
+        mw=np.array([r[4] for r in rows], dtype=float),
+        pathways=[""] * len(rows),
+        sequences=[""] * len(rows),
+    )
+
+
+def test_kegg_fallback_when_uniprot_empty(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    model = _build_ec_model(adapter, ["r1"], ["g1"], [[0]])
+    uniprot = _uniprot([])  # nothing in UniProt
+    kegg = _kegg([("Q1", "g1", "K1", "1.1.1.1", 100.0)])
+    fill_eccodes_from_database(model, uniprot, kegg_db=kegg)
+    assert model.ec.eccodes == ["1.1.1.1"]
+
+
+def test_kegg_fallback_when_uniprot_returns_wildcard(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    model = _build_ec_model(adapter, ["r1"], ["g1"], [[0]])
+    uniprot = _uniprot([("P1", "g1", "1.1.1.-", 100.0)])
+    kegg = _kegg([("Q1", "g1", "K1", "1.1.1.42", 100.0)])
+    fill_eccodes_from_database(model, uniprot, kegg_db=kegg)
+    assert model.ec.eccodes == ["1.1.1.42"]
+
+
+def test_kegg_not_used_when_uniprot_returns_complete_ec(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    model = _build_ec_model(adapter, ["r1"], ["g1"], [[0]])
+    uniprot = _uniprot([("P1", "g1", "1.1.1.1", 100.0)])
+    kegg = _kegg([("Q1", "g1", "K1", "9.9.9.9", 100.0)])
+    fill_eccodes_from_database(model, uniprot, kegg_db=kegg)
+    assert model.ec.eccodes == ["1.1.1.1"]
+
+
+def test_kegg_fallback_with_no_match_leaves_empty(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    model = _build_ec_model(adapter, ["r1"], ["g1"], [[0]])
+    uniprot = _uniprot([])
+    kegg = _kegg([("Q1", "g_other", "K1", "1.1.1.1", 100.0)])
+    fill_eccodes_from_database(model, uniprot, kegg_db=kegg)
+    assert model.ec.eccodes == [""]
+
+
+def test_kegg_fallback_tags_conflict_source(tmp_path, caplog):
+    adapter = _minimal_adapter(tmp_path)
+    model = _build_ec_model(adapter, ["r1"], ["g1"], [[0]])
+    uniprot = _uniprot([])
+    kegg = _kegg([
+        ("Q1", "g1", "K1", "1.1.1.1", 100.0),
+        ("Q2", "g1", "K2", "2.2.2.2", 100.0),
+    ])
+    with caplog.at_level(logging.WARNING):
+        fill_eccodes_from_database(model, uniprot, kegg_db=kegg, action="display")
+    assert "(kegg)" in caplog.text
+
+
+def test_no_kegg_arg_preserves_original_behaviour(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    model = _build_ec_model(adapter, ["r1"], ["g1"], [[0]])
+    uniprot = _uniprot([])
+    fill_eccodes_from_database(model, uniprot)
+    assert model.ec.eccodes == [""]
