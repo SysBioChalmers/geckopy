@@ -107,8 +107,8 @@ def test_rev_direction_is_not_a_sibling_of_forward():
 
     fill_kcats_from_isozymes(ec_model, apply=False)
 
-    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_1"))
-    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_2"))
+    assert _kcat(ec_model, "R2_REV_EXP_1") == 0
+    assert _kcat(ec_model, "R2_REV_EXP_2") == 0
 
 
 def test_rev_isozymes_share_among_themselves():
@@ -119,21 +119,21 @@ def test_rev_isozymes_share_among_themselves():
     fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _kcat(ec_model, "R2_REV_EXP_2") == 75.0
-    assert np.isnan(_kcat(ec_model, "R2_EXP_1"))
-    assert np.isnan(_kcat(ec_model, "R2_EXP_2"))
+    assert _kcat(ec_model, "R2_EXP_1") == 0
+    assert _kcat(ec_model, "R2_EXP_2") == 0
 
 
 # --------------------------------------------------------------------------- #
 # Single-isozyme reactions
 # --------------------------------------------------------------------------- #
 
-def test_single_isozyme_reaction_stays_nan():
+def test_single_isozyme_reaction_stays_zero():
     """R3 has no siblings (it was never expanded; ec.rxns has just 'R3').
-    With NaN kcat and no siblings, it should stay NaN."""
+    With an unset kcat (0) and no siblings, it stays 0."""
     ec_model = _ectestgem_ec_model()
-    # All NaN, including R3. R3 has no _EXP_ siblings.
+    # All unset, including R3. R3 has no _EXP_ siblings.
     fill_kcats_from_isozymes(ec_model, apply=False)
-    assert np.isnan(_kcat(ec_model, "R3"))
+    assert _kcat(ec_model, "R3") == 0
 
 
 def test_single_isozyme_does_not_fill_itself():
@@ -151,12 +151,12 @@ def test_single_isozyme_does_not_fill_itself():
 # Edge cases
 # --------------------------------------------------------------------------- #
 
-def test_all_nan_kcats_does_nothing(caplog):
+def test_all_unset_kcats_does_nothing(caplog):
     ec_model = _ectestgem_ec_model()
     with caplog.at_level(logging.WARNING):
         fill_kcats_from_isozymes(ec_model, apply=False)
     assert "no known values" in caplog.text
-    assert np.isnan(ec_model.ec.kcat).all()
+    assert (ec_model.ec.kcat == 0).all()
 
 
 def test_no_missing_to_fill_logs_info(caplog):

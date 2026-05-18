@@ -268,14 +268,14 @@ def test_rxn_enz_mat_built_from_enzymes_map(tmp_path):
 # Optional fields default correctly
 # --------------------------------------------------------------------------- #
 
-def test_missing_kcat_defaults_to_nan(tmp_path):
+def test_missing_kcat_defaults_to_zero(tmp_path):
     adapter = _adapter(tmp_path)
     doc = _canonical_yaml()
     del doc["ec-rxns"][0]["kcat"]
     path = tmp_path / "models" / "ecModel.yml"
     _write_yaml(path, doc)
     model = load_ec_model("ecModel.yml", adapter=adapter)
-    assert np.isnan(model.ec.kcat[0])
+    assert model.ec.kcat[0] == 0
 
 
 def test_missing_mw_defaults_to_nan(tmp_path):

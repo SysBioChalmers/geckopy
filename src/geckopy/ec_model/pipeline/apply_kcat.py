@@ -123,15 +123,15 @@ def apply_kcat_constraints(
         if to_clear:
             rxn.add_metabolites(to_clear, combine=False)
 
-    # Step 2: identify which selected entries have valid kcats.
+    # Step 2: identify which selected entries have a real kcat (>0).
     kcats_selected = model.ec.kcat[selected_idx]
-    valid = (~np.isnan(kcats_selected)) & (kcats_selected > 0)
+    valid = kcats_selected > 0
 
     if not valid.any():
         warnings.warn(
-            "apply_kcat_constraints: ec.kcat has no valid entries for the "
-            "selected reactions (all zero or NaN); existing constraints "
-            "were cleared and no new ones written.",
+            "apply_kcat_constraints: ec.kcat has no real entries for the "
+            "selected reactions; existing constraints were cleared and no "
+            "new ones written.",
             UserWarning,
             stacklevel=2,
         )

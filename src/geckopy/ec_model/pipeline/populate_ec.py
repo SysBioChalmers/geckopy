@@ -63,7 +63,8 @@ def allocate_ec_for_catalyzed_reactions(model: "EcModel") -> list[str]:
     n = len(rxn_ids)
 
     model.ec.rxns = rxn_ids
-    model.ec.kcat = np.full(n, np.nan, dtype=float)
+    # 0 marks "no kcat assigned" (matching MATLAB GECKO).
+    model.ec.kcat = np.zeros(n, dtype=float)
     model.ec.source = [""] * n
     model.ec.notes = [""] * n
     model.ec.eccodes = [""] * n

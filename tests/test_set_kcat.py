@@ -91,7 +91,7 @@ def test_unsuffixed_rxn_expands_to_all_isozymes():
     assert _kcat_at(ec_model, "R2_EXP_1") == 5.0
     assert _kcat_at(ec_model, "R2_EXP_2") == 5.0
     # R2_REV_EXP_1 should NOT have been updated.
-    assert np.isnan(_kcat_at(ec_model, "R2_REV_EXP_1"))
+    assert _kcat_at(ec_model, "R2_REV_EXP_1") == 0
 
 
 def test_unsuffixed_rxn_with_scalar_kcat_broadcasts():
@@ -117,7 +117,7 @@ def test_set_specific_isozyme_with_suffix():
     )
     assert updated == ["R2_EXP_1"]
     assert _kcat_at(ec_model, "R2_EXP_1") == 99.0
-    assert np.isnan(_kcat_at(ec_model, "R2_EXP_2"))
+    assert _kcat_at(ec_model, "R2_EXP_2") == 0
 
 
 # --------------------------------------------------------------------------- #

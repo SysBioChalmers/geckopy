@@ -23,6 +23,9 @@ used the opposite sign convention. The loader detects that case
 on load and flips the affected reactions in place, so downstream
 geckopy code always sees the current convention.
 
+ec.kcat uses ``0`` as the "no kcat assigned" sentinel (matching
+MATLAB GECKO).
+
 MATLAB-COMPAT: the MATLAB ``loadEcModel`` validates
 ``endsWith(filename, {'yml','yaml'})`` and then has a dead
 ``elseif endsWith(filename,{'xml','sbml'})`` branch. geckopy
@@ -200,8 +203,9 @@ def _build_ec_data(
 
     n_r = len(ec_rxns_raw)
     rxns = [str(r["id"]) for r in ec_rxns_raw]
+    # 0 = "no kcat assigned"; real turnover numbers are always positive.
     kcat = np.array(
-        [float(r.get("kcat", np.nan)) for r in ec_rxns_raw], dtype=float,
+        [float(r.get("kcat", 0.0)) for r in ec_rxns_raw], dtype=float,
     )
     source = [str(r.get("source", "")) for r in ec_rxns_raw]
     notes = [str(r.get("notes", "")) for r in ec_rxns_raw]

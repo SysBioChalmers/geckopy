@@ -38,17 +38,13 @@ def fill_kcats_from_isozymes(
     NOT stripped: forward and reverse reactions share chemistry but
     can have different kcats, so they are kept distinct.
 
-    For each reaction with NaN ``ec.kcat`` (missing), find its siblings
-    with non-NaN kcats. If any exist, take their mean and assign it.
-    Set ``ec.source`` to ``"isozymes"`` for the filled entries.
+    For each reaction with no kcat assigned (``ec.kcat == 0``), find
+    its siblings whose kcat is set (``> 0``). If any exist, take their
+    mean and assign it. Set ``ec.source`` to ``"isozymes"`` for the
+    filled entries.
 
-    Reactions whose siblings all also have missing kcats remain NaN.
-    Reactions with a single isozyme (no siblings beyond themselves)
-    also remain NaN.
-
-    MATLAB-COMPAT: MATLAB uses ``kcat == 0`` to mark "missing"; geckopy
-    uses ``NaN``. See docs/future_improvements.md for translation
-    discussion.
+    Reactions whose siblings all also lack a kcat stay at 0. Reactions
+    with a single isozyme (no siblings beyond themselves) also stay at 0.
 
     MATLAB-COMPAT: this function was originally named
     ``getKcatAcrossIsozymes`` in MATLAB; geckopy renamed it to
@@ -80,7 +76,8 @@ def fill_kcats_from_isozymes(
         )
 
     kcat = model.ec.kcat
-    if kcat.size == 0 or np.isnan(kcat).all():
+    known_mask = kcat > 0
+    if kcat.size == 0 or not known_mask.any():
         logger.warning(
             "fill_kcats_from_isozymes: ec.kcat has no known values to "
             "average from; model unchanged."
@@ -92,14 +89,14 @@ def fill_kcats_from_isozymes(
 
     # Group known kcats by base_id.
     known_by_base: dict[str, list[float]] = {}
-    for bid, k in zip(base_ids, kcat):
-        if not np.isnan(k):
+    for bid, k, known in zip(base_ids, kcat, known_mask):
+        if known:
             known_by_base.setdefault(bid, []).append(float(k))
 
     # For each missing entry, look up its base group and average if available.
     filled_indices: list[int] = []
-    for i, (bid, k) in enumerate(zip(base_ids, kcat)):
-        if not np.isnan(k):
+    for i, (bid, known) in enumerate(zip(base_ids, known_mask)):
+        if known:
             continue
         siblings = known_by_base.get(bid)
         if not siblings:

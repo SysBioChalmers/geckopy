@@ -154,7 +154,7 @@ def _should_overwrite(
     current: float, new: float, mode: _OverwriteMode,
 ) -> bool:
     """Decide whether to write `new` over `current` per the overwrite mode."""
-    is_unset = np.isnan(current) or current == 0
+    is_unset = current == 0
     if mode is True:
         return True
     if mode is False:

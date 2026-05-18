@@ -186,8 +186,9 @@ def _build_ec_rxns_list(ec: EcData) -> list:
     """Translate per-rxn ec fields + rxn_enz_mat rows into the
     canonical YAML list-of-mappings form.
 
-    Empty `source` / `notes` / `eccodes` strings are omitted; NaN
-    `kcat` values are written as `.nan`.
+    Empty `source` / `notes` / `eccodes` strings are omitted. `kcat`
+    is always written: a real turnover number when set, otherwise
+    ``0`` (the "no kcat assigned" sentinel, matching MATLAB GECKO).
     """
     coo = ec.rxn_enz_mat.tocoo()
     per_row_enzymes: list[dict[str, float]] = [

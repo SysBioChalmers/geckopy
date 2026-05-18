@@ -90,7 +90,7 @@ def test_stage6_selects_only_reactions_with_genes():
 
     assert ec_model.ec.rxns == ["r1", "r3"]
     assert ec_model.ec.n_rxns == 2
-    assert np.isnan(ec_model.ec.kcat).all()
+    assert (ec_model.ec.kcat == 0).all()
     assert ec_model.ec.source == ["", ""]
     assert ec_model.ec.notes == ["", ""]
     assert ec_model.ec.eccodes == ["", ""]

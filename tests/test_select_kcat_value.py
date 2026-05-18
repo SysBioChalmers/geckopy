@@ -22,7 +22,7 @@ def _ec_model(
     """Build an EcModel with the given ec.rxns and starting state."""
     n = len(ec_rxns)
     if initial_kcat is None:
-        initial_kcat = [np.nan] * n
+        initial_kcat = [0.0] * n
     if initial_source is None:
         initial_source = [""] * n
     model = EcModel("test")
@@ -50,7 +50,7 @@ def test_empty_kcat_list_returns_empty_no_updates():
     model = _ec_model(["r1"])
     updated = apply_kcat_list(model, _kcat_list([]))
     assert updated == []
-    assert np.isnan(model.ec.kcat[0])
+    assert model.ec.kcat[0] == 0
 
 
 def test_all_zero_kcats_no_updates():
@@ -59,7 +59,7 @@ def test_all_zero_kcats_no_updates():
         model, _kcat_list([("r1", 0.0, "brenda")]),
     )
     assert updated == []
-    assert np.isnan(model.ec.kcat[0])
+    assert model.ec.kcat[0] == 0
 
 
 def test_single_kcat_per_reaction_basic():
@@ -192,25 +192,23 @@ def test_overwrite_true_replaces_existing():
     assert model.ec.source[0] == "new"
 
 
-def test_overwrite_false_only_updates_zero_or_nan():
+def test_overwrite_false_only_updates_unset():
     model = _ec_model(
-        ["r1", "r2", "r3"],
-        initial_kcat=[10.0, 0.0, np.nan],
-        initial_source=["old1", "old2", "old3"],
+        ["r1", "r2"],
+        initial_kcat=[10.0, 0.0],
+        initial_source=["old1", "old2"],
     )
     updated = apply_kcat_list(
         model,
         _kcat_list([
             ("r1", 100.0, "new1"),
             ("r2", 200.0, "new2"),
-            ("r3", 300.0, "new3"),
         ]),
         overwrite=False,
     )
-    assert sorted(updated) == ["r2", "r3"]
+    assert updated == ["r2"]
     assert model.ec.kcat[0] == 10.0  # untouched
     assert model.ec.kcat[1] == 200.0
-    assert model.ec.kcat[2] == 300.0
 
 
 def test_overwrite_if_higher_only_replaces_when_strictly_higher():
@@ -234,20 +232,19 @@ def test_overwrite_if_higher_only_replaces_when_strictly_higher():
     assert model.ec.kcat[2] == 15.0
 
 
-def test_overwrite_if_higher_treats_zero_or_nan_as_unset():
+def test_overwrite_if_higher_treats_zero_as_unset():
     model = _ec_model(
-        ["r1", "r2"],
-        initial_kcat=[0.0, np.nan],
-        initial_source=["old1", "old2"],
+        ["r1"],
+        initial_kcat=[0.0],
+        initial_source=["old1"],
     )
     updated = apply_kcat_list(
         model,
-        _kcat_list([("r1", 5.0, "new1"), ("r2", 5.0, "new2")]),
+        _kcat_list([("r1", 5.0, "new1")]),
         overwrite="if_higher",
     )
-    assert sorted(updated) == ["r1", "r2"]
+    assert updated == ["r1"]
     assert model.ec.kcat[0] == 5.0
-    assert model.ec.kcat[1] == 5.0
 
 
 def test_overwrite_invalid_raises():

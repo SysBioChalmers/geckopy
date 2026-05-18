@@ -54,10 +54,10 @@ def test_p3_catalyzes_both_r2_isozyme_branches():
     assert sorted(df["rxn_id"].tolist()) == ["R2_EXP_2", "R2_REV_EXP_2"]
 
 
-def test_kcat_initially_nan():
+def test_kcat_initially_zero():
     ec_model = _ectestgem_ec_model()
     df = get_reactions_from_enzyme(ec_model, "P4")
-    assert df["kcat"].isna().all()
+    assert (df["kcat"] == 0).all()
 
 
 def test_kcat_reflects_set_value():

@@ -20,7 +20,7 @@ def test_empty_for_reactions_shape():
     assert ec.kcat.shape == (3,)
     assert ec.mw.shape == (2,)
     assert ec.rxn_enz_mat.shape == (3, 2)
-    assert np.isnan(ec.kcat).all()
+    assert (ec.kcat == 0).all()
     assert np.isnan(ec.mw).all()
     assert np.isnan(ec.concs).all()
     assert ec.rxns == ["", "", ""]

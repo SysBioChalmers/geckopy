@@ -474,7 +474,7 @@ def test_idempotent_resets_source_on_real_enzyme_rxns_when_re_run(tmp_path):
     model.ec.kcat[r1_idx] = 50.0
     model.ec.source[r1_idx] = "manual"
 
-    # Re-run: r1 should keep its real kcat (no longer 0/NaN).
+    # Re-run: r1 should keep its real kcat (no longer unset).
     assign_standard_kcat(model, _uniprot([100.0]))
     r1_idx = model.ec.rxns.index("r1")
     assert model.ec.kcat[r1_idx] == 50.0
@@ -518,17 +518,3 @@ def test_fill_zero_kcat_false_leaves_zeros_alone(tmp_path):
     assert model.ec.kcat[r2_idx] == 0.0
 
 
-def test_fill_zero_kcat_replaces_nan_too(tmp_path):
-    adapter = _adapter(tmp_path)
-    model = _build_model_with_pool(
-        adapter,
-        [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], "g1"),
-         ("r2", [("B", -1.0, "beta", "c"), ("C", 1.0, "gamma", "c")], "g2")],
-        ec_rxns=["r1", "r2"],
-        ec_kcats=[10.0, np.nan],
-        ec_genes=["g1", "g2"], ec_enzymes=["g1", "g2"], ec_mws=[100.0, 100.0],
-        rxn_to_ec_genes=[[0], [1]],
-    )
-    assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
-    r2_idx = model.ec.rxns.index("r2")
-    assert model.ec.kcat[r2_idx] == pytest.approx(10.0)

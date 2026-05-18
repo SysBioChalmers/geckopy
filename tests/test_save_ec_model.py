@@ -278,13 +278,16 @@ def test_empty_sequence_omitted(tmp_path):
     assert "sequence" not in doc["ec-enzymes"][0]
 
 
-def test_nan_kcat_emitted_as_nan(tmp_path):
+def test_zero_kcat_emitted_as_zero(tmp_path):
+    """Unset kcats (0, the sentinel) are written as ``kcat: 0`` so the
+    file round-trips back to 0."""
     adapter = _adapter(tmp_path)
     model = _build_full_ec_model(adapter)
-    model.ec.kcat[0] = np.nan
+    model.ec.kcat[0] = 0
     path = save_ec_model(model)
     text = path.read_text()
-    assert ".nan" in text
+    # The first ec-rxns entry's kcat line should read "kcat: 0".
+    assert "kcat: 0" in text
 
 
 # --------------------------------------------------------------------------- #
@@ -360,13 +363,14 @@ def test_round_trip_preserves_cobra_structure(tmp_path):
     assert {g.id for g in loaded.genes} == {g.id for g in model.genes}
 
 
-def test_round_trip_with_nan_kcat(tmp_path):
+def test_round_trip_with_zero_kcat(tmp_path):
+    """An unset (=0) kcat round-trips back to 0 through save+load."""
     adapter = _adapter(tmp_path)
     model = _build_full_ec_model(adapter)
-    model.ec.kcat[0] = np.nan
+    model.ec.kcat[0] = 0
     path = save_ec_model(model)
     loaded = load_ec_model(path)
-    assert np.isnan(loaded.ec.kcat[0])
+    assert loaded.ec.kcat[0] == 0
     assert loaded.ec.kcat[1] == pytest.approx(2.5)
 
 

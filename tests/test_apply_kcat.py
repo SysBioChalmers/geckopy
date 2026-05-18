@@ -77,34 +77,20 @@ def test_writes_expected_coefficients_multi_subunit_reaction():
     assert coef_p2 == pytest.approx(-(20000.0 / (100.0 * 3600.0)))
 
 
-def test_kcat_nan_produces_zero_coefficient():
-    """When kcat is NaN, no coefficient is written. The all-NaN warning
-    is expected: a freshly built ecModel has all-NaN kcats."""
+def test_unset_kcat_produces_zero_coefficient():
+    """A freshly built ecModel has all kcats unset (=0). Applying with
+    no real kcats writes no coefficient and emits the documented warning."""
     ec_model = _ectestgem_ec_model()
-    # All kcats are initialized to NaN by make_ec_model.
-    with pytest.warns(UserWarning, match="no valid entries"):
+    with pytest.warns(UserWarning, match="no real entries"):
         apply_kcat_constraints(ec_model)
     r3 = ec_model.reactions.get_by_id("R3")
     assert _get_s_coef(r3, "prot_P4") == 0.0
 
 
-def test_kcat_zero_produces_zero_coefficient():
-    """All-zero/NaN selection triggers the documented warning."""
-    ec_model = _ectestgem_ec_model()
-    r3_idx = ec_model.ec.rxns.index("R3")
-    ec_model.ec.kcat[r3_idx] = 0.0
-
-    with pytest.warns(UserWarning, match="no valid entries"):
-        apply_kcat_constraints(ec_model)
-
-    r3 = ec_model.reactions.get_by_id("R3")
-    assert _get_s_coef(r3, "prot_P4") == 0.0
-
-
-def test_all_nan_kcats_warns_and_leaves_model_unchanged():
+def test_all_unset_kcats_warns_and_leaves_model_unchanged():
     ec_model = _ectestgem_ec_model()
 
-    with pytest.warns(UserWarning, match="no valid entries"):
+    with pytest.warns(UserWarning, match="no real entries"):
         apply_kcat_constraints(ec_model)
 
     # No reaction should gain any prot_ coefficient (except prot_pool,
@@ -183,30 +169,10 @@ def test_update_rxns_empty_list_is_noop():
     assert r3_coef == 0.0
 
 
-def test_setting_kcat_to_nan_and_reapplying_clears_old_constraint():
-    """Apply a kcat, then set it back to NaN and re-apply: the previous
-    coefficient must be cleared, even though the warning about all-NaN
-    selection still fires."""
-    ec_model = _ectestgem_ec_model()
-    r3_idx = ec_model.ec.rxns.index("R3")
-    ec_model.ec.kcat[r3_idx] = 10.0
-    apply_kcat_constraints(ec_model)
-    assert _get_s_coef(
-        ec_model.reactions.get_by_id("R3"), "prot_P4"
-    ) != 0.0
-
-    ec_model.ec.kcat[r3_idx] = float("nan")
-    with pytest.warns(UserWarning):
-        apply_kcat_constraints(ec_model, update_rxns=["R3"])
-
-    # Old coefficient cleared.
-    assert _get_s_coef(
-        ec_model.reactions.get_by_id("R3"), "prot_P4"
-    ) == 0.0
-
-
 def test_setting_kcat_to_zero_and_reapplying_clears_old_constraint():
-    """Same as the NaN case but with 0.0 instead. Both should clear."""
+    """Apply a kcat, then reset it to 0 (unset) and re-apply: the
+    previous coefficient must be cleared, even though the warning
+    about no real entries still fires."""
     ec_model = _ectestgem_ec_model()
     r3_idx = ec_model.ec.rxns.index("R3")
     ec_model.ec.kcat[r3_idx] = 10.0

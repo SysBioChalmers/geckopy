@@ -112,15 +112,17 @@ class EcData:
     @staticmethod
     def empty_for_reactions(n_rxns: int, n_enzymes: int = 0, *,
                             gecko_light: bool = False) -> "EcData":
-        """Create an EcData with empty strings and NaN arrays of given size.
+        """Create an EcData with empty strings and zero/NaN arrays of given size.
 
         Used by makeEcModel step 6 to preallocate the structure before
-        populating it.
+        populating it. ``kcat`` starts at 0 (the "no kcat assigned"
+        sentinel, matching MATLAB GECKO). ``mw`` and ``concs`` start at
+        NaN since their physical default really is "unknown".
         """
         return EcData(
             gecko_light=gecko_light,
             rxns=[""] * n_rxns,
-            kcat=np.full(n_rxns, np.nan, dtype=float),
+            kcat=np.zeros(n_rxns, dtype=float),
             source=[""] * n_rxns,
             notes=[""] * n_rxns,
             eccodes=[""] * n_rxns,

@@ -199,6 +199,9 @@ def _compute_subsystem_kcats(
     sub_counts: dict[str, int] = defaultdict(int)
 
     for ec_rxn_id, kcat in zip(model.ec.rxns, model.ec.kcat):
+        # Only reactions with a real kcat contribute to the average.
+        if kcat == 0:
+            continue
         cobra_rxn_id = _ec_rxn_to_cobra_id(model, ec_rxn_id)
         try:
             rxn = model.reactions.get_by_id(cobra_rxn_id)
@@ -207,7 +210,7 @@ def _compute_subsystem_kcats(
         sub = _first_subsystem(rxn)
         if not sub:
             continue
-        sub_sums[sub] += float(kcat) if not np.isnan(kcat) else 0.0
+        sub_sums[sub] += float(kcat)
         sub_counts[sub] += 1
 
     return {
@@ -393,7 +396,7 @@ def _assign_standard_kcat_to_missing(
             if sub
             else standard_kcat
         )
-        if np.isnan(kcat):
+        if kcat == 0:  # subsystem had no real kcat to average -> standard
             kcat = standard_kcat
         kcats_to_add.append(kcat)
 
@@ -423,15 +426,15 @@ def _assign_standard_kcat_to_missing(
 
 
 def _fill_zero_kcats(model: "EcModel", standard_kcat: float) -> list[str]:
-    """Replace 0/NaN ``ec.kcat`` entries with ``standard_kcat`` and mark
-    their source as 'standard'. Returns the list of rxn IDs filled."""
+    """Replace unset ``ec.kcat`` entries (0) with ``standard_kcat`` and
+    mark their source as 'standard'. Returns the list of rxn IDs filled."""
     if model.ec.kcat.size == 0:
         return []
-    zero_mask = (model.ec.kcat == 0) | np.isnan(model.ec.kcat)
-    if not zero_mask.any():
+    unset_mask = model.ec.kcat == 0
+    if not unset_mask.any():
         return []
-    model.ec.kcat[zero_mask] = standard_kcat
-    indices = np.where(zero_mask)[0]
+    model.ec.kcat[unset_mask] = standard_kcat
+    indices = np.where(unset_mask)[0]
     for i in indices:
         model.ec.source[int(i)] = "standard"
     return [model.ec.rxns[int(i)] for i in indices]
