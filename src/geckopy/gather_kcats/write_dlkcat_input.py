@@ -72,14 +72,6 @@ def write_dlkcat_input(
     ``model.metSmiles`` cell. cobrapy stores them per-metabolite in
     ``annotation['smiles']``; geckopy reads from there.
 
-    MATLAB-COMPAT: GECKO MATLAB has a buggy ``rxnsToClear(ecRxns) =
-    false`` block that indexes into a length-N array using indices
-    from the larger model.ec.rxns space. The intended behaviour
-    (clear unselected reactions in the subset matrix) is already
-    achieved by the preceding ``reducedS(:,origRxnIdxs)`` slice, so
-    geckopy simply skips the buggy block. Tracked in
-    ``docs/future_improvements.md``.
-
     Parameters
     ----------
     model

@@ -12,12 +12,6 @@ compartments) and adds four GECKO-specific top-level keys:
 Empty / NaN fields are omitted to keep the file compact; the
 loader fills them back in.
 
-MATLAB-COMPAT: MATLAB ``saveEcModel`` defaults the filename to
-``'ecModel'`` (no extension), which then falls through to YAML
-output without an extension. geckopy defaults to
-``'ecModel.yml'``. The MATLAB-side bug is tracked in
-``docs/future_improvements.md``.
-
 MATLAB-COMPAT: MATLAB ``saveEcModel`` mutates the input model
 (``ecModel.description = ['Enzyme-constrained model of '
 ecModel.id]``). geckopy writes the description into the output

@@ -17,14 +17,8 @@ weren't blocking. Three audiences:
 
 ## Conventions / data model
 
-Two cross-cutting decisions where geckopy and MATLAB GECKO ended
-up different. Not blocking, but worth aligning eventually.
-
-- **Missing-kcat sentinel.** geckopy uses `NaN` in `ec.kcat` to
-  mark "no value yet". MATLAB GECKO uses `0`. Any I/O layer that
-  crosses between the two has to translate (`0` -> `NaN` on read,
-  `NaN` -> `0` on write). The cleaner long-term fix is to switch
-  MATLAB GECKO to `NaN` too, after which no translation is needed.
+One cross-cutting decision where geckopy and MATLAB GECKO are
+still misaligned. Not blocking, but worth doing eventually.
 
 - **Custom subunit stoichiometry file format.** The `stoicho`
   column in `customKcats.tsv` was meant to let users override
@@ -98,9 +92,6 @@ notes alongside the Python implementation.
 
 Notable items:
 
-- Switch `prot_pool_exchange` and `usage_prot_*` reactions to the
-  forward direction (positive flux for protein production).
-- Sort `ec.genes` alphabetically in stage 7 of `makeEcModel`.
 - Implement gene-cell splitting in the UniProt loader.
 - Apply the `stoicho` column from `customKcats.tsv`, or drop it from
   the schema.
@@ -135,12 +126,6 @@ Notable items:
 - Simplify `loadBRENDAdata` signature: drop the `modelAdapter` arg
   and `ModelAdapterManager.getDefault()` fallback; take the folder
   path directly. The adapter resolution belongs at the call site.
-- Drop the unused 5th column from the BRENDA dump file format.
-  `loadBRENDAdata` parses it as `%q` and never reads it; observed
-  dumps consistently set it to `*`.
-- Fix the stale `[1/hr]` comment on `SAcell{3}` in `loadBRENDAdata`.
-  With the post-refactor scaling factors (SA * 1/60, MW * 1/1000)
-  the unit is `[1/s]`, not `[1/hr]`.
 - Resolve the `'add'` action in `getECfromDatabase`: either implement
   the commented-out `addMultipleMatches` branch (and drop the
   apologetic `% I don't understand the purpose of this, let's skip
@@ -161,34 +146,6 @@ Notable items:
   swap the search order so any-no-subs-kcat is tried before org-SA,
   or update the docstring to match the search order. geckopy
   replicates the current MATLAB behavior with a MATLAB-COMPAT note.
-- Cap the iterative-EC-escalation loop in `fuzzyKcatMatching` at 4
-  wildcards. The current `while ~success` loop has no termination
-  condition for tokens that never match; combined with
-  `EC{k} = [EC{k}(1:dot_pos(4-wild_num)) ...]`, when `wild_num`
-  exceeds 4 the indexing becomes invalid (``dot_pos(0)``) and MATLAB
-  errors out. geckopy returns "no match" cleanly at that point.
-- Remove the dead-code `if forceWClvl == 1` block in
-  `fuzzyKcatMatching`. After the preceding `while forceWClvl > 0`
-  loop, `forceWClvl` is always 0, so the `if` never fires. Either
-  delete it or capture the original `forceWClvl` value before the
-  loop and check that.
-- Drop the unused `ids` field from the loaded `phylDistStruct` in
-  `KEGG_struct`. It is parsed but never read.
-- Fix `sigmaFitter` to actually apply the optimal sigma to the
-  returned model. The current implementation tries 100 sigma values
-  in a loop, picks the best, then returns the model with the LAST
-  trial (sigma=1.0) applied, not the best. The docstring claims the
-  model is adapted to the optimal sigma. Add a final
-  `model = setProtPoolSize(model, Ptot, f, sigma, modelAdapter);`
-  after the loop.
-- Fix the wildcard branch of `findMaxValue`. The current code does
-  `EC_cell{i} = EC_cell{i}(strfind(EC_cell{i},'-')-1:end);` which
-  keeps the suffix from before the first `-` to the end (yielding
-  e.g. `".-"` for `"EC1.1.1.-"`), then re-prepends `"EC"` to produce
-  `"EC.-"` and uses that as a substring-search key. No real EC code
-  starts with `"EC.-"`, so the wildcard branch matches nothing in
-  practice. Replace with a prefix match on everything before the
-  first `-` (e.g. `"EC1.1.1."` for `"EC1.1.1.-"`).
 - Delete `updateProtPool` from MATLAB GECKO. The function has been
   obsolete since GECKO 3.2.0 (all enzymes, measured and unmeasured,
   draw from the protein pool); its sole runtime behaviour on a
@@ -201,22 +158,6 @@ Notable items:
   factor look fine until they don't. geckopy's split design
   (`load_pax_db` raises FileNotFoundError, `calculate_f_factor`
   requires pre-loaded data) makes the missing-data case explicit.
-- Fix the `all(kcatSubSystemIdx)` check in `getStandardKcat`. The
-  intent is "does the reaction's subsystem appear in our subsystem
-  list?", but `all` of a length-N boolean vector is true only when
-  every entry is true (i.e. only when the model has a single unique
-  subsystem). For any model with more than one subsystem, the
-  per-subsystem mean kcat is effectively dead code and the function
-  always falls back to the global standard kcat. Use `any(...)` (or
-  the equivalent membership check) instead. geckopy uses the
-  intended semantics.
-- Fix `saveEcModel`'s default filename. The MATLAB default is
-  `'ecModel'` (no extension); combined with the dispatch on
-  `filename(end-3:end)` falling through to `writeYAMLmodel` for
-  unknown extensions, the file is written as
-  `<path>/models/ecModel` (no extension). Either default to
-  `'ecModel.yml'` or auto-append `.yml` when no extension is
-  given. geckopy defaults to `'ecModel.yml'`.
 - Drop the `e-005` -> `e-05 ` post-processing in `saveEcModel`'s
   SBML branch. The Windows/Mac stoichiometric-coefficient
   formatting workaround predates current libSBML, which formats
@@ -225,37 +166,6 @@ Notable items:
   dangling `backup.xml`. Either rely on libSBML's current output
   directly, or fix it via a libSBML option rather than text
   rewriting.
-- Update `writeYAMLmodel` / `readYAMLmodel` (RAVEN) to emit and
-  accept the canonical geckopy YAML schema specified in
-  [yaml_format.md](yaml_format.md). The conversion is purely
-  cosmetic (drop the outer sequence wrapper; drop all `!!omap`
-  tags; flatten `compartments`, per-met / per-rxn / per-gene
-  entries, `reactions[].metabolites`, and `ec-rxns[].enzymes`;
-  lift `id` and `name` out of `metaData` to top-level; move
-  `geckoLight` out of `metaData` into a top-level boolean
-  `gecko_light`; move per-met `smiles` into `annotation:
-  {smiles: [...]}`; coerce annotation values to single-element
-  lists). Once both implementations agree on the canonical
-  format, ecModels become directly exchangeable between MATLAB
-  GECKO and geckopy with no translator. As an interim measure,
-  ship a one-off conversion script (`legacy_to_canonical.py` or
-  similar in `docs/` or `scripts/`) for rewriting existing
-  RAVEN-format YAMLs (e.g. the published `ecYeastGEM.yml`).
-- Make `readDLKcatOutput`'s substrate-name match against
-  `model.metNames` case-insensitive. `ismember` is case-sensitive by
-  default, which can fail spuriously when an SBML loader normalizes
-  case differently from how the DLKcat input was generated. geckopy
-  uses case-insensitive matching here.
-- Fix the `rxnsToClear(ecRxns) = false` block in `writeDLKcatInput`.
-  The `rxnsToClear` array has length `numel(ecRxns)` (the count of
-  selected reactions), but `ecRxns` (after `find()`) holds indices
-  into the larger `model.ec.rxns` space. For any non-trivial
-  selection, indices will exceed the array length and MATLAB will
-  error out. The intended behaviour ("clear unselected reactions in
-  the subset matrix") is already achieved by the preceding
-  `reducedS(:, origRxnIdxs)` slice; the `rxnsToClear` block is
-  dead/buggy and should be removed.
-
 ## get_enzyme_data subsystem
 
 - **KEGG as an alternative protein-sequence source for

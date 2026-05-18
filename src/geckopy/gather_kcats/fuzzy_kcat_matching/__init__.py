@@ -141,18 +141,6 @@ def fuzzy_kcat_matching(
     counts in an internal ``stats.matrix`` that is never returned.
     geckopy emits an aggregated ``logger.info`` summary instead.
 
-    MATLAB-COMPAT: GECKO MATLAB's iterative EC escalation can produce
-    invalid EC strings ("1.-.-.-.-") and crash with an index error if
-    a token never matches at any wildcard level. geckopy caps escalation
-    at 4 wildcards (full ``-.-.-.-``) and returns "no match" cleanly.
-
-    MATLAB-COMPAT: GECKO MATLAB has dead code at
-    ``if forceWClvl == 1`` (it is checked AFTER ``forceWClvl`` was
-    decremented to 0 by the preceding ``while`` loop). geckopy
-    interprets ``force_wildcard_level=N`` as "escalate every EC token
-    by N wildcards from the right", which is the consistent extension
-    of the loop's intent.
-
     Parameters
     ----------
     model

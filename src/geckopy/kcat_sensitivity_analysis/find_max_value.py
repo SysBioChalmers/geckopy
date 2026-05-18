@@ -30,14 +30,6 @@ def find_max_value(
     Ported from GECKO MATLAB:
     src/geckomat/kcat_sensitivity_analysis/findMaxValue.m.
 
-    MATLAB-COMPAT: The MATLAB wildcard branch is buggy: it slices
-    the token from the position before the first ``-`` to the end
-    (yielding e.g. ``".-"`` for ``"1.1.1.-"``) and then prepends
-    ``"EC"``, producing a search string like ``"EC.-"`` that never
-    matches any real EC code. geckopy implements the docstring-
-    stated intent (prefix match on everything before the first
-    ``-``). Tracked in ``docs/future_improvements.md``.
-
     MATLAB-COMPAT: GECKO MATLAB takes raw cell arrays
     ``BRENDA = {ec_codes, substrate, organism, kcat}`` and ``SA =
     {ec_codes, organism, kcat, mw}``. geckopy takes a ``BrendaData``
