@@ -1,5 +1,6 @@
 """Tests for the template generator and the CLI scaffold."""
 import tomllib
+from pathlib import Path
 
 from geckopy import ModelAdapter
 from geckopy.adapter.template import generate_template_toml
@@ -98,3 +99,36 @@ def test_cli_init_stub_adapter_py_is_commented_out(tmp_path):
         if not k.startswith("_") and isinstance(v, type)
     ]
     assert user_classes == []
+
+
+def test_cli_brenda_refresh_empty_cache_errors(tmp_path, capsys):
+    rc = main([
+        "brenda-refresh",
+        "--cache-dir", str(tmp_path / "cache"),
+        "--out-dir", str(tmp_path / "out"),
+    ])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "download.php" in err
+
+
+def test_cli_brenda_refresh_end_to_end(tmp_path, capsys):
+    """Drop the test fixture JSON in the cache dir and run the command."""
+    cache = tmp_path / "cache"
+    out = tmp_path / "out"
+    cache.mkdir()
+    fixture = (
+        Path(__file__).parent / "data" / "brenda_minimal.json"
+    ).read_text()
+    (cache / "brenda_minimal.json").write_text(fixture)
+
+    rc = main([
+        "brenda-refresh",
+        "--cache-dir", str(cache),
+        "--out-dir", str(out),
+    ])
+    assert rc == 0
+    output = capsys.readouterr().out
+    assert "BRENDA release 2026.1" in output
+    for name in ("max_kcat.tsv", "max_sa.tsv", "max_mw.tsv"):
+        assert (out / name).exists()

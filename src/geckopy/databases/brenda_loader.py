@@ -5,14 +5,14 @@ src/geckomat/get_enzyme_data/loadBRENDAdata.m.
 
 Three tab-delimited files are read from the BRENDA folder:
 
-    max_KCAT.txt   kcat values
-    max_SA.txt     specific activities
-    max_MW.txt     molecular weights
+    max_kcat.tsv   kcat values
+    max_sa.tsv     specific activities
+    max_mw.tsv     molecular weights
 
-Each file has 5 tab-delimited columns: EC code (with ``EC`` prefix),
-substrate, organism + taxonomy + KEGG (joined by ``//``), numeric
-value, and a 5th column that is always ``*`` in observed dumps and is
-silently dropped (MATLAB parses but never uses it).
+The files are produced by the ``geckopy brenda-refresh`` CLI. Each
+has 5 tab-delimited columns: EC number, substrate (``*`` for SA/MW),
+organism, numeric value, references (semicolon-joined PMIDs or ``*``).
+A ``#`` header line carries the BRENDA release version.
 """
 from __future__ import annotations
 
@@ -56,11 +56,10 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     Ported from GECKO MATLAB:
     src/geckomat/get_enzyme_data/loadBRENDAdata.m.
 
-    Reads ``max_KCAT.txt``, ``max_SA.txt``, ``max_MW.txt`` from
-    ``folder``, applies the GECKO unit conversions, strips the
-    ``EC`` prefix and trims taxonomy/KEGG metadata from the organism
-    column, and joins SA + MW on EC + organism (case-insensitive) to
-    produce a derived kcat table.
+    Reads ``max_kcat.tsv``, ``max_sa.tsv``, ``max_mw.tsv`` from
+    ``folder``, applies the GECKO unit conversions, and joins
+    SA + MW on EC + organism (case-insensitive) to produce a
+    derived kcat table.
 
     Unit conventions:
 
@@ -74,14 +73,6 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and resolves
     the path via ``modelAdapter.getBrendaDBFolder()``. geckopy takes
     a folder path directly; the caller resolves the path.
-
-    MATLAB-COMPAT: GECKO MATLAB parses the 5th column as ``%q`` and
-    never uses it. geckopy drops it from the output and tracks a
-    MATLAB-side TODO to drop it from the file format too.
-
-    MATLAB-COMPAT: GECKO MATLAB's inline comment on ``SAcell{3}``
-    says ``[1/hr]`` but the post-refactor scaling factors actually
-    produce ``[1/s]``. Tracked as a MATLAB-side comment fix.
 
     Malformed lines (wrong number of fields, non-numeric column 4)
     are skipped with a ``logger.warning``; the rest of the file is
@@ -105,9 +96,9 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
         If any of the three expected files is missing.
     """
     folder = Path(folder)
-    kcat_path = folder / "max_KCAT.txt"
-    sa_path = folder / "max_SA.txt"
-    mw_path = folder / "max_MW.txt"
+    kcat_path = folder / "max_kcat.tsv"
+    sa_path = folder / "max_sa.tsv"
+    mw_path = folder / "max_mw.tsv"
 
     for p in (kcat_path, sa_path, mw_path):
         if not p.is_file():
@@ -116,10 +107,6 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     kcat_raw = _load_table(kcat_path, 1.0)
     sa_raw = _load_table(sa_path, 1.0 / 60.0)
     mw_raw = _load_table(mw_path, 1.0 / 1000.0)
-
-    for df in (kcat_raw, sa_raw, mw_raw):
-        if not df.empty:
-            df["ec_code"] = df["ec_code"].str[2:]
 
     kcat_table = kcat_raw.rename(columns={"value": "kcat"})[_KCAT_COLUMNS]
     sa_table = _join_sa_with_mw(sa_raw, mw_raw)
@@ -131,9 +118,8 @@ def _load_table(path: Path, value_scale: float) -> pd.DataFrame:
     """Parse a 5-column tab-delimited BRENDA dump.
 
     Returns a DataFrame with columns ``ec_code``, ``substrate``,
-    ``organism``, ``value``. The 5th column is dropped. The
-    ``organism`` column is trimmed: everything from the first ``//``
-    onwards is removed.
+    ``organism``, ``value``. The 5th column (references) is dropped.
+    Lines beginning with ``#`` are treated as comments and skipped.
     """
     rows: list[tuple[str, str, str, float]] = []
     invalid_lines = 0
@@ -141,7 +127,7 @@ def _load_table(path: Path, value_scale: float) -> pd.DataFrame:
     with open(path, "r", encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             line = line.rstrip("\n")
-            if not line:
+            if not line or line.startswith("#"):
                 continue
             parts = line.split("\t")
             if len(parts) < 5:
@@ -151,7 +137,7 @@ def _load_table(path: Path, value_scale: float) -> pd.DataFrame:
                     path.name, line_no, len(parts),
                 )
                 continue
-            ec, substrate, organism_blob, value_str, _ = parts[:5]
+            ec, substrate, organism, value_str, _ = parts[:5]
             try:
                 value = float(value_str) * value_scale
             except ValueError:
@@ -161,7 +147,6 @@ def _load_table(path: Path, value_scale: float) -> pd.DataFrame:
                     path.name, line_no, value_str,
                 )
                 continue
-            organism = organism_blob.split("//", 1)[0]
             rows.append((ec, substrate, organism, value))
 
     if invalid_lines:
