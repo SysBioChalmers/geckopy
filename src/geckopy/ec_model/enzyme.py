@@ -310,10 +310,6 @@ class Kcats:
         model.ec.kcat[rxn_idx] = float(kcat_per_s)
         apply_kcat_constraints(model, update_rxns=[rxn_id])
 
-    def __delitem__(self, rxn_id: str) -> None:
-        """Clear the kcat (NaN) and re-apply (removes coefficient)."""
-        self[rxn_id] = float("nan")
-
     def keys(self):
         return list(self)
 

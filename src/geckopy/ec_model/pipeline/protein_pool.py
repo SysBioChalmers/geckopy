@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 
 
 from ..constants import (
-    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
-    POOL_ID as _POOL_ID,
-    PROT_PREFIX as _PROT_PREFIX,
-    PROTEIN_USAGE_SUBSYSTEM as _PROTEIN_USAGE_SUBSYSTEM,
-    USAGE_PREFIX as _USAGE_PREFIX,
+    POOL_EXCHANGE_ID,
+    POOL_ID,
+    PROT_PREFIX,
+    PROTEIN_USAGE_SUBSYSTEM,
+    USAGE_PREFIX,
 )
 
 
@@ -84,7 +84,7 @@ def add_protein_pseudometabolites(model: "EcModel") -> list[str]:
 
     new_mets: list[cobra.Metabolite] = []
     for enzyme in unique_enzymes:
-        met_id = f"{_PROT_PREFIX}{enzyme}"
+        met_id = f"{PROT_PREFIX}{enzyme}"
         if met_id in {m.id for m in model.metabolites}:
             continue
         met = cobra.Metabolite(
@@ -124,7 +124,7 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
         "params.enzyme_comp from the adapter",
     )
 
-    if _POOL_ID in {m.id for m in model.metabolites}:
+    if POOL_ID in {m.id for m in model.metabolites}:
         return  # idempotent
 
     comp_id = _resolve_enzyme_compartment_id(
@@ -132,8 +132,8 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
     )
 
     pool = cobra.Metabolite(
-        id=_POOL_ID,
-        name=_POOL_ID,
+        id=POOL_ID,
+        name=POOL_ID,
         compartment=comp_id,
     )
     pool.notes["enzyme_usage"] = "Enzyme-usage protein pool"
@@ -182,17 +182,17 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
     list of str
         Sorted IDs of added usage reactions.
     """
-    pool_met = model.metabolites.get_by_id(_POOL_ID)
+    pool_met = model.metabolites.get_by_id(POOL_ID)
 
     new_rxns: list[cobra.Reaction] = []
     for enzyme, gene in sorted(
         set(zip(model.ec.enzymes, model.ec.genes))
     ):
-        rxn_id = f"{_USAGE_PREFIX}{enzyme}"
+        rxn_id = f"{USAGE_PREFIX}{enzyme}"
         if rxn_id in {r.id for r in model.reactions}:
             continue  # idempotent
 
-        met_id = f"{_PROT_PREFIX}{enzyme}"
+        met_id = f"{PROT_PREFIX}{enzyme}"
         prot_met = model.metabolites.get_by_id(met_id)
 
         rxn = cobra.Reaction(id=rxn_id, name=rxn_id)
@@ -200,7 +200,7 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
         rxn.upper_bound = 1000.0
         rxn.add_metabolites({pool_met: -1.0, prot_met: 1.0})
         rxn.gene_reaction_rule = gene
-        rxn.subsystem = _PROTEIN_USAGE_SUBSYSTEM
+        rxn.subsystem = PROTEIN_USAGE_SUBSYSTEM
         new_rxns.append(rxn)
 
     if new_rxns:
@@ -239,16 +239,16 @@ def add_protein_pool_exchange_reaction(model: "EcModel") -> None:
     model
         An EcModel with stage 10 already run. Mutated in place.
     """
-    if _POOL_EXCHANGE_ID in {r.id for r in model.reactions}:
+    if POOL_EXCHANGE_ID in {r.id for r in model.reactions}:
         return  # idempotent
 
-    pool_met = model.metabolites.get_by_id(_POOL_ID)
+    pool_met = model.metabolites.get_by_id(POOL_ID)
 
-    rxn = cobra.Reaction(id=_POOL_EXCHANGE_ID, name=_POOL_EXCHANGE_ID)
+    rxn = cobra.Reaction(id=POOL_EXCHANGE_ID, name=POOL_EXCHANGE_ID)
     rxn.lower_bound = 0.0
     rxn.upper_bound = 1000.0
     rxn.add_metabolites({pool_met: 1.0})
-    rxn.subsystem = _PROTEIN_USAGE_SUBSYSTEM
+    rxn.subsystem = PROTEIN_USAGE_SUBSYSTEM
     model.add_reactions([rxn])
 
 
@@ -328,12 +328,12 @@ def set_prot_pool_size(
         if sigma is None:
             sigma = params.sigma
 
-    if _POOL_EXCHANGE_ID not in {r.id for r in model.reactions}:
+    if POOL_EXCHANGE_ID not in {r.id for r in model.reactions}:
         raise ValueError(
-            f"Reaction '{_POOL_EXCHANGE_ID}' not found. Call make_ec_model "
+            f"Reaction '{POOL_EXCHANGE_ID}' not found. Call make_ec_model "
             f"or add_protein_pool_exchange_reaction first."
         )
 
     bound = p_tot * f * sigma * 1000.0
-    model.reactions.get_by_id(_POOL_EXCHANGE_ID).upper_bound = bound
+    model.reactions.get_by_id(POOL_EXCHANGE_ID).upper_bound = bound
     return bound

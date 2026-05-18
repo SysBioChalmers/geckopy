@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _STANDARD_NAME = "standard"
 _STANDARD_MET_ID = "prot_standard"
 _STANDARD_USAGE_RXN_ID = "usage_prot_standard"
-from ..ec_model.constants import POOL_ID as _PROT_POOL_ID
+from ..ec_model.constants import POOL_ID
 
 
 def assign_standard_kcat(
@@ -350,7 +350,7 @@ def _add_standard_pseudoenzyme(
         prot_std.notes["enzyme_usage"] = "Standard enzyme-usage pseudometabolite"
         model.add_metabolites([prot_std])
 
-        pool_met = model.metabolites.get_by_id(_PROT_POOL_ID)
+        pool_met = model.metabolites.get_by_id(POOL_ID)
         usage_rxn = cobra.Reaction(
             _STANDARD_USAGE_RXN_ID, name=_STANDARD_USAGE_RXN_ID,
         )

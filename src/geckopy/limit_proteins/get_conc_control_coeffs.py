@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
 
-from ..ec_model.constants import USAGE_PREFIX as _USAGE_PREFIX
+from ..ec_model.constants import USAGE_PREFIX
 
 _GROWTH_DELTA_THRESHOLD = 1e-10
 
@@ -89,7 +89,7 @@ def get_conc_control_coeffs(
     cobra_rxn_ids = {r.id for r in model.reactions}
 
     for i, protein in enumerate(proteins):
-        rxn_id = f"{_USAGE_PREFIX}{protein}"
+        rxn_id = f"{USAGE_PREFIX}{protein}"
         if rxn_id not in cobra_rxn_ids:
             continue
 

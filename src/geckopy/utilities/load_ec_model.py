@@ -292,6 +292,4 @@ def _canonicalize_eccodes(value) -> str:
         return ""
     if isinstance(value, str):
         return value
-    if isinstance(value, (list, tuple)):
-        return ";".join(str(v) for v in value)
-    return str(value)
+    return ";".join(str(v) for v in value)

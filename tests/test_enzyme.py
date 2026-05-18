@@ -130,15 +130,6 @@ def test_kcats_set_complex_raises():
         enz.kcats["R2_EXP_1"] = 100.0
 
 
-def test_kcats_del_sets_nan():
-    model = _ectestgem_ec_model()
-    r3_idx = model.ec.rxns.index("R3")
-    model.ec.kcat[r3_idx] = 5.0
-    enz = model.enzymes.get_by_id("P4")
-    del enz.kcats["R3"]
-    assert np.isnan(model.ec.kcat[r3_idx])
-
-
 def test_kcats_unknown_rxn_raises():
     model = _ectestgem_ec_model()
     enz = model.enzymes.get_by_id("P4")

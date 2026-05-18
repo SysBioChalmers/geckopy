@@ -23,8 +23,8 @@ _REV_SUFFIX = "_REV"
 _REV_EXP_INFIX = "_REV_EXP_"
 _EXP_RE = re.compile(r"_EXP_\d+")
 from ..ec_model.constants import (
-    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
-    USAGE_PREFIX as _USAGE_PREFIX,
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
 )
 
 _POOL_LABEL = "pool"
@@ -179,10 +179,10 @@ def map_rxns_to_conv(
     usage_enz: list[str] = []
     usage_indices: list[int] = []
     for i, rid in enumerate(ec_rxn_ids):
-        if rid.startswith(_USAGE_PREFIX):
-            usage_enz.append(rid[len(_USAGE_PREFIX):])
+        if rid.startswith(USAGE_PREFIX):
+            usage_enz.append(rid[len(USAGE_PREFIX):])
             usage_indices.append(i)
-        elif rid == _POOL_EXCHANGE_ID:
+        elif rid == POOL_EXCHANGE_ID:
             usage_enz.append(_POOL_LABEL)
             usage_indices.append(i)
 

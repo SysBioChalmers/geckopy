@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..ec_model import EcModel
 
 
-from ..constants import POOL_ID as _POOL_ID, PROT_PREFIX as _PROT_PREFIX
+from ..constants import POOL_ID, PROT_PREFIX
 
 
 def apply_kcat_constraints(
@@ -109,7 +109,7 @@ def apply_kcat_constraints(
     # and re-applying genuinely clears the old constraint.
     prot_met_ids = {
         m.id for m in model.metabolites
-        if m.id.startswith(_PROT_PREFIX) and m.id != _POOL_ID
+        if m.id.startswith(PROT_PREFIX) and m.id != POOL_ID
     }
 
     for idx in selected_idx:
@@ -139,7 +139,7 @@ def apply_kcat_constraints(
 
     # Step 3: write fresh coefficients for valid kcats.
     enz_idx_to_met_id = {
-        i: f"{_PROT_PREFIX}{enz}"
+        i: f"{PROT_PREFIX}{enz}"
         for i, enz in enumerate(model.ec.enzymes)
     }
     rxn_enz_mat_csr = model.ec.rxn_enz_mat.tocsr()

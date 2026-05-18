@@ -40,8 +40,8 @@ logger = logging.getLogger(__name__)
 
 
 from ..ec_model.constants import (
-    PROT_PREFIX as _PROT_PREFIX,
-    USAGE_PREFIX as _USAGE_PREFIX,
+    PROT_PREFIX,
+    USAGE_PREFIX,
 )
 _TUNING_SOURCE = "sensitivityTuning"
 
@@ -177,9 +177,9 @@ def sensitivity_tuning(
 
     usage_rxn_ids = [
         r.id for r in model.reactions
-        if r.id.startswith(_USAGE_PREFIX)
+        if r.id.startswith(USAGE_PREFIX)
     ]
-    ignore_usage_ids = {f"{_USAGE_PREFIX}{p}" for p in prot_to_ignore}
+    ignore_usage_ids = {f"{USAGE_PREFIX}{p}" for p in prot_to_ignore}
 
     last_growth = float("nan")
     tuned_ec_indices: list[int] = []  # indices into model.ec.rxns
@@ -226,8 +226,8 @@ def sensitivity_tuning(
             break
 
         # The enzyme metabolite the usage rxn produces.
-        enzyme_id = best_usage_id[len(_USAGE_PREFIX):]
-        prot_met_id = f"{_PROT_PREFIX}{enzyme_id}"
+        enzyme_id = best_usage_id[len(USAGE_PREFIX):]
+        prot_met_id = f"{PROT_PREFIX}{enzyme_id}"
         try:
             prot_met = model.metabolites.get_by_id(prot_met_id)
         except KeyError:

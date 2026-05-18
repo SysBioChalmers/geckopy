@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 
 
 from ..ec_model.constants import (
-    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
-    PROT_PREFIX as _PROT_PREFIX,
+    POOL_EXCHANGE_ID,
+    PROT_PREFIX,
 )
 
 _FLUX_THRESHOLD = 1e-7
@@ -113,7 +113,7 @@ def report_enzyme_usage(
     -------
     EnzymeUsageReport
     """
-    pool_rxn = model.reactions.get_by_id(_POOL_EXCHANGE_ID)
+    pool_rxn = model.reactions.get_by_id(POOL_EXCHANGE_ID)
     total_pool = float(pool_rxn.upper_bound)
 
     cap_arr = np.asarray(usage_data.cap_usage, dtype=float)
@@ -252,7 +252,7 @@ def _per_rxn_details(
     except ValueError:
         return []
 
-    prot_met_id = f"{_PROT_PREFIX}{protein_id}"
+    prot_met_id = f"{PROT_PREFIX}{protein_id}"
     try:
         prot_met = model.metabolites.get_by_id(prot_met_id)
     except KeyError:

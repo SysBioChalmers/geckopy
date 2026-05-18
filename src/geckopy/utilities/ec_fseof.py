@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 from ..ec_model.constants import (
-    PROT_PREFIX as _PROT_PREFIX,
-    USAGE_PREFIX as _USAGE_PREFIX,
+    PROT_PREFIX,
+    USAGE_PREFIX,
 )
 
 _STANDARD_GPR = "standard"
@@ -37,14 +37,6 @@ _RXN_TARGET_COLUMNS = [
 _GENE_TARGET_COLUMNS = [
     "gene_id", "gene_name", "slope", "action", "essentiality",
 ]
-
-
-def _empty_rxn_df() -> pd.DataFrame:
-    return pd.DataFrame(columns=_RXN_TARGET_COLUMNS)
-
-
-def _empty_gene_df() -> pd.DataFrame:
-    return pd.DataFrame(columns=_GENE_TARGET_COLUMNS)
 
 
 @dataclass
@@ -76,9 +68,15 @@ class EcFseofResult:
         default_factory=lambda: np.empty(0, dtype=float)
     )
     v_matrix: pd.DataFrame = field(default_factory=pd.DataFrame)
-    rxn_targets: pd.DataFrame = field(default_factory=_empty_rxn_df)
-    transport_targets: pd.DataFrame = field(default_factory=_empty_rxn_df)
-    gene_targets: pd.DataFrame = field(default_factory=_empty_gene_df)
+    rxn_targets: pd.DataFrame = field(
+        default_factory=lambda: pd.DataFrame(columns=_RXN_TARGET_COLUMNS)
+    )
+    transport_targets: pd.DataFrame = field(
+        default_factory=lambda: pd.DataFrame(columns=_RXN_TARGET_COLUMNS)
+    )
+    gene_targets: pd.DataFrame = field(
+        default_factory=lambda: pd.DataFrame(columns=_GENE_TARGET_COLUMNS)
+    )
 
 
 def ec_fseof(
@@ -304,7 +302,7 @@ def ec_fseof(
 
     # Step 8: build rxn_targets and transport_targets DataFrames.
     keep_for_rxn_table = [
-        not rid.startswith(_USAGE_PREFIX) for rid in target_rxn_ids
+        not rid.startswith(USAGE_PREFIX) for rid in target_rxn_ids
     ]
     final_rxn_ids = [
         r for r, k in zip(target_rxn_ids, keep_for_rxn_table) if k
@@ -321,7 +319,7 @@ def ec_fseof(
         rxn = model.reactions.get_by_id(rid)
         non_prot_met_names = [
             m.name for m in rxn.metabolites
-            if not m.id.startswith(_PROT_PREFIX)
+            if not m.id.startswith(PROT_PREFIX)
         ]
         is_transport = (
             len(non_prot_met_names) != len(set(non_prot_met_names))
@@ -370,7 +368,7 @@ def _check_essentiality(
         i for i, g in enumerate(model.ec.genes) if g == gene_id
     ]
     usage_rxn_ids = [
-        f"{_USAGE_PREFIX}{model.ec.enzymes[i]}" for i in enz_indices
+        f"{USAGE_PREFIX}{model.ec.enzymes[i]}" for i in enz_indices
     ]
     cobra_rxn_ids = {r.id for r in model.reactions}
     usage_rxn_ids = [r for r in usage_rxn_ids if r in cobra_rxn_ids]

@@ -240,7 +240,8 @@ def fuzzy_kcat_matching(
 
         try:
             cobra_rxn = model.reactions.get_by_id(cobra_rxn_id)
-            substrates, substrate_coeffs = _extract_substrates(cobra_rxn)
+            substrates = [m.name for m, c in cobra_rxn.metabolites.items() if c < 0]
+            substrate_coeffs = [-c for c in cobra_rxn.metabolites.values() if c < 0]
         except KeyError:
             substrates, substrate_coeffs = [], []
 
@@ -334,20 +335,6 @@ def _empty_result_df() -> pd.DataFrame:
         "wildcard_level": pd.array([], dtype="Int64"),
         "origin": pd.array([], dtype="Int64"),
     })
-
-
-def _extract_substrates(rxn) -> tuple[list[str], list[float]]:
-    """Return (names, abs_coeffs) for negative-coefficient metabolites.
-
-    Uses ``metabolite.name`` (cobra equivalent of MATLAB ``metNames``).
-    """
-    names: list[str] = []
-    coeffs: list[float] = []
-    for met, coeff in rxn.metabolites.items():
-        if coeff < 0:
-            names.append(met.name)
-            coeffs.append(-coeff)
-    return names, coeffs
 
 
 __all__ = ["fuzzy_kcat_matching"]
