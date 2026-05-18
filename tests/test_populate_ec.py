@@ -532,6 +532,22 @@ def test_kegg_fills_with_kegg_gene_id_when_uniprot_accession_empty(tmp_path):
     assert enz_by_gene["g1"] == "YBR196C"
 
 
+def test_kegg_bare_id_fallback_emits_warning(tmp_path, caplog):
+    import logging
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([])
+    kegg = _synthetic_kegg([("", "g1", "YBR196C", 60.0, "MVQR")])
+    with caplog.at_level(logging.WARNING):
+        populate_enzyme_data(ec, uniprot, kegg_db=kegg)
+    assert "no UniProt accession" in caplog.text
+    assert "g1->YBR196C" in caplog.text
+
+
 def test_uniprot_match_preferred_over_kegg(tmp_path):
     adapter = _minimal_adapter(tmp_path)
     cmodel = _build_model([

@@ -181,6 +181,7 @@ def populate_enzyme_data(
     matched_seq: list[str] = []
     unmatched: list[str] = []
     kegg_filled: list[str] = []
+    kegg_used_bare_id: list[tuple[str, str]] = []
 
     kegg_lookup: dict[str, int] = {}
     kegg_transformed: list[str] = []
@@ -203,8 +204,14 @@ def populate_enzyme_data(
         if kegg_idx is None:
             unmatched.append(gene)
             continue
-        # KEGG fallback hit.
-        enzyme_id = kegg_db.uniprot_ids[kegg_idx] or kegg_db.kegg_genes[kegg_idx]
+        # KEGG fallback hit. Prefer the UniProt accession carried on the
+        # KEGG row; fall back to the bare KEGG gene id when empty.
+        kegg_uniprot = kegg_db.uniprot_ids[kegg_idx]
+        if kegg_uniprot:
+            enzyme_id = kegg_uniprot
+        else:
+            enzyme_id = kegg_db.kegg_genes[kegg_idx]
+            kegg_used_bare_id.append((gene, enzyme_id))
         matched_genes.append(gene)
         matched_enzymes.append(enzyme_id)
         matched_mw.append(float(kegg_db.mw[kegg_idx]))
@@ -227,12 +234,27 @@ def populate_enzyme_data(
 
     if kegg_filled:
         import logging
-        logging.getLogger(__name__).info(
+        logger = logging.getLogger(__name__)
+        logger.info(
             "populate_enzyme_data: %d gene(s) resolved via KEGG fallback "
             "(UniProt had no entry): %s",
             len(kegg_filled),
             ", ".join(kegg_filled[:10]) + ("..." if len(kegg_filled) > 10 else ""),
         )
+        if kegg_used_bare_id:
+            preview = ", ".join(
+                f"{g}->{eid}" for g, eid in kegg_used_bare_id[:10]
+            )
+            more = (
+                "" if len(kegg_used_bare_id) <= 10
+                else f" (and {len(kegg_used_bare_id) - 10} more)"
+            )
+            logger.warning(
+                "populate_enzyme_data: %d KEGG-resolved gene(s) had no "
+                "UniProt accession on the KEGG row; the bare KEGG gene id "
+                "is used in ec.enzymes instead: %s%s",
+                len(kegg_used_bare_id), preview, more,
+            )
 
     # Annotate reactions whose GPR mentions any unmatched gene.
     if unmatched:
