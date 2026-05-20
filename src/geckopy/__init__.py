@@ -74,6 +74,7 @@ from geckopy.ec_model.pipeline import (
 from geckopy.gather_kcats import (
     apply_kcat_list,
     assign_standard_kcat,
+    fetch_open_kinetics_predictor,
     fuzzy_kcat_matching,
     get_standard_kcat,  # deprecated; alias of assign_standard_kcat
     merge_dlkcat_and_fuzzy_kcats,
@@ -81,6 +82,7 @@ from geckopy.gather_kcats import (
     remove_standard_kcat,
     run_dlkcat,
     select_kcat_value,  # deprecated; alias of apply_kcat_list
+    submit_open_kinetics_predictor,
     write_dlkcat_input,
 )
 
@@ -187,11 +189,13 @@ __all__ = [
     # Gather-kcats
     "apply_kcat_list",
     "assign_standard_kcat",
+    "fetch_open_kinetics_predictor",
     "fuzzy_kcat_matching",
     "merge_dlkcat_and_fuzzy_kcats",
     "read_dlkcat_output",
     "remove_standard_kcat",
     "run_dlkcat",
+    "submit_open_kinetics_predictor",
     "write_dlkcat_input",
     # get_enzyme_data
     "copy_ec_to_gem",

@@ -80,6 +80,36 @@ class BayesianParams(BaseModel):
     max_generations: int = 150
 
 
+class OkpParams(BaseModel):
+    """OpenKineticsPredictor settings (used by submit/fetch_open_kinetics_predictor).
+
+    The API key is intentionally NOT here (it is a secret): provide it as a
+    function argument, the OKP_API_KEY environment variable, or the file
+    ``<path>/data/okpApiKey.txt``.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    method: str = Field(
+        default="CataPro",
+        description=(
+            "Predictor method: CataPro, CatPred, DLKcat, EITLEM, "
+            "KinForm-H, KinForm-L, UniKP (see GET /api/v1/methods/)."
+        ),
+    )
+    handle_long_sequences: str = Field(
+        default="truncate",
+        description="How OKP handles sequences exceeding a method's max length.",
+    )
+    include_similarity_columns: bool = Field(
+        default=True,
+        description="Append per-row similarity-to-training-data columns.",
+    )
+    canonicalize_substrates: bool = Field(
+        default=True,
+        description="Canonicalize substrate SMILES server-side before prediction.",
+    )
+
+
 class ModelParameters(BaseModel):
     """Top-level parameters for an ecModel adapter."""
     model_config = ConfigDict(extra="forbid")
@@ -109,3 +139,4 @@ class ModelParameters(BaseModel):
     uniprot: UniprotParams = Field(default_factory=UniprotParams)
     complex: ComplexParams = Field(default_factory=ComplexParams)
     bayesian: BayesianParams = Field(default_factory=BayesianParams)
+    okp: OkpParams = Field(default_factory=OkpParams)

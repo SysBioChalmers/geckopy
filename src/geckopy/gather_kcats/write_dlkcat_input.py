@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 _OUTPUT_COLUMNS = ["rxn_id", "gene", "substrate", "smiles", "sequence", "kcat"]
+_PAIR_COLUMNS = ["rxn_id", "gene", "substrate", "smiles", "sequence"]
 _NORMALIZE_RE = re.compile(r"[^0-9a-zA-Z]+")
 
 
@@ -115,6 +116,53 @@ def write_dlkcat_input(
             f"{output_path} already exists. Set overwrite=True to replace."
         )
 
+    pairs = extract_enzyme_substrate_pairs(
+        model, ignore_lists, ec_rxns=ec_rxns, only_with_smiles=only_with_smiles,
+    )
+    df = pairs.copy()
+    df["kcat"] = "NA"
+    df = df[_OUTPUT_COLUMNS]
+
+    _write_tsv(output_path, df)
+    logger.info(
+        "write_dlkcat_input: wrote %d row(s) to %s.", len(df), output_path,
+    )
+    return df
+
+
+def extract_enzyme_substrate_pairs(
+    model: "EcModel",
+    ignore_lists: "DLKcatIgnoreLists",
+    *,
+    ec_rxns: Optional[Iterable[str]] = None,
+    only_with_smiles: bool = True,
+) -> pd.DataFrame:
+    """Enumerate (reaction, gene, substrate, SMILES, sequence) rows for an ec model.
+
+    Shared core of ``write_dlkcat_input`` and the OpenKineticsPredictor
+    input builder. Performs the same filtering (ignored metabolites,
+    ``prot_`` pseudometabolites, currency-metabolite pairs) and the same
+    ``only_with_smiles`` handling, but does no file I/O.
+
+    Parameters
+    ----------
+    model
+        EcModel with ``ec.rxns``, ``ec.genes``, ``ec.sequence`` and
+        ``ec.rxn_enz_mat`` populated, and per-metabolite SMILES in
+        ``annotation['smiles']``.
+    ignore_lists
+        Loaded ``DLKcatIgnoreLists``.
+    ec_rxns
+        Optional iterable of reaction IDs (must be in ``model.ec.rxns``).
+        ``None`` means all.
+    only_with_smiles
+        Drop rows with no SMILES when True; otherwise write ``"None"``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Columns ``rxn_id, gene, substrate, smiles, sequence``.
+    """
     n_ec = model.ec.n_rxns
     if ec_rxns is None:
         ec_rxn_indices = list(range(n_ec))
@@ -131,9 +179,7 @@ def write_dlkcat_input(
         ec_rxn_indices = [index_by_id[rid] for rid in ec_rxns_list]
 
     if not ec_rxn_indices:
-        _write_tsv(output_path, pd.DataFrame(columns=_OUTPUT_COLUMNS))
-        logger.info("write_dlkcat_input: no reactions selected; wrote empty file.")
-        return pd.DataFrame(columns=_OUTPUT_COLUMNS)
+        return pd.DataFrame(columns=_PAIR_COLUMNS)
 
     # Map ec.rxns to cobra reaction IDs (with gecko_light prefix).
     if model.ec.gecko_light:
@@ -192,12 +238,7 @@ def write_dlkcat_input(
     substrate_idx, local_rxn_idx = np.where(sub_matrix < 0)
 
     if len(substrate_idx) == 0:
-        df = pd.DataFrame(columns=_OUTPUT_COLUMNS)
-        _write_tsv(output_path, df)
-        logger.info(
-            "write_dlkcat_input: no surviving substrates; wrote empty file."
-        )
-        return df
+        return pd.DataFrame(columns=_PAIR_COLUMNS)
 
     rxn_enz_mat = model.ec.rxn_enz_mat.tocsr()
 
@@ -214,10 +255,9 @@ def write_dlkcat_input(
                 "smiles": met_smiles[sub_i],
                 "sequence": model.ec.sequence[gene_idx]
                             if gene_idx < len(model.ec.sequence) else "",
-                "kcat": "NA",
             })
 
-    df = pd.DataFrame(rows, columns=_OUTPUT_COLUMNS)
+    df = pd.DataFrame(rows, columns=_PAIR_COLUMNS)
 
     if only_with_smiles:
         df = df[df["smiles"].astype(str) != ""].reset_index(drop=True)
@@ -225,10 +265,6 @@ def write_dlkcat_input(
         empty_mask = df["smiles"].astype(str) == ""
         df.loc[empty_mask, "smiles"] = "None"
 
-    _write_tsv(output_path, df)
-    logger.info(
-        "write_dlkcat_input: wrote %d row(s) to %s.", len(df), output_path,
-    )
     return df
 
 
