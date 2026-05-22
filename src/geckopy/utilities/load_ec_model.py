@@ -1,21 +1,21 @@
 """Load an ecModel from a YAML file.
 
-Reads the cobrapy-style YAML format documented in
-``docs/yaml_format.md`` and rebuilds an ``EcModel``. Most of the
-heavy lifting is delegated to cobra-py
-(``cobra.io.dict.model_from_dict`` handles the reactions /
-metabolites / genes); this module adds the GECKO-specific
+Reads the cobrapy YAML format (``!!omap`` tagged, exactly what
+``cobra.io.save_yaml_model`` writes) plus the GECKO-specific
 top-level keys (``ec-rxns``, ``ec-enzymes``, ``gecko_light``,
-``metaData``) on top.
+``metaData``). The cobra-shaped portion is rebuilt by
+``cobra.io.dict.model_from_dict``; this module reads the ec keys
+on top.
 
 The loader also dispatches SBML files (`.xml` / `.sbml`) to
 ``geckopy.io.sbml.read_sbml_ec_model``, so the same call works
 for both formats.
 
-The pre-2026 MATLAB / RAVEN YAML format (with ``!!omap`` tags and
-an outer sequence wrapper) is NOT supported by this loader -- only
-RAVEN's own ``readYAMLmodel`` reads those. Re-save the file from
-MATLAB to convert it.
+Legacy MATLAB / RAVEN ecModels load too: ``_normalize_legacy_layout``
+lifts ``id`` / ``name`` / ``version`` out of ``metaData`` and moves
+per-metabolite ``smiles`` into ``annotation`` before handing the
+document to cobra. (The legacy ``!!omap`` tags themselves parse
+straight into mappings, so no special handling is needed for those.)
 
 ecModels written before MATLAB GECKO switched ``usage_prot_*`` and
 ``prot_pool_exchange`` to the forward direction (positive flux)
@@ -109,6 +109,7 @@ def load_ec_model(
         from ..io.sbml import read_sbml_ec_model
         return read_sbml_ec_model(path, adapter=adapter)
     data = _read_yaml(path)
+    data = _normalize_legacy_layout(data)
 
     ec_rxns_raw = data.pop("ec-rxns", None)
     ec_enzymes_raw = data.pop("ec-enzymes", None)
@@ -170,13 +171,53 @@ def _read_yaml(path: Path) -> dict:
     yaml = YAML(typ="safe")
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.load(f)
+    # cobra `!!omap` and plain mappings both parse to a dict. A very old
+    # RAVEN file written as a bare `---` sequence of single-key maps (no
+    # `!!omap`) parses to a list; merge it into one mapping.
+    if isinstance(data, list):
+        merged: dict = {}
+        for item in data:
+            if isinstance(item, dict):
+                merged.update(item)
+        data = merged
     if not isinstance(data, dict):
         raise ValueError(
-            f"{path}: top-level YAML must be a mapping, got "
-            f"{type(data).__name__}. Legacy MATLAB / RAVEN format "
-            "(outer sequence wrapper) is not supported; see "
-            "docs/yaml_format.md."
+            f"{path}: top-level YAML must be a mapping or a sequence of "
+            f"single-key mappings, got {type(data).__name__}. "
+            "See docs/yaml_format.md."
         )
+    return data
+
+
+def _normalize_legacy_layout(data: dict) -> dict:
+    """Bring a legacy MATLAB / RAVEN ecModel YAML to the cobra layout.
+
+    Two legacy quirks are normalised (both no-ops on a current file):
+
+    - ``id`` / ``name`` / ``version`` nested under ``metaData`` are
+      lifted to the top level (where cobra expects them).
+    - a per-metabolite top-level ``smiles`` key is moved into
+      ``annotation['smiles']`` (as a one-element list).
+    """
+    meta = data.get("metaData")
+    if isinstance(meta, dict):
+        for key in ("id", "name", "version"):
+            if meta.get(key) and not data.get(key):
+                data[key] = meta[key]
+
+    mets = data.get("metabolites")
+    if isinstance(mets, list):
+        for met in mets:
+            if isinstance(met, dict) and "smiles" in met:
+                smiles = met.pop("smiles")
+                annotation = met.get("annotation")
+                if not isinstance(annotation, dict):
+                    annotation = {}
+                    met["annotation"] = annotation
+                if "smiles" not in annotation and smiles:
+                    annotation["smiles"] = (
+                        smiles if isinstance(smiles, list) else [smiles]
+                    )
     return data
 
 

@@ -3,43 +3,43 @@
 This document defines the YAML format that geckopy uses to save and
 load ecModels.
 
-## Why a custom format
+## It *is* the cobrapy YAML format, plus a few GECKO keys
 
-Standard cobrapy already has its own YAML format for ordinary
-metabolic models. But an ecModel carries extra information that
-cobrapy doesn't know about: a list of kcat values, a list of
-enzymes with molecular weights and protein concentrations, and
-the matrix that links reactions to the enzymes that catalyse them.
+There is no bespoke geckopy format. An ecModel is saved as **exactly
+the YAML that cobrapy writes** (`cobra.io.save_yaml_model`), with a
+handful of GECKO-specific top-level keys added alongside for the data
+cobra doesn't model: kcat values, the enzyme list (MW, sequence,
+concentration), and the reaction-enzyme coupling matrix.
 
-We had two options:
+geckopy builds the cobra portion with `cobra.io.dict.model_to_dict`
+and writes the whole document with cobra's own YAML serialiser, so the
+cobra-shaped part is byte-for-byte what cobrapy produces. That means:
 
-1. Match the legacy MATLAB / RAVEN YAML format used by GECKO MATLAB
-   at the time, so files exchange perfectly between MATLAB and
-   Python.
-2. Match cobrapy's YAML format, then add the ec-specific data as
-   extra top-level keys.
+- any cobrapy-aware tool (Escher, Memote, plain cobra) loads the file
+  and simply ignores the extra `ec-*` keys (verified: cobra's
+  `load_yaml_model` skips unknown top-level keys);
+- MATLAB GECKO / RAVEN write and read the same format, so ecModels
+  exchange between the two toolboxes with no translator.
 
-We picked option 2. cobrapy already serialises metabolic models in
-a clean schema; reusing it means any cobrapy-aware tool (Escher,
-Memote, etc.) can load the cobra portion of a geckopy file and
-just ignore the GECKO extras. MATLAB GECKO and RAVEN (via
-`writeYAMLmodel` / `readYAMLmodel`) now emit and accept the same
-format, so ecModels exchange directly between the two toolboxes
-with no translator. RAVEN's reader still loads the older
-`---` / `!!omap` files as well, so existing distributions keep
-working.
+### A note on `!!omap`
+
+cobra's serialiser tags every mapping with `!!omap` (to preserve key
+order). This is the same tag style legacy RAVEN used, so the on-disk
+files look familiar. The tag is cosmetic: ruamel and cobra both parse
+`!!omap` and plain mappings into ordinary dictionaries, so a file
+written either way loads everywhere. geckopy emits `!!omap` purely to
+match cobra's output exactly.
 
 ## Design goals
 
-1. **Compatible with cobrapy.** The cobra-shaped portion of the
-   file is exactly what `cobra.io.dict.model_from_dict` produces;
-   loading it doesn't need a custom parser.
+1. **Identical to cobrapy.** The cobra-shaped portion is exactly what
+   `cobra.io.model_to_dict` / `model_from_dict` round-trips; no custom
+   parser, no custom schema.
 2. **Round-trippable with MATLAB GECKO.** RAVEN's `writeYAMLmodel`
-   and `readYAMLmodel` emit and accept this same format, so
-   ecModels move between the two toolboxes without conversion.
-3. **Human-readable.** Plain YAML mappings, no `!!omap` tags. Empty
-   strings and NaN values can be omitted; the reader fills in the
-   defaults.
+   and `readYAMLmodel` emit and accept this same format.
+3. **Backward compatible.** Both geckopy and RAVEN also load the
+   legacy MATLAB / RAVEN layout (see the last section). Empty strings
+   and NaN values can be omitted; the reader fills in the defaults.
 
 ## Top-level structure
 
@@ -178,32 +178,24 @@ it as `.nan` so the reader sees it.
 
 ## Legacy MATLAB / RAVEN format
 
-Older RAVEN releases wrote YAML in a different on-disk layout
-(outer `---` / `!!omap` wrapper, `!!omap` tags throughout,
-`id`/`name`/`geckoLight` nested under `metaData`, scalar
-annotation values, ...). Files in that older shape still load via
-RAVEN's `readYAMLmodel` (it auto-detects the layout); geckopy's
-own loader only accepts the cobrapy-style format, so if you need
-to bring an older RAVEN/GECKO YAML into geckopy, re-save it once
-from MATLAB (`writeYAMLmodel` now produces the cobrapy layout) or
-run a one-off conversion script.
+Older RAVEN/GECKO ecModels used a slightly different schema. **Both
+geckopy and RAVEN load it** — geckopy's loader normalises it on read
+(`_normalize_legacy_layout`), and RAVEN's `readYAMLmodel` auto-detects
+it. The `!!omap` tags are *not* the difference (the current format uses
+them too); the real schema deltas are:
 
-For reference, the cosmetic differences between the two layouts:
-
-| Aspect | Legacy MATLAB / RAVEN | Current (cobrapy / this spec) |
+| Aspect | Legacy MATLAB / RAVEN | Current (cobrapy + GECKO keys) |
 |---|---|---|
-| Top-level shape | YAML sequence of single-key mappings | YAML mapping |
-| Ordered-map tags | `!!omap` everywhere | none |
-| `compartments` | sequence of single-key mappings | flat mapping |
-| `metabolites[]`, `reactions[]`, `genes[]` | each entry is `!!omap` | each entry is a plain mapping |
-| `reactions[].metabolites` | `!!omap` list | flat mapping `met_id -> stoich` |
-| `ec-rxns[].enzymes` | `!!omap` list | flat mapping `enzyme_id -> stoich` |
-| Top-level `id` / `name` | nested under `metaData` | top-level |
-| `metaData` provenance fields | inside `metaData` | inside `metaData` (unchanged) |
-| `metaData.geckoLight` | inside `metaData`, string `"true"`/`"false"` | top-level `gecko_light: <bool>` |
-| `smiles` per metabolite | top-level metabolite key | nested under `annotation` as `{smiles: ["..."]}` |
+| Top-level `id` / `name` / `version` | nested under `metaData` | top level (where cobra reads them) |
+| `smiles` per metabolite | top-level metabolite key | under `annotation` as `{smiles: ["..."]}` |
 | Annotation values | scalar strings | list of strings |
-| Reaction `ec-code` annotation | not exposed (only `ec-rxns[].eccodes`) | exposed at `reactions[].annotation.ec-code` if known |
+| `metaData.geckoLight` | inside `metaData`, string `"true"`/`"false"` | top-level `gecko_light: <bool>` |
+| Outer `---` document marker | present | absent (cobra omits it) |
+| `metaData` provenance fields | inside `metaData` | inside `metaData` (unchanged) |
 
-The two layouts hold the same information; the difference is
-purely in how it is shaped on disk.
+The normalisation lifts `id`/`name`/`version` to the top level and
+moves per-metabolite `smiles` into `annotation`; cobra tolerates the
+scalar-vs-list annotation difference on read. A legacy file written as
+a bare `---` sequence of single-key maps (no `!!omap`) is merged into a
+mapping by geckopy's reader. In short: the two layouts hold the same
+information, and the tooling reads both.
