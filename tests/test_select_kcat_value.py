@@ -318,3 +318,54 @@ def test_consumes_fuzzy_kcat_matching_schema_directly():
     # r1 had two entries (5.0, 9.0); max is 9.0.
     assert model.ec.kcat[0] == 9.0
     assert model.ec.kcat[1] == 7.0
+
+
+# --------------------------------------------------------------------------- #
+# Provenance string written to model.ec.source
+# --------------------------------------------------------------------------- #
+
+def test_source_records_fuzzy_wildcard_and_origin_detail():
+    """A fuzzy BRENDA winner records its wildcard level and origin."""
+    model = _ec_model(["r1", "r2"])
+    df = pd.DataFrame({
+        "rxn_id": ["r1", "r2"],
+        "source": ["brenda", "brenda"],
+        "kcat": [5.0, 7.0],
+        "wildcard_level": pd.array([0, 2], dtype="Int64"),
+        "origin": pd.array([1, 6], dtype="Int64"),
+    })
+    apply_kcat_list(model, df)
+    assert model.ec.source[0] == "brenda (wc=0, origin=1)"
+    assert model.ec.source[1] == "brenda (wc=2, origin=6)"
+
+
+def test_source_winning_row_metadata_used_under_max():
+    """The detail comes from the row whose kcat actually won."""
+    model = _ec_model(["r1"])
+    df = pd.DataFrame({
+        "rxn_id": ["r1", "r1"],
+        "source": ["brenda", "brenda"],
+        "kcat": [5.0, 9.0],
+        "wildcard_level": pd.array([2, 0], dtype="Int64"),
+        "origin": pd.array([6, 1], dtype="Int64"),
+    })
+    apply_kcat_list(model, df, criteria="max")
+    # 9.0 wins -> its (wc=0, origin=1) is recorded, not the 5.0 row's.
+    assert model.ec.kcat[0] == 9.0
+    assert model.ec.source[0] == "brenda (wc=0, origin=1)"
+
+
+def test_source_bare_lowercase_token_without_metadata():
+    """Exact DB hits and predictions (NA metadata) render as the bare,
+    lowercased source token."""
+    model = _ec_model(["r1", "r2"])
+    df = pd.DataFrame({
+        "rxn_id": ["r1", "r2"],
+        "source": ["Sabio-RK", "CataPro"],
+        "kcat": [5.0, 7.0],
+        "wildcard_level": pd.array([pd.NA, pd.NA], dtype="Int64"),
+        "origin": pd.array([pd.NA, pd.NA], dtype="Int64"),
+    })
+    apply_kcat_list(model, df)
+    assert model.ec.source[0] == "sabio_rk"
+    assert model.ec.source[1] == "catapro"
