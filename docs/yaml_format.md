@@ -12,23 +12,13 @@ cobra doesn't model: kcat values, the enzyme list (MW, sequence,
 concentration), and the reaction-enzyme coupling matrix.
 
 geckopy builds the cobra portion with `cobra.io.dict.model_to_dict`
-and writes the whole document with cobra's own YAML serialiser, so the
-cobra-shaped part is byte-for-byte what cobrapy produces. That means:
+and writes the whole document with cobra's own YAML serialiser. That
+means:
 
 - any cobrapy-aware tool (Escher, Memote, plain cobra) loads the file
-  and simply ignores the extra `ec-*` keys (verified: cobra's
-  `load_yaml_model` skips unknown top-level keys);
+  and simply ignores the extra `ec-*` keys;
 - MATLAB GECKO / RAVEN write and read the same format, so ecModels
   exchange between the two toolboxes with no translator.
-
-### A note on `!!omap`
-
-cobra's serialiser tags every mapping with `!!omap` (to preserve key
-order). This is the same tag style legacy RAVEN used, so the on-disk
-files look familiar. The tag is cosmetic: ruamel and cobra both parse
-`!!omap` and plain mappings into ordinary dictionaries, so a file
-written either way loads everywhere. geckopy emits `!!omap` purely to
-match cobra's output exactly.
 
 ## Design goals
 
@@ -181,8 +171,7 @@ it as `.nan` so the reader sees it.
 Older RAVEN/GECKO ecModels used a slightly different schema. **Both
 geckopy and RAVEN load it** — geckopy's loader normalises it on read
 (`_normalize_legacy_layout`), and RAVEN's `readYAMLmodel` auto-detects
-it. The `!!omap` tags are *not* the difference (the current format uses
-them too); the real schema deltas are:
+it. The schema differences are:
 
 | Aspect | Legacy MATLAB / RAVEN | Current (cobrapy + GECKO keys) |
 |---|---|---|

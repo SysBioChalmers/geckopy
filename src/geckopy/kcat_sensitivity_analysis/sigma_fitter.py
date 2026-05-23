@@ -77,7 +77,7 @@ def fit_sigma(
     MATLAB-COMPAT: GECKO MATLAB leaves the model at the LAST trial
     (sigma = 1.0) even though its docstring claims to return the
     model adapted to the optimal sigma. geckopy re-applies the best
-    sigma at the end. Tracked in ``docs/future_improvements.md``.
+    sigma at the end.
 
     MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and a
     ``makePlot`` flag. geckopy reads the adapter from

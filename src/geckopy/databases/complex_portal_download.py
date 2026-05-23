@@ -58,10 +58,6 @@ def get_complex_data(
     MATLAB-COMPAT: MATLAB warns and returns silently when taxonomic_id
     is missing. geckopy raises ValueError instead.
 
-    MATLAB-COMPAT: A more descriptive Python name would be
-    ``download_complex_portal_data``. Tracked in
-    docs/future_improvements.md.
-
     Parameters
     ----------
     taxonomic_id

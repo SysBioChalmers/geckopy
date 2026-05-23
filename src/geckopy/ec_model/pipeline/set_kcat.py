@@ -50,12 +50,9 @@ def set_kcat_for_reactions(
 
     MATLAB-COMPAT: MATLAB allows passing a length-N kcat for an
     un-suffixed ID that expands to N matches; geckopy forbids this.
-    MATLAB GECKO should adopt the strict rule.
 
     MATLAB-COMPAT: MATLAB writes the source string ``'setKcatForReactions'``
     to ec.source for changed reactions. geckopy writes ``'manual'``.
-    MATLAB GECKO should adopt ``'manual'`` for round-trippable source
-    strings.
 
     Parameters
     ----------

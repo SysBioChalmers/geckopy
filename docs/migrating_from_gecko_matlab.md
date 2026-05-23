@@ -156,10 +156,10 @@ ecModels move between the two tools without conversion:
 
 - **Saving** in either tool writes the same canonical, cobrapy-style
   YAML, so a geckopy `.yml` loads in GECKO 4 and vice versa.
-- **Loading** is backward compatible: geckopy reads older MATLAB ecModels
-  (RAVEN `!!omap` YAML), and it auto-flips legacy reverse-direction
-  protein reactions on load — exactly as GECKO 4's `loadEcModel` does. So
-  a GECKO 3 model opened in geckopy and saved comes out as a current
+- **Loading** is backward compatible: geckopy reads older MATLAB
+  ecModels too, and it auto-flips legacy reverse-direction protein
+  reactions on load — exactly as GECKO 4's `loadEcModel` does. So a
+  GECKO 3 model opened in geckopy and saved comes out as a current
   model.
 
 The BRENDA database files use the same refreshed schema

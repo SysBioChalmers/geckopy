@@ -85,8 +85,7 @@ def load_uniprot_tsv(
         space-separated multiple ORF names per entry, MATLAB matches
         on the whole string and silently misses those genes. geckopy
         provides ``split_gene_cells=True`` as an opt-in fix, but the
-        default mirrors MATLAB. MATLAB GECKO should adopt the same
-        splitting logic.
+        default mirrors MATLAB.
 
         If False (the default and MATLAB-equivalent behavior), the cell
         is stored verbatim, including any embedded whitespace.

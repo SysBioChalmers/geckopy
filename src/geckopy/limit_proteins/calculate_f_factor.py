@@ -59,8 +59,7 @@ def calculate_f_factor(
 
     MATLAB-COMPAT: GECKO MATLAB silently returns 0.5 when no
     proteome data is provided. geckopy requires the caller to handle
-    the missing-data case explicitly. Tracked in
-    ``docs/future_improvements.md``.
+    the missing-data case explicitly.
 
     Parameters
     ----------

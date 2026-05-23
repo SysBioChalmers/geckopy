@@ -3,10 +3,7 @@
 Ported from GECKO MATLAB:
 src/geckomat/gather_kcats/fuzzyKcatMatching.m.
 
-This subpackage was previously one large module (601 lines doing
-data lookup, organism resolution, EC-wildcard escalation, and
-substrate matching all in one file). It's now split into four
-files by concern:
+This subpackage is split into four files by concern:
 
 - ``_escalation.py``   -- EC-token wildcard escalation
 - ``_organism.py``     -- organism resolution and per-row filtering
@@ -125,8 +122,7 @@ def fuzzy_kcat_matching(
     consequence is that when both would match, org-SA wins (with
     output origin 5) even though any-no-subs-kcat (output origin 4)
     would have been ranked better by the docstring. geckopy
-    replicates this behavior; tracked as a MATLAB-side bug in
-    ``docs/future_improvements.md``.
+    replicates this behavior.
 
     MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and reads
     the organism via ``adapter.params.org_name``. geckopy reads from

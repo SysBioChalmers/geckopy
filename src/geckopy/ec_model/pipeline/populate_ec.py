@@ -95,9 +95,7 @@ def populate_enzyme_data(
     MATLAB-COMPAT: GECKO MATLAB iterates model.genes in their original
     model order. geckopy iterates them in alphabetical order so that
     ec.genes / ec.enzymes / ec.mw / ec.sequence are deterministic
-    regardless of how the SBML was loaded. MATLAB GECKO should adopt
-    the same alphabetical sort to produce byte-identical ec
-    substructures across the two implementations.
+    regardless of how the SBML was loaded.
 
     For every gene in the model (sorted alphabetically for reproducibility),
     a lookup is performed:

@@ -20,7 +20,7 @@ from typing import Iterator, Literal, NamedTuple
 logger = logging.getLogger(__name__)
 
 
-# BRENDA "no value" sentinel.
+# -999 is BRENDA's missing-value marker.
 _MISSING_VALUE = -999.0
 
 # Bar-Even et al. 2011, Biochemistry 50:4402 - physical upper bound for kcat.
@@ -67,7 +67,7 @@ def parse_brenda_json(path: str | Path) -> Iterator[Row]:
     """Yield one ``Row`` per (kind, EC, substrate, organism) measurement.
 
     Range values like ``"0.1-2.5 {NADH}"`` collapse to their upper
-    bound. Mutant-flagged rows, the ``-999`` sentinel, kcat values
+    bound. Mutant-flagged rows, the ``-999`` missing-value marker, kcat values
     above the physical ceiling, and the ``spontaneous`` pseudo-EC are
     skipped. Measurements fan out across ``proteins[]`` so one input
     row may produce several output rows (one per organism).

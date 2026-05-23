@@ -58,10 +58,6 @@ def apply_complex_data(
     must remember to do it. geckopy auto-applies (apply=True) since
     changing rxn_enz_mat invalidates kcat coefficients.
 
-    MATLAB-COMPAT: A more descriptive name would be
-    ``apply_complex_portal_data``. Tracked in
-    docs/future_improvements.md.
-
     Parameters
     ----------
     model

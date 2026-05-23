@@ -1,11 +1,9 @@
 """Load an ecModel from a YAML file.
 
-Reads the cobrapy YAML format (``!!omap`` tagged, exactly what
-``cobra.io.save_yaml_model`` writes) plus the GECKO-specific
-top-level keys (``ec-rxns``, ``ec-enzymes``, ``gecko_light``,
-``metaData``). The cobra-shaped portion is rebuilt by
-``cobra.io.dict.model_from_dict``; this module reads the ec keys
-on top.
+Reads the cobrapy YAML format plus the GECKO-specific top-level keys
+(``ec-rxns``, ``ec-enzymes``, ``gecko_light``, ``metaData``). The
+cobra-shaped portion is rebuilt by ``cobra.io.dict.model_from_dict``;
+this module reads the ec keys on top.
 
 The loader also dispatches SBML files (`.xml` / `.sbml`) to
 ``geckopy.io.sbml.read_sbml_ec_model``, so the same call works
@@ -14,22 +12,21 @@ for both formats.
 Legacy MATLAB / RAVEN ecModels load too: ``_normalize_legacy_layout``
 lifts ``id`` / ``name`` / ``version`` out of ``metaData`` and moves
 per-metabolite ``smiles`` into ``annotation`` before handing the
-document to cobra. (The legacy ``!!omap`` tags themselves parse
-straight into mappings, so no special handling is needed for those.)
+document to cobra.
 
-ecModels written before MATLAB GECKO switched ``usage_prot_*`` and
-``prot_pool_exchange`` to the forward direction (positive flux)
-used the opposite sign convention. The loader detects that case
-on load and flips the affected reactions in place, so downstream
-geckopy code always sees the current convention.
+Some ecModels write ``usage_prot_*`` and ``prot_pool_exchange`` with
+the opposite sign convention to the forward direction (positive flux).
+The loader detects that case on load and flips the affected reactions
+in place, so downstream geckopy code always sees the forward
+convention.
 
-ec.kcat uses ``0`` as the "no kcat assigned" sentinel (matching
+ec.kcat uses ``0`` to mark "no kcat assigned" (matching
 MATLAB GECKO).
 
 MATLAB-COMPAT: the MATLAB ``loadEcModel`` validates
 ``endsWith(filename, {'yml','yaml'})`` and then has a dead
 ``elseif endsWith(filename,{'xml','sbml'})`` branch. geckopy
-implements both paths properly; SBML is no longer dead code.
+implements both paths properly, including SBML.
 
 MATLAB-COMPAT: MATLAB ``loadEcModel`` falls back to
 ``ModelAdapterManager.getDefault()`` when no adapter is supplied.

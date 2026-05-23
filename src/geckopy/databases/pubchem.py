@@ -60,10 +60,6 @@ def find_met_smiles(
     instances (different compartments). Lookup is done once per unique
     name and the SMILES is applied to every metabolite sharing that name.
 
-    MATLAB-COMPAT: A more descriptive Python name would be
-    ``populate_smiles`` or ``add_smiles_annotations``. Tracked in
-    docs/future_improvements.md.
-
     MATLAB-COMPAT: MATLAB returns ``(model, noSMILES)``; geckopy mutates
     in place and logs unmatched metabolite count.
 

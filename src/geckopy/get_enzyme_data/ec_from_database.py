@@ -77,8 +77,7 @@ def fill_eccodes_from_database(
     code). geckopy drops ``'add'``. ``'display'`` here emits a single
     aggregated ``logger.warning`` rather than raising, since the
     individual conflict warnings from ``find_ec_in_db`` already give
-    users enough to act on. Tracked in
-    ``docs/future_improvements.md``.
+    users enough to act on.
 
     MATLAB-COMPAT: GECKO MATLAB loops over every reaction even when
     ``ecRxns`` masks most of them, then subsets at the end. geckopy

@@ -61,8 +61,8 @@ def apply_flux_data_constraints(
     the adapter from ``model.adapter`` and requires pre-loaded
     ``flux_data``.
 
-    A ``+/-1000`` measured flux is treated as a sentinel for
-    "unconstrained", regardless of ``loose_strict_flux``:
+    A ``+/-1000`` measured flux means unconstrained, regardless of
+    ``loose_strict_flux``:
     ``-1000`` -> ``lb=-1000, ub=0`` (free uptake), ``+1000`` ->
     ``lb=0, ub=1000`` (free excretion).
 

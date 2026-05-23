@@ -5,15 +5,13 @@ YAML format documented in ``docs/yaml_format.md`` for
 ``.yml`` / ``.yaml`` filenames, and SBML for ``.xml`` / ``.sbml``
 (via ``geckopy.io.sbml.write_sbml_ec_model``).
 
-The YAML writer uses ``cobra.io.dict.model_to_dict`` for the
-cobra-shaped portion (metabolites, reactions, genes,
-compartments) and **cobra's own YAML serializer** to write it, so
-the file is byte-for-byte the cobrapy YAML format (``!!omap``
-tagged). Four GECKO-specific top-level keys are added alongside:
-``ec-rxns``, ``ec-enzymes``, ``gecko_light``, ``metaData``.
-cobra-aware tools ignore those extra keys, so the file also loads
-as a plain cobra model. Empty / NaN fields are omitted to keep the
-file compact; the loader fills them back in.
+The cobra-shaped portion (metabolites, reactions, genes,
+compartments) is written with cobra's own YAML serializer, so the
+file is the cobrapy YAML format. Four GECKO-specific top-level keys
+are added alongside: ``ec-rxns``, ``ec-enzymes``, ``gecko_light``,
+``metaData``. cobra-aware tools ignore those extra keys, so the file
+also loads as a plain cobra model. Empty / NaN fields are omitted to
+keep the file compact; the loader fills them back in.
 
 MATLAB-COMPAT: MATLAB ``saveEcModel`` mutates the input model
 (``ecModel.description = ['Enzyme-constrained model of '
@@ -112,12 +110,10 @@ def save_ec_model(
         write_sbml_ec_model(model, path)
         return path
 
-    # cobra-shaped portion, exactly as cobrapy serialises it.
+    # cobra-shaped portion, as cobrapy serialises it.
     doc = model_to_dict(model)
-    # GECKO-specific extras as plain native types (cobra's YAML
-    # serialiser renders every mapping as !!omap, so the extras match
-    # the cobra portion's style). Kept out of model_to_dict so the
-    # cobra part stays byte-identical to cobra's own output.
+    # GECKO-specific extras as plain native types so cobra's YAML
+    # serialiser renders them in the same style as the cobra portion.
     doc["gecko_light"] = bool(model.ec.gecko_light)
     doc["metaData"] = _to_native(_build_metadata(model))
     doc["ec-rxns"] = _to_native(_build_ec_rxns_list(model.ec))
@@ -166,10 +162,8 @@ def _build_metadata(model: EcModel) -> dict:
     description string mirroring MATLAB's
     ``Enzyme-constrained model of <id>``.
 
-    Future enrichment (Q2-b): author / email / organization /
-    taxonomy could be sourced from `adapter.params` once those
-    fields are added to `ModelParameters`. Tracked in
-    `docs/future_improvements.md`.
+    Author / email / organization / taxonomy could be sourced from
+    `adapter.params` once those fields are added to `ModelParameters`.
     """
     try:
         geckopy_version = version("geckopy")
@@ -188,7 +182,7 @@ def _build_ec_rxns_list(ec: EcData) -> list:
 
     Empty `source` / `notes` / `eccodes` strings are omitted. `kcat`
     is always written: a real turnover number when set, otherwise
-    ``0`` (the "no kcat assigned" sentinel, matching MATLAB GECKO).
+    ``0`` (0 marks "no kcat assigned", matching MATLAB GECKO).
     """
     coo = ec.rxn_enz_mat.tocoo()
     per_row_enzymes: list[dict[str, float]] = [

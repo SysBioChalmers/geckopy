@@ -65,7 +65,7 @@ def load_pax_db(
     MATLAB-COMPAT: GECKO MATLAB's calculateFfactor silently returns
     ``0.5`` when the paxDB.tsv file is missing. geckopy raises
     ``FileNotFoundError`` from this loader; the caller decides on a
-    fallback. Tracked in ``docs/future_improvements.md``.
+    fallback.
 
     Ported from GECKO MATLAB:
     the inline paxDB-parsing block of

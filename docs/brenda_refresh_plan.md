@@ -293,7 +293,7 @@ tests/
 
 | filter | source | action |
 |--------|--------|--------|
-| `value == -999` | BRENDA sentinel for "no value" | skip row |
+| `value == -999` | BRENDA's missing-value marker | skip row |
 | comment matches `/mutant\|mutated/i` | mutant enzyme | skip row |
 | `kcat > 1e7` | Bar-Even et al. 2011 physical limit | skip row |
 | value is a range `0.1-2.5` | BRENDA convention | take upper bound |

@@ -76,7 +76,7 @@ def make_ec_model(
       coupling matrix).
 
     The kcat values themselves are NOT filled in here — they stay
-    at 0 (the "no kcat assigned" sentinel) until you populate them
+    at 0 (0 marks "no kcat assigned") until you populate them
     via the ``gather_kcats`` functions (BRENDA / DLKcat / custom
     files) and call ``apply_kcat_constraints``, or set them manually
     via ``set_kcat_for_reactions``.
