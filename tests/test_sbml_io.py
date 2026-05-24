@@ -98,6 +98,42 @@ def test_write_read_roundtrip_kcats(tmp_path):
         assert reloaded.ec.kcat[ri_new] == pytest.approx(kcat_orig, rel=1e-5)
 
 
+def test_write_read_roundtrip_provenance(tmp_path):
+    """source / eccodes / notes / sequence and >1 subunit counts survive
+    the round-trip (previously silently dropped)."""
+    model, adapter = _ectestgem_ec_model_with_kcats()
+
+    # Pick a catalysed reaction with at least one coupled enzyme.
+    mat = model.ec.rxn_enz_mat.tolil()
+    ri = next(i for i in range(mat.shape[0]) if mat.getrow(i).nnz)
+    rxn_id = model.ec.rxns[ri]
+    j = int(mat.getrow(ri).indices[0])
+    enzyme_id = model.ec.enzymes[j]
+
+    # Stamp provenance and a 2-subunit coupling.
+    model.ec.source[ri] = "brenda"
+    model.ec.eccodes[ri] = "1.1.1.1;2.7.1.-"
+    model.ec.notes[ri] = "preTuneKcat=12.5 | source:dlkcat"
+    model.ec.kcat[ri] = 50.0
+    model.ec.sequence[j] = "MKVLA"
+    mat[ri, j] = 2.0
+    model.ec.rxn_enz_mat = mat.tocsr()
+
+    out = tmp_path / "rt.xml"
+    write_sbml_ec_model(model, out)
+    reloaded = read_sbml_ec_model(out, adapter=adapter)
+
+    ri_new = reloaded.ec.rxns.index(rxn_id)
+    j_new = reloaded.ec.enzymes.index(enzyme_id)
+    assert reloaded.ec.source[ri_new] == "brenda"
+    assert reloaded.ec.eccodes[ri_new] == "1.1.1.1;2.7.1.-"
+    assert reloaded.ec.notes[ri_new] == "preTuneKcat=12.5 | source:dlkcat"
+    assert reloaded.ec.sequence[j_new] == "MKVLA"
+    # kcat recovered exactly, not divided by the subunit count.
+    assert reloaded.ec.kcat[ri_new] == pytest.approx(50.0, rel=1e-9)
+    assert reloaded.ec.rxn_enz_mat[ri_new, j_new] == pytest.approx(2.0)
+
+
 # --------------------------------------------------------------------------- #
 # Group + notes structure
 # --------------------------------------------------------------------------- #
