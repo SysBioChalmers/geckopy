@@ -44,6 +44,10 @@ from ..ec_model.constants import (
     USAGE_PREFIX,
 )
 _TUNING_SOURCE = "sensitivityTuning"
+# Growth is considered stalled when an iteration improves it by no more
+# than this (absolute, 1/h). Using a tolerance instead of exact equality
+# avoids spinning on sub-numerical-noise increases.
+_GROWTH_STALL_TOL = 1e-9
 
 
 @dataclass
@@ -68,6 +72,7 @@ def sensitivity_tuning(
     desired_growth_rate: Optional[float] = None,
     fold_change: float = 10.0,
     prot_to_ignore: Optional[list[str]] = None,
+    max_iterations: int = 1000,
     verbose: bool = True,
 ) -> TunedKcatsResult:
     """Iteratively bump the most-limiting kcat by ``fold_change`` until
@@ -120,6 +125,9 @@ def sensitivity_tuning(
     prot_to_ignore
         UniProt IDs whose usage rxns are excluded from being picked
         as the limiting enzyme.
+    max_iterations
+        Hard cap on tuning iterations. A backstop against a target
+        growth rate that is unreachable by raising kcats alone.
     verbose
         Whether per-iteration progress is logged at INFO.
 
@@ -185,11 +193,11 @@ def sensitivity_tuning(
     tuned_ec_indices: list[int] = []  # indices into model.ec.rxns
     iteration = 1
 
-    while True:
+    while iteration <= max_iterations:
         sol = model.optimize()
         growth = float(sol.objective_value or 0.0)
 
-        if growth == last_growth:
+        if not np.isnan(last_growth) and growth <= last_growth + _GROWTH_STALL_TOL:
             logger.warning(
                 "sensitivity_tuning: growth did not increase from %g; "
                 "uptake or pool constraints may be limiting.", growth,
@@ -286,6 +294,12 @@ def sensitivity_tuning(
 
         if ec_idx not in tuned_ec_indices:
             tuned_ec_indices.append(ec_idx)
+    else:
+        logger.warning(
+            "sensitivity_tuning: reached max_iterations (%d) without "
+            "hitting the target growth rate (%g); stopping.",
+            max_iterations, desired_growth_rate,
+        )
 
     return _build_result(model, tuned_ec_indices)
 
