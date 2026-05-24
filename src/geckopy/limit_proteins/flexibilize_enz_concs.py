@@ -29,6 +29,10 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
+)
 from .get_conc_control_coeffs import get_conc_control_coeffs
 
 if TYPE_CHECKING:
@@ -37,10 +41,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-from ..ec_model.constants import (
-    POOL_EXCHANGE_ID,
-    USAGE_PREFIX,
-)
 _POOL_TARGET_NAME = "prot_pool"
 _GROWTH_DELTA_THRESHOLD = 1e-3
 # Backstop on total iterations when iter_per_enzyme is infinite (the

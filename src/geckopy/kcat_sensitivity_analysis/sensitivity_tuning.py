@@ -30,6 +30,10 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from ..ec_model.constants import (
+    PROT_PREFIX,
+    USAGE_PREFIX,
+)
 from ..ec_model.pipeline.apply_kcat import apply_kcat_constraints
 
 if TYPE_CHECKING:
@@ -39,10 +43,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-from ..ec_model.constants import (
-    PROT_PREFIX,
-    USAGE_PREFIX,
-)
 _TUNING_SOURCE = "sensitivityTuning"
 # Growth is considered stalled when an iteration improves it by no more
 # than this (absolute, 1/h). Using a tolerance instead of exact equality
