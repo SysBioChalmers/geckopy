@@ -215,8 +215,10 @@ def read_sbml_ec_model(
     filename
         Path to the SBML file.
     adapter
-        ModelAdapter to attach to the returned EcModel. Required;
-        downstream functions need it for organism parameters.
+        ModelAdapter to attach to the returned EcModel, or ``None`` to
+        load the model for inspection without a project. Downstream
+        functions that need organism parameters will then require an
+        explicit ``adapter``.
 
     Ported from the legacy geckopy package (Carrasco et al., 2023,
     https://doi.org/10.1128/spectrum.01705-23),
@@ -227,8 +229,6 @@ def read_sbml_ec_model(
     from ..ec_model.ec_model import EcModel
 
     filename = str(filename)
-    if adapter is None:
-        raise ValueError("read_sbml_ec_model requires an adapter")
 
     # 1. Standard cobra read.
     cobra_model = cobra.io.read_sbml_model(filename)
