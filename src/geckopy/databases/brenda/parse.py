@@ -149,7 +149,10 @@ def _parse_one(
     }))
 
     for pid in raw.get("proteins", []) or []:
-        protein = proteins_map.get(pid)
+        # The "protein" map is keyed by string (JSON object keys always are),
+        # while the "proteins" reference list may carry ints; coerce so the
+        # lookup matches regardless and the measurement is not silently lost.
+        protein = proteins_map.get(str(pid))
         if not isinstance(protein, dict):
             continue
         org = (protein.get("organism") or "").strip()

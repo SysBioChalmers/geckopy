@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class KeggParams(BaseModel):
@@ -79,6 +79,31 @@ class BayesianParams(BaseModel):
     rmse_threshold: float = 0.2
     max_generations: int = 150
 
+    @model_validator(mode="after")
+    def _check_parallel_list_lengths(self) -> "BayesianParams":
+        """The per-source lists must line up with ``kcat_sources``, and the
+        ABC-SMC schedule lists must line up with each other; otherwise a
+        downstream positional zip silently mismatches."""
+        n = len(self.kcat_sources)
+        for name in (
+            "sigma0_log_source",
+            "shrink_thr_source",
+            "variance_cap_source",
+            "force_prior_thr_source",
+        ):
+            length = len(getattr(self, name))
+            if length != n:
+                raise ValueError(
+                    f"BayesianParams.{name} has length {length}, expected "
+                    f"{n} to match kcat_sources."
+                )
+        if len(self.schedule_generations) != len(self.schedule_samples):
+            raise ValueError(
+                "BayesianParams.schedule_generations and schedule_samples "
+                "must have equal length."
+            )
+        return self
+
 
 class OkpParams(BaseModel):
     """OpenKineticsPredictor settings (used by submit/fetch_open_kinetics_predictor).
@@ -119,6 +144,8 @@ class ModelParameters(BaseModel):
 
     org_name: str = Field(description="Scientific name of the organism")
 
+    # No range constraints: callers intentionally pass out-of-range values
+    # (e.g. an inflated f) for sensitivity experiments and test fixtures.
     sigma: float = Field(default=0.5, description="Average enzyme saturation factor")
     p_tot: float = Field(default=0.5, description="Total protein content [g/gDw]")
     f: float = Field(default=0.5, description="Fraction of enzymes in model [g/g]")
