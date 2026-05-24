@@ -307,3 +307,60 @@ def test_complex_of_complexes_flattens(monkeypatch):
     # SUB-B contributes P2 with stoich 1*5=5.
     assert big.protein_ids == ["P1", "P2"]
     assert big.stoichiometry == [6, 5]
+
+
+def test_subcomplex_with_ligand_ignores_ligand(monkeypatch):
+    """A complex with a sub-complex participant *and* a ligand (no direct
+    protein) flattens to the sub-complex proteins only; the ligand must not
+    be treated as a sub-complex id."""
+    responses = {
+        "search/*": (200, {
+            "size": 2,
+            "elements": [{"complexAC": "SUB-A"}, {"complexAC": "BIG"}],
+        }),
+        "complex/SUB-A": (200, {
+            "complexAc": "SUB-A", "name": "A", "species": "x",
+            "participants": [
+                {"interactorType": "protein", "name": "G1", "identifier": "P1",
+                 "stochiometry": "minValue: 2, maxValue: 2"},
+            ],
+        }),
+        "complex/BIG": (200, {
+            "complexAc": "BIG", "name": "Big", "species": "x",
+            "participants": [
+                {"interactorType": "complex", "name": "SUB-A",
+                 "identifier": "SUB-A",
+                 "stochiometry": "minValue: 3, maxValue: 3"},
+                {"interactorType": "small molecule", "name": "ATP",
+                 "identifier": "CHEBI:15422",
+                 "stochiometry": "minValue: 1, maxValue: 1"},
+            ],
+        }),
+    }
+    _install_fake_session(monkeypatch, responses)
+
+    result = get_complex_data(taxonomic_id=9606)
+    big = next(r for r in result if r.complex_id == "BIG")
+    assert big.protein_ids == ["P1"]
+    assert big.stoichiometry == [6]
+
+
+def test_ligand_only_complex_has_no_proteins(monkeypatch):
+    """A complex whose only participants are non-protein, non-complex must
+    not be flattened as a complex-of-complexes; it yields no proteins."""
+    responses = {
+        "search/*": (200, {"size": 1, "elements": [{"complexAC": "LIG"}]}),
+        "complex/LIG": (200, {
+            "complexAc": "LIG", "name": "ligand only", "species": "x",
+            "participants": [
+                {"interactorType": "small molecule", "name": "ATP",
+                 "identifier": "CHEBI:15422",
+                 "stochiometry": "minValue: 1, maxValue: 1"},
+            ],
+        }),
+    }
+    _install_fake_session(monkeypatch, responses)
+
+    result = get_complex_data(taxonomic_id=9606)
+    lig = next(r for r in result if r.complex_id == "LIG")
+    assert lig.protein_ids == []

@@ -190,13 +190,26 @@ def _parse_complex_detail(payload: dict) -> dict:
         p for p in participants
         if str(p.get("interactorType", "")).lower() == "protein"
     ]
+    # A sub-complex participant has an interactorType naming a complex
+    # ("complex", "stable complex", ...). Classifying by this rather than
+    # by "no proteins present" stops complexes whose only non-protein
+    # participants are ligands/RNA from being mistaken for complexes-of-
+    # complexes and silently reduced to zero proteins in _post_process.
+    complex_participants = [
+        p for p in participants
+        if "complex" in str(p.get("interactorType", "")).lower()
+    ]
 
     if protein_participants:
         eligible = protein_participants
         defined = 1
-    else:
-        eligible = participants
+    elif complex_participants:
+        eligible = complex_participants
         defined = 2
+    else:
+        # Only ligands / nucleic acids / etc. -- nothing usable as an enzyme.
+        eligible = []
+        defined = 0
 
     gene_names: list[str] = []
     protein_ids: list[str] = []
