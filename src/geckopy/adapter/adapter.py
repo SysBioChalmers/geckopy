@@ -170,11 +170,18 @@ class ModelAdapter:
     def get_brenda_db_folder(self) -> Path:
         """Return the folder where the BRENDA database files are stored.
 
-        Default: the BRENDA snapshot bundled with geckopy
-        (`<geckopy>/data/brenda/`), refreshed via `geckopy brenda-refresh`.
-        Override to point at a project-local copy.
+        Prefers `<project_path>/data/brenda/` (consistent with
+        `get_phyl_dist_path`, and writable on read-only installs), where
+        `geckopy brenda-refresh` writes. Falls back to the snapshot
+        bundled with geckopy when the project has no copy, so the
+        out-of-the-box flow still works. Override to point elsewhere.
         """
-        return Path(__file__).resolve().parent.parent / "data" / "brenda"
+        project = self.params.path / "data" / "brenda"
+        if not project.is_dir():
+            bundled = Path(__file__).resolve().parent.parent / "data" / "brenda"
+            if bundled.is_dir():
+                return bundled
+        return project
 
     def get_phyl_dist_path(self) -> Path:
         """Return the path to the phylogenetic distance structure file.
