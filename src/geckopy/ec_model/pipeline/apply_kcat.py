@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..ec_model import EcModel
 
 
-from ..constants import POOL_ID, PROT_PREFIX
+from ..constants import PROT_PREFIX
 
 
 def apply_kcat_constraints(
@@ -105,10 +105,11 @@ def apply_kcat_constraints(
     # in the update set. We never touch prot_pool here. This step always
     # runs regardless of kcat validity, so that flipping a kcat to NaN
     # and re-applying genuinely clears the old constraint.
-    prot_met_ids = {
-        m.id for m in model.metabolites
-        if m.id.startswith(PROT_PREFIX) and m.id != POOL_ID
-    }
+    # The enzyme pseudometabolites are exactly prot_<accession> for the
+    # accessions in ec.enzymes; deriving the set from there avoids scanning
+    # every metabolite on each (often per-reaction) call. prot_pool is never
+    # an ec.enzyme, so it is naturally excluded.
+    prot_met_ids = {f"{PROT_PREFIX}{e}" for e in model.ec.enzymes}
 
     for idx in selected_idx:
         rxn_id = ec_rxn_ids[idx]

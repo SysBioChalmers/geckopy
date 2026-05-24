@@ -257,12 +257,12 @@ def _solve_for_conv_rxn(
 
     rxns = list(ec_model.reactions)
     with ec_model:
-        for rxn in rxns:
-            rxn.objective_coefficient = 0.0
-        for i in forward_pos:
-            rxns[i].objective_coefficient = 1.0
-        for i in reverse_neg:
-            rxns[i].objective_coefficient = -1.0
+        # Assigning an objective dict zeroes every other reaction's
+        # coefficient in one step (reverted on context exit), instead of
+        # looping over all reactions to reset them.
+        objective = {rxns[i]: 1.0 for i in forward_pos}
+        objective.update({rxns[i]: -1.0 for i in reverse_neg})
+        ec_model.objective = objective
         ec_model.objective_direction = sense
         sol = ec_model.optimize()
         if sol.objective_value is None or np.isnan(sol.objective_value):

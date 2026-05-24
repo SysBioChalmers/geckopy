@@ -145,10 +145,9 @@ def _annotate_ec_metadata(model: "EcModel") -> "EcModel":
       and subunit counts lets the reader recover both exactly instead
       of assuming one subunit and dividing the kcat.
     """
-    import copy as _copy
-
+    # All values written below are read from the original ``model.ec``;
+    # ``out.ec`` is never touched, so there is no need to deep-copy it.
     out = model.copy()
-    out.ec = _copy.deepcopy(model.ec)
 
     out_met_ids = {m.id for m in out.metabolites}
     out_rxn_ids = {r.id for r in out.reactions}
