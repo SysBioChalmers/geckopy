@@ -162,7 +162,10 @@ def apply_kcat_constraints(
             mw = float(model.ec.mw[enz_idx])
             coef = -subunits * mw / (kcat * 3600.0)
             met = model.metabolites.get_by_id(enz_idx_to_met_id[enz_idx])
-            updates[met] = coef
+            # Two enzyme rows can map to the same prot_<accession> metabolite
+            # (distinct genes sharing one UniProt entry). Sum their demands
+            # instead of letting the later one overwrite the earlier.
+            updates[met] = updates.get(met, 0.0) + coef
 
         if updates:
             rxn.add_metabolites(updates, combine=False)

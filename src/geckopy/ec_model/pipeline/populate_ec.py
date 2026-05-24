@@ -233,6 +233,20 @@ def populate_enzyme_data(
     model.ec.sequence = matched_seq
     model.ec.concs = np.full(len(matched_genes), np.nan, dtype=float)
 
+    # Per-enzyme rows are keyed by gene, so two genes that map to the same
+    # UniProt accession produce duplicate ec.enzymes entries. apply_kcat now
+    # sums their coupling, but the duplication is worth surfacing because the
+    # per-enzyme mw/concs of the second row are otherwise easy to overlook.
+    seen: set[str] = set()
+    duplicates = sorted({e for e in matched_enzymes if e in seen or seen.add(e)})
+    if duplicates:
+        logger.warning(
+            "populate_enzyme_data: %d UniProt accession(s) are shared by "
+            "multiple genes (e.g. %s); their enzyme rows are duplicated in "
+            "model.ec.enzymes.",
+            len(duplicates), ", ".join(duplicates[:5]),
+        )
+
     if kegg_filled:
         logger.info(
             "populate_enzyme_data: %d gene(s) resolved via KEGG fallback "

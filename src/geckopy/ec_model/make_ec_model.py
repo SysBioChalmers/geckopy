@@ -183,4 +183,8 @@ def make_ec_model(
             more,
         )
 
+    # Catch any internal length/shape drift in the ec arrays before the
+    # model is handed back (cheap, and surfaces build bugs early).
+    ec_model.ec.validate()
+
     return ec_model
