@@ -21,6 +21,7 @@ talk to the network.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -30,6 +31,8 @@ if TYPE_CHECKING:
     from ...databases import UniprotDB
     from ...databases.kegg_loader import KeggDB
     from ..ec_model import EcModel
+
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -231,8 +234,6 @@ def populate_enzyme_data(
     model.ec.concs = np.full(len(matched_genes), np.nan, dtype=float)
 
     if kegg_filled:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info(
             "populate_enzyme_data: %d gene(s) resolved via KEGG fallback "
             "(UniProt had no entry): %s",

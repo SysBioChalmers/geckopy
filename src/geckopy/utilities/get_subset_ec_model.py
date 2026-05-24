@@ -12,6 +12,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
+)
+
 if TYPE_CHECKING:
     import cobra
 
@@ -24,10 +29,6 @@ logger = logging.getLogger(__name__)
 _REV_SUFFIX = "_REV"
 _REV_EXP_INFIX = "_REV_EXP_"
 _EXP_RE = re.compile(r"_EXP_\d+")
-from ..ec_model.constants import (
-    POOL_EXCHANGE_ID,
-    USAGE_PREFIX,
-)
 _STANDARD_GENE = "standard"
 _USAGE_DEFAULT_UB = 1000.0
 

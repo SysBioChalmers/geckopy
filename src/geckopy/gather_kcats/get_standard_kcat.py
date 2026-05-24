@@ -15,6 +15,7 @@ import cobra
 import numpy as np
 from scipy import sparse
 
+from ..ec_model.constants import POOL_ID
 from ..ec_model.pipeline.protein_pool import _resolve_enzyme_compartment_id
 
 if TYPE_CHECKING:
@@ -27,7 +28,6 @@ logger = logging.getLogger(__name__)
 _STANDARD_NAME = "standard"
 _STANDARD_MET_ID = "prot_standard"
 _STANDARD_USAGE_RXN_ID = "usage_prot_standard"
-from ..ec_model.constants import POOL_ID
 
 
 def assign_standard_kcat(

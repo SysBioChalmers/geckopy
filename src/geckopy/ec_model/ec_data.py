@@ -90,8 +90,10 @@ class EcData:
                     f"(matching ec.rxns)"
                 )
 
+        # n_e is len(self.enzymes), so the per-enzyme fields below are
+        # checked against it; ec.enzymes itself is the reference length.
         enz_lengths = {
-            "enzymes": len(self.enzymes),
+            "genes": len(self.genes),
             "mw": len(self.mw),
             "sequence": len(self.sequence),
             "concs": len(self.concs),
@@ -100,7 +102,7 @@ class EcData:
             if length != n_e:
                 raise ValueError(
                     f"ec.{name} has length {length}, expected {n_e} "
-                    f"(matching ec.genes)"
+                    f"(matching ec.enzymes)"
                 )
 
         if self.rxn_enz_mat.shape != (n_r, n_e):

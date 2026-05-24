@@ -13,17 +13,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from ..ec_model.constants import (
+    PROT_PREFIX,
+    USAGE_PREFIX,
+)
+
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
 
 logger = logging.getLogger(__name__)
 
-
-from ..ec_model.constants import (
-    PROT_PREFIX,
-    USAGE_PREFIX,
-)
 
 _STANDARD_GPR = "standard"
 _BIOMASS_INFEASIBLE_THRESHOLD = 1e-8

@@ -5,6 +5,7 @@ Ported from GECKO MATLAB: src/geckomat/change_model/applyCustomKcats.m.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_EXP_SUFFIX_REGEX = __import__("re").compile(r"_EXP_\d+$")
+_EXP_SUFFIX_REGEX = re.compile(r"_EXP_\d+$")
 _SOURCE_TAG = "custom"
 _NOTES_SEPARATOR = ", "
 
