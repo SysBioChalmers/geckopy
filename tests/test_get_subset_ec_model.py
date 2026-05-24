@@ -182,8 +182,8 @@ def test_kept_rxn_machinery_preserved(tmp_path):
 
 
 def test_dropped_gene_machinery_removed(tmp_path):
-    """The dropped gene's usage rxn is removed because the catalysed rxn
-    is gone (orphan cleanup), and prot_E3 is orphaned out as well."""
+    """When a gene is dropped, its catalysed rxn, usage_prot_<X> reaction
+    and prot_<X> metabolite are all removed (no orphaned constraints)."""
     big = _build_big_ec_model(_adapter(tmp_path))
     small = _build_small_gem(["R1", "R2"])
     result = get_subset_ec_model(big, small)
@@ -191,13 +191,12 @@ def test_dropped_gene_machinery_removed(tmp_path):
     rxn_ids = {r.id for r in result.reactions}
     met_ids = {m.id for m in result.metabolites}
 
-    # usage_prot_E3 is itself preserved by the usage-rxn rule, even
-    # though prot_E3 is now orphan; what we DO check is that the
-    # catalysed rxn R3 is gone.
     assert "R3" not in rxn_ids
-    # prot_E3 may still exist (referenced by usage_prot_E3) or be
-    # orphan-removed; either is acceptable. Not asserted.
-    _ = met_ids
+    assert "usage_prot_E3" not in rxn_ids
+    assert "prot_E3" not in met_ids
+    # Kept-enzyme machinery is untouched.
+    assert "usage_prot_E1" in rxn_ids
+    assert "prot_E1" in met_ids
 
 
 def test_ec_per_enzyme_fields_trimmed(tmp_path):

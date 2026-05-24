@@ -5,7 +5,6 @@ src/geckomat/utilities/mapRxnsToConv.m.
 """
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Union
@@ -13,19 +12,17 @@ from typing import TYPE_CHECKING, Union
 import numpy as np
 import pandas as pd
 
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
+    canonicalize_rxn_id,
+)
+
 if TYPE_CHECKING:
     import cobra
 
     from ..ec_model.ec_model import EcModel
 
-
-_REV_SUFFIX = "_REV"
-_REV_EXP_INFIX = "_REV_EXP_"
-_EXP_RE = re.compile(r"_EXP_\d+")
-from ..ec_model.constants import (
-    POOL_EXCHANGE_ID,
-    USAGE_PREFIX,
-)
 
 _POOL_LABEL = "pool"
 
@@ -147,12 +144,10 @@ def map_rxns_to_conv(
     canonical_ids: list[str] = []
     flux_signed = flux_2d.copy()
     for i, rid in enumerate(ec_rxn_ids):
-        is_rev = rid.endswith(_REV_SUFFIX) or _REV_EXP_INFIX in rid
+        canonical, is_rev = canonicalize_rxn_id(rid)
         if is_rev:
             flux_signed[i, :] = -flux_signed[i, :]
-            rid = rid.replace(_REV_SUFFIX, "")
-        rid = _EXP_RE.sub("", rid)
-        canonical_ids.append(rid)
+        canonical_ids.append(canonical)
 
     # Group by canonical id and sum.
     summed: dict[str, np.ndarray] = defaultdict(

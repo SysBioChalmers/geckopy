@@ -7,14 +7,15 @@ from __future__ import annotations
 
 import copy
 import logging
-import re
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..ec_model.constants import (
     POOL_EXCHANGE_ID,
+    PROT_PREFIX,
     USAGE_PREFIX,
+    canonicalize_rxn_id,
 )
 
 if TYPE_CHECKING:
@@ -26,9 +27,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-_REV_SUFFIX = "_REV"
-_REV_EXP_INFIX = "_REV_EXP_"
-_EXP_RE = re.compile(r"_EXP_\d+")
 _STANDARD_GENE = "standard"
 _USAGE_DEFAULT_UB = 1000.0
 
@@ -159,6 +157,7 @@ def get_subset_ec_model(
 
     # --- 7. Trim ec per-enzyme fields ---
     if genes_to_remove:
+        old_enzymes = list(small.ec.enzymes)
         keep_enz_mask = np.array(
             [g not in genes_to_remove for g in small.ec.genes], dtype=bool,
         )
@@ -178,6 +177,31 @@ def get_subset_ec_model(
             small.ec.rxn_enz_mat = small.ec.rxn_enz_mat[
                 :, keep_enz_mask
             ].tocsr()
+
+        # Drop the protein-pool machinery (usage_prot_<X> reaction and
+        # prot_<X> metabolite) for accessions no longer used by any kept
+        # enzyme row, so the subset carries no orphaned enzyme constraints.
+        # An accession shared by a kept gene (duplicate accession) is
+        # retained.
+        kept_accessions = set(small.ec.enzymes)
+        orphaned = [
+            e for e, k in zip(old_enzymes, keep_enz_mask)
+            if not k and e not in kept_accessions
+        ]
+        orphan_usage = [
+            small.reactions.get_by_id(f"{USAGE_PREFIX}{e}")
+            for e in orphaned
+            if small.reactions.has_id(f"{USAGE_PREFIX}{e}")
+        ]
+        if orphan_usage:
+            small.remove_reactions(orphan_usage, remove_orphans=False)
+        orphan_mets = [
+            small.metabolites.get_by_id(f"{PROT_PREFIX}{e}")
+            for e in orphaned
+            if small.metabolites.has_id(f"{PROT_PREFIX}{e}")
+        ]
+        if orphan_mets:
+            small.remove_metabolites(orphan_mets)
 
     # --- 8. Remove reactions whose canonical id is not in small_gem ---
     small_gem_rxn_ids = {r.id for r in small_gem.reactions}
@@ -216,6 +240,9 @@ def get_subset_ec_model(
                 keep_rxn_mask, :
             ].tocsr()
 
+    # Surface any length/shape drift introduced by the trims rather than
+    # returning a silently inconsistent ec substructure.
+    small.ec.validate()
     return small
 
 
@@ -225,10 +252,7 @@ def get_subset_ec_model(
 
 def _canonical(rxn_id: str) -> str:
     """Strip ``_REV`` and ``_EXP_<N>`` suffixes."""
-    rid = rxn_id
-    if rid.endswith(_REV_SUFFIX) or _REV_EXP_INFIX in rid:
-        rid = rid.replace(_REV_SUFFIX, "")
-    return _EXP_RE.sub("", rid)
+    return canonicalize_rxn_id(rxn_id)[0]
 
 
 def _need_rxn_trim(big: "EcModel", small_gem: "cobra.Model") -> bool:
