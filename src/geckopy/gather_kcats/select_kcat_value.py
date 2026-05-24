@@ -5,7 +5,7 @@ src/geckomat/gather_kcats/selectKcatValue.m.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Optional, Union
+from typing import TYPE_CHECKING, Literal, Union
 
 import numpy as np
 import pandas as pd
@@ -206,7 +206,8 @@ def _should_overwrite(
     current: float, new: float, mode: _OverwriteMode,
 ) -> bool:
     """Decide whether to write `new` over `current` per the overwrite mode."""
-    is_unset = current == 0
+    # 0 and NaN both mean "no kcat assigned" (NaN slips past `== 0`).
+    is_unset = current == 0 or bool(np.isnan(current))
     if mode is True:
         return True
     if mode is False:

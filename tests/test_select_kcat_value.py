@@ -247,6 +247,24 @@ def test_overwrite_if_higher_treats_zero_as_unset():
     assert model.ec.kcat[0] == 5.0
 
 
+def test_overwrite_false_treats_nan_as_unset():
+    model = _ec_model(["r1"], initial_kcat=[float("nan")], initial_source=["old"])
+    updated = apply_kcat_list(
+        model, _kcat_list([("r1", 5.0, "new")]), overwrite=False,
+    )
+    assert updated == ["r1"]
+    assert model.ec.kcat[0] == 5.0
+
+
+def test_overwrite_if_higher_treats_nan_as_unset():
+    model = _ec_model(["r1"], initial_kcat=[float("nan")], initial_source=["old"])
+    updated = apply_kcat_list(
+        model, _kcat_list([("r1", 5.0, "new")]), overwrite="if_higher",
+    )
+    assert updated == ["r1"]
+    assert model.ec.kcat[0] == 5.0
+
+
 def test_overwrite_invalid_raises():
     model = _ec_model(["r1"])
     with pytest.raises(ValueError, match="overwrite must be"):

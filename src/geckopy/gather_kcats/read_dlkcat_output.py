@@ -111,16 +111,19 @@ def read_dlkcat_output(
     unknown_subs_mask = ~file_subs_lower.isin(model_met_names_lower)
     if unknown_subs_mask.any():
         unknown = sorted(df.loc[unknown_subs_mask, "substrate"].unique())
-        preview = unknown[:5]
-        raise ValueError(
-            f"DLKcat output references {len(unknown)} substrate name(s) "
-            f"not present in model.metabolites (case-insensitive). "
-            f"Examples: {preview}. The output was likely generated from a "
-            f"different ecModel."
+        # A few renamed/normalised substrate names should not discard the
+        # whole prediction file; drop those rows and keep the rest (mirrors
+        # how non-numeric kcats are handled).
+        logger.warning(
+            "DLKcat output references %d substrate name(s) not in "
+            "model.metabolites (case-insensitive); those rows are skipped. "
+            "Examples: %s",
+            len(unknown), unknown[:5],
         )
+        valid_mask = valid_mask & ~unknown_subs_mask
 
     ec_rxn_ids = set(model.ec.rxns)
-    unknown_rxns_mask = ~df["rxn_id"].isin(ec_rxn_ids)
+    unknown_rxns_mask = (~df["rxn_id"].isin(ec_rxn_ids)) & valid_mask
     if unknown_rxns_mask.any():
         unknown = sorted(df.loc[unknown_rxns_mask, "rxn_id"].unique())
         preview = unknown[:5]
