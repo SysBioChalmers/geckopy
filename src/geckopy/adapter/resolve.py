@@ -64,3 +64,25 @@ def resolve_adapter(
             f"ModelAdapter.from_folder(...)`)."
         )
     return resolved
+
+
+def resolve_param(
+    model,
+    explicit,
+    attr: str,
+    *,
+    adapter: Optional["ModelAdapter"] = None,
+    purpose: str = "this function",
+):
+    """Return an explicit value, else fall back to ``adapter.params.<attr>``.
+
+    Lets a function take the single parameter it needs directly, only
+    requiring a full ``ModelAdapter`` when the value is not supplied. If
+    ``explicit`` is not ``None`` it is returned as-is and no adapter is
+    needed; otherwise the adapter is resolved (from ``adapter`` or
+    ``model.adapter``) and ``params.<attr>`` is read.
+    """
+    if explicit is not None:
+        return explicit
+    resolved = resolve_adapter(model, adapter, purpose=purpose)
+    return getattr(resolved.params, attr)
