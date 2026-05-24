@@ -40,6 +40,8 @@ _GENES_PER_QUERY = 10
 _REQUEST_TIMEOUT = 30
 _MAX_RETRIES = 5
 _RETRY_BACKOFF = 1.0
+# KEGG asks for at most 3 requests/second; ~0.34 s between calls stays under.
+_INTER_REQUEST_SLEEP = 0.34
 
 
 def download_kegg(
@@ -74,8 +76,10 @@ def download_kegg(
     Raises
     ------
     RuntimeError
-        If the organism list cannot be retrieved or KEGG returns
-        fewer entries than requested in any batch.
+        If the organism list cannot be retrieved or a KEGG request is
+        rejected (e.g. an invalid organism code). Batches that come back
+        with fewer entries than requested are not an error; the missing
+        gene IDs are skipped with a debug log.
     ValueError
         If ``gene_id_field`` is not present in any returned entry.
     """
@@ -91,13 +95,20 @@ def download_kegg(
     logger.info("KEGG %s: %d genes to fetch", kegg_id, len(gene_ids))
 
     entries: list[dict[str, str]] = []
-    for batch in _chunks(gene_ids, _GENES_PER_QUERY):
+    for batch_no, batch in enumerate(_chunks(gene_ids, _GENES_PER_QUERY)):
+        if batch_no > 0:
+            # KEGG asks for <=3 requests/s; throttle between batches.
+            time.sleep(_INTER_REQUEST_SLEEP)
         text = _fetch_get(sess, kegg_id, batch)
         raw_entries = _split_entries(text)
         if len(raw_entries) < len(batch):
-            raise RuntimeError(
-                f"KEGG returned {len(raw_entries)} entries for a batch "
-                f"of {len(batch)}; reduce _GENES_PER_QUERY and retry."
+            # KEGG legitimately omits entries for withdrawn/obsolete gene
+            # IDs, so a short batch is expected, not an error. Entries are
+            # matched by their own ENTRY line in _parse_entry, not by
+            # position, so the missing ones simply drop out.
+            logger.debug(
+                "KEGG returned %d/%d entries for a batch (missing IDs are "
+                "skipped).", len(raw_entries), len(batch),
             )
         for raw in raw_entries[:len(batch)]:
             parsed = _parse_entry(raw, gene_id_field=gene_id_field)
@@ -141,18 +152,22 @@ def _fetch(sess: requests.Session, url: str) -> str:
     for attempt in range(_MAX_RETRIES):
         try:
             resp = sess.get(url, timeout=_REQUEST_TIMEOUT)
-            if resp.status_code == 400:
-                raise RuntimeError(
-                    f"KEGG REST returned 400 for {url}; "
-                    f"the requested ID is likely invalid."
-                )
-            resp.raise_for_status()
-            return resp.text
-        except (requests.RequestException, RuntimeError) as exc:
+        except requests.RequestException as exc:
             last_err = exc
-            if isinstance(exc, RuntimeError):
-                raise
             time.sleep(_RETRY_BACKOFF * (attempt + 1))
+            continue
+        # 4xx (other than 429 rate-limiting) means the request is invalid
+        # (bad organism code or gene ID); retrying won't help, so fail fast.
+        if 400 <= resp.status_code < 500 and resp.status_code != 429:
+            raise RuntimeError(
+                f"KEGG REST returned {resp.status_code} for {url}; "
+                f"the requested ID is likely invalid."
+            )
+        if resp.status_code == 429 or resp.status_code >= 500:
+            last_err = requests.HTTPError(f"HTTP {resp.status_code}")
+            time.sleep(_RETRY_BACKOFF * (attempt + 1))
+            continue
+        return resp.text
     raise RuntimeError(f"KEGG REST request failed: {url}") from last_err
 
 

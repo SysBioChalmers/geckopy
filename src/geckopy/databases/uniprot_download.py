@@ -114,11 +114,24 @@ def _fetch(
     for attempt in range(_MAX_RETRIES):
         try:
             resp = sess.get(url, params=params, timeout=_REQUEST_TIMEOUT)
-            resp.raise_for_status()
-            return resp.text
         except requests.RequestException as exc:
             last_err = exc
             time.sleep(_RETRY_BACKOFF * (attempt + 1))
+            continue
+        # A 4xx (other than 429 rate-limiting) means the request itself is
+        # wrong -- a bad query, id_type or gene_id_field. Retrying wastes
+        # time and hides the real cause, so surface it immediately with the
+        # server's explanation.
+        if 400 <= resp.status_code < 500 and resp.status_code != 429:
+            raise RuntimeError(
+                f"UniProt REST request rejected with HTTP "
+                f"{resp.status_code}: {resp.text[:200]}"
+            )
+        if resp.status_code == 429 or resp.status_code >= 500:
+            last_err = requests.HTTPError(f"HTTP {resp.status_code}")
+            time.sleep(_RETRY_BACKOFF * (attempt + 1))
+            continue
+        return resp.text
     raise RuntimeError(
         f"UniProt REST request failed after {_MAX_RETRIES} attempts"
     ) from last_err
