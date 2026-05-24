@@ -13,7 +13,8 @@ Scope: full sweep of the `geckopy` package (~16 k lines across `ec_model`, `gath
 
 Resolved items are removed as they are fixed; see `git log` for the corresponding commits.
 Addressed and pruned so far: the entire high-priority tier (former §1.1–1.8); §2.1, §2.2,
-§2.5, §2.6, §2.7, §2.8, §2.9, §2.10, §2.11 (OKP/PubChem parts), §2.12, §2.14 (validator),
+§2.5, §2.6, §2.7, §2.8, §2.9, §2.10, §2.11 (OKP/PubChem parts), §2.12, §2.13 (read path +
+ec_fseof/flux-data overrides), §2.14 (validator), §2.15 (data out of install tree),
 §2.16 (BRENDA protein lookup); and the import-hygiene bullets of §5. Verified **false
 positives** (no change): §2.3 (currency-pair stripping mutates `s_dense` live, so cumulative
 state is tracked), §2.4 (`set_kcat` base-name does not strip `_REV`, so forward/reverse stay
@@ -25,19 +26,13 @@ intentional and tested). Remaining IDs are kept stable.
 
 ## 2. Medium-priority (remaining)
 
-### 2.13 Adapter required where the type says optional — **(c)(e)**
-`io/sbml.py` (`read_sbml_ec_model`) and `adapter/resolve.py`. `read_sbml_ec_model(adapter=None)`
-is typed optional but raises if `None`; `resolve_adapter` makes a full `ModelAdapter` mandatory
-across 30+ functions even when only one path/param is needed, forcing a full project folder for
-a quick read/inspect. Consider letting functions take the specific param and fall back to the
-adapter, and/or letting `read_sbml_ec_model` attach `adapter=None` for inspection-only loads.
-*Design decision — deferred.*
-
-### 2.15 Writable data defaults inside the install tree — **(a)(f)**
-`adapter/adapter.py` (`get_brenda_db_folder` → `<pkg>/data/brenda`) and `cli.py`
-(`brenda-refresh` output). Writing into site-packages fails on read-only/zip installs. Default
-to a user cache dir (e.g. `platformdirs`) or the project `path/data`, consistent with
-`get_phyl_dist_path`. *Design decision — deferred (where should the cache live?).*
+### 2.13 Adapter coupling — **(c)(e)** (partly done)
+`read_sbml_ec_model`/`EcModel.from_cobra` now accept `adapter=None` (inspection loads), and a
+`resolve_param` helper lets functions take a specific id and fall back to the adapter;
+`ec_fseof` and `apply_flux_data_constraints` use it. **Remaining:** apply the same per-param
+override (mostly `bio_rxn`) to `flexibilize_enz_concs` and `sensitivity_tuning` (which already
+accept the growth-rate override). The builder/data-acquisition functions legitimately need the
+project folder and are lower-value to decouple.
 
 ### 2.16 Other data-loader robustness — **(a)** (remaining)
 - `uniprot_loader.py:200-225` — duplicate-ID detection only collapses *consecutive* runs, so a
@@ -146,6 +141,7 @@ protein. Consider NaN for empty input.
 
 ## Suggested order of attack (remaining)
 
-1. The two deferred design decisions (2.13 adapter coupling, 2.15 data-cache location).
+1. Finish 2.13 (bio_rxn override on flexibilize_enz_concs / sensitivity_tuning) and the 2.16
+   loader-robustness bits.
 2. Modeling-intent items (section 3) — discuss as design decisions; you are the original author.
 3. Lower-priority guards (section 4) and the remaining organization items (section 5).
