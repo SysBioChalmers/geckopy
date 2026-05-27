@@ -104,6 +104,20 @@ def filter_by_substrate(
     return rows[keep]
 
 
+def _aggregate_kcats(kcats: np.ndarray, how: str) -> float:
+    """Collapse the matched BRENDA kcats to a single value.
+
+    ``"max"`` (default, matches MATLAB GECKO) takes the highest reported
+    turnover; ``"median"`` is more robust to assay outliers and engineered
+    mutants.
+    """
+    if how == "median":
+        return float(np.median(kcats))
+    if how == "max":
+        return float(np.max(kcats))
+    raise ValueError(f"aggregate must be 'max' or 'median', got {how!r}")
+
+
 def match_kcat(
     ec_token: str,
     substrates: list[str],
@@ -116,6 +130,7 @@ def match_kcat(
     sa: bool,
     phyl_dist: "PhylDist",
     org_index: Optional[int],
+    aggregate: str = "max",
 ) -> tuple[float, int]:
     """One match attempt at one of the six search levels.
 
@@ -152,7 +167,7 @@ def match_kcat(
         return 0.0, 0
 
     n = len(kcats)
-    kcat = float(np.max(kcats))
+    kcat = _aggregate_kcats(kcats, aggregate)
     if kcat > DIFFUSION_LIMIT:
         kcat = DIFFUSION_LIMIT
     return kcat, n
@@ -169,6 +184,7 @@ def main_match(
     organism_name: str,
     phyl_dist: "PhylDist",
     org_index: Optional[int],
+    aggregate: str = "max",
 ) -> tuple[float, int, int]:
     """Try each of the six search levels in MATLAB's order.
 
@@ -189,6 +205,7 @@ def main_match(
             sa=use_sa,
             phyl_dist=phyl_dist,
             org_index=org_index,
+            aggregate=aggregate,
         )
         if n > 0:
             return kcat, output_origin, n
@@ -206,6 +223,7 @@ def iterative_match_one_ec(
     organism_name: str,
     phyl_dist: "PhylDist",
     org_index: Optional[int],
+    aggregate: str = "max",
 ) -> tuple[float, int, int]:
     """Escalate wildcards in ``ec_token`` until a match is found or
     every level is wildcarded.
@@ -221,6 +239,7 @@ def iterative_match_one_ec(
             brenda_kcat, brenda_sa,
             kcat_ec_indices, sa_ec_indices,
             organism_name, phyl_dist, org_index,
+            aggregate=aggregate,
         )
         if origin > 0:
             return kcat, origin, wc
