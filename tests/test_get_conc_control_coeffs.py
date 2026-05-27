@@ -209,3 +209,28 @@ def test_subset_proteins_only_those_evaluated():
     assert len(enz) == 1
     assert enz[0]
     assert coeffs[0] > 0
+
+
+# --------------------------------------------------------------------------- #
+# Single-solve alternative (validating the review §3.4 suggestion)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(
+    "ub, coeff_in_R, expected",
+    [(5.0, -1.0, 1.0), (3.0, -1.0, 1.0), (6.0, -2.0, 0.5)],
+)
+def test_shadow_price_matches_finite_difference_coeff(ub, coeff_in_R, expected):
+    """The per-protein finite-difference loop can be replaced by a single
+    solve: the prot_<id> metabolite shadow price (|dual|) equals the
+    finite-difference control coefficient.
+
+    Note: the *reaction* ``reduced_cost`` of the usage reaction does NOT —
+    it is scaled by the number of coupled pseudometabolites (prot_pool +
+    prot_<id>), so it reads 2x here. Use the metabolite shadow price.
+    """
+    model = _build_toy_ec_model(enzyme_ub=ub, enzyme_coeff_in_R=coeff_in_R)
+    _, coeffs = get_conc_control_coeffs(model)  # finite-difference
+    model.optimize()  # single solve
+    shadow = abs(model.enzymes.get_by_id("E").shadow_price)
+    assert coeffs[0] == pytest.approx(expected)
+    assert shadow == pytest.approx(coeffs[0], rel=1e-6)

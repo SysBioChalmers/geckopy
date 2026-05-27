@@ -102,6 +102,19 @@ def ec_fva(
     Ported from GECKO MATLAB:
     src/geckomat/utilities/ecFVA.m.
 
+    Note (envelope semantics): the per-reaction min/max are reduced
+    *per ec variant* across *all* the per-reaction optimisations and then
+    summed back to conventional space. For a reaction with a single
+    variant this is the exact FVA range. For a reaction split into
+    several isozymes (and/or forward + ``_REV``), each variant's extreme
+    value may be attained in a *different* LP solution, so summing the
+    independently-extremised variants gives
+    ``sum_v max_k v_variant(opt_k) >= max_k sum_v v_variant(opt_k)`` —
+    i.e. an **outer envelope** that can be wider than the true combined
+    range. The exact per-reaction bound is the *diagonal*: the combined
+    flux of group ``k`` at the optimum that extremised group ``k``. This
+    mirrors GECKO MATLAB; the envelope is conservative (never too tight).
+
     MATLAB-COMPAT: GECKO MATLAB uses ``parfor`` to parallelise the
     per-conv-rxn LP solves. geckopy now supports parallelism via
     ``multiprocessing`` with the ``n_proc`` parameter; the default
