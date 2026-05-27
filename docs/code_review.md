@@ -14,8 +14,9 @@ Scope: full sweep of the `geckopy` package (~16 k lines across `ec_model`, `gath
 Resolved items are removed as they are fixed; see `git log` for the corresponding commits.
 Addressed and pruned so far: the entire high-priority tier (former §1.1–1.8); §2.1, §2.2,
 §2.5, §2.6, §2.7, §2.8, §2.9, §2.10, §2.11 (OKP/PubChem parts), §2.12, §2.13 (read path +
-ec_fseof/flux-data overrides), §2.14 (validator), §2.15 (data out of install tree),
-§2.16 (BRENDA protein lookup); and the import-hygiene bullets of §5. Verified **false
+per-param `bio_rxn`/`c_source` overrides), §2.14 (validator), §2.15 (data out of install tree),
+§2.16 (uniprot duplicate detection, flux-header warning, BRENDA protein lookup); and the
+import-hygiene bullets of §5. Verified **false
 positives** (no change): §2.3 (currency-pair stripping mutates `s_dense` live, so cumulative
 state is tracked), §2.4 (`set_kcat` base-name does not strip `_REV`, so forward/reverse stay
 distinct), §2.7-objective (usage fluxes already carry MW scaling, so the unit-weighted sum
@@ -26,23 +27,14 @@ intentional and tested). Remaining IDs are kept stable.
 
 ## 2. Medium-priority (remaining)
 
-### 2.13 Adapter coupling — **(c)(e)** (partly done)
-`read_sbml_ec_model`/`EcModel.from_cobra` now accept `adapter=None` (inspection loads), and a
-`resolve_param` helper lets functions take a specific id and fall back to the adapter;
-`ec_fseof` and `apply_flux_data_constraints` use it. **Remaining:** apply the same per-param
-override (mostly `bio_rxn`) to `flexibilize_enz_concs` and `sensitivity_tuning` (which already
-accept the growth-rate override). The builder/data-acquisition functions legitimately need the
-project folder and are lower-value to decouple.
+The medium tier is essentially cleared. Two deliberately-skipped low-value bits remain:
 
-### 2.16 Other data-loader robustness — **(a)** (remaining)
-- `uniprot_loader.py:200-225` — duplicate-ID detection only collapses *consecutive* runs, so a
-  genuine adjacent file duplicate is misread as a split repetition and not flagged.
 - `pax_db_loader.py:113` — a non-numeric abundance (`NA`/`-`) is dropped silently; arguably
   correct (an unusable value), but a debug/info count would aid diagnosis. Low value.
-- `dlkcat_ignore_lists.py:122-125`, `flux_data.py:214-231` — these TSV readers assume no header
-  / tolerate ragged rows silently; a header row or a `(rxn)`-less flux column produces wrong
-  constraints with no warning. (KEGG download's fewer-entries handling and the BRENDA
-  protein-id lookup were fixed.)
+- `dlkcat_ignore_lists.py:122-125` — the ignore-list TSV reader assumes no header row; a header
+  would add a harmless bogus blocklist entry. Low value. (The `flux_data` `(rxn)`-less header
+  case now warns; the uniprot adjacent-duplicate detection, KEGG fewer-entries handling, and
+  BRENDA protein-id lookup were fixed.)
 
 ---
 
@@ -141,7 +133,5 @@ protein. Consider NaN for empty input.
 
 ## Suggested order of attack (remaining)
 
-1. Finish 2.13 (bio_rxn override on flexibilize_enz_concs / sensitivity_tuning) and the 2.16
-   loader-robustness bits.
-2. Modeling-intent items (section 3) — discuss as design decisions; you are the original author.
-3. Lower-priority guards (section 4) and the remaining organization items (section 5).
+1. Modeling-intent items (section 3) — discuss as design decisions; you are the original author.
+2. Lower-priority guards (section 4) and the remaining organization items (section 5).
