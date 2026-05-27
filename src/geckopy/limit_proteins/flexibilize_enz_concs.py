@@ -73,6 +73,7 @@ def flexibilize_enz_concs(
     exp_growth: Optional[float] = None,
     fold_change: float = 2.0,
     iter_per_enzyme: int = 5,
+    bio_rxn: Optional[str] = None,
     verbose: bool = True,
 ) -> FlexEnzResult:
     """Iteratively relax enzyme concentration constraints until the
@@ -128,6 +129,9 @@ def flexibilize_enz_concs(
     iter_per_enzyme
         Maximum iterations per enzyme before warning and breaking.
         ``0`` means no limit (matches MATLAB).
+    bio_rxn
+        Biomass reaction id. Defaults to ``params.bio_rxn`` from the
+        adapter; pass it (with ``exp_growth``) to run without an adapter.
     verbose
         Whether per-iteration progress is logged at INFO.
 
@@ -142,24 +146,26 @@ def flexibilize_enz_concs(
         flexibilize), or if ``model.adapter`` is None and
         ``exp_growth`` is also None.
     """
-    from ..adapter import resolve_adapter
-    adapter = resolve_adapter(
-        model,
-        purpose="flexibilize_enz_concs reads params.bio_rxn (and "
-        "params.gr_exp when `exp_growth` is not passed) from the adapter",
-    )
+    from ..adapter import resolve_param
     if exp_growth is None:
-        if adapter.params.gr_exp is None:
+        exp_growth = resolve_param(
+            model, None, "gr_exp",
+            purpose="flexibilize_enz_concs needs `exp_growth` (pass it "
+            "explicitly, or rely on params.gr_exp from the adapter)",
+        )
+        if exp_growth is None:
             raise ValueError(
-                "exp_growth not provided and model.adapter.params.gr_exp "
-                "is unset."
+                "exp_growth not provided and params.gr_exp is unset."
             )
-        exp_growth = float(adapter.params.gr_exp)
+    exp_growth = float(exp_growth)
 
     if iter_per_enzyme == 0:
         iter_per_enzyme = math.inf
 
-    bio_rxn_id = adapter.params.bio_rxn
+    bio_rxn_id = resolve_param(
+        model, bio_rxn, "bio_rxn",
+        purpose="flexibilize_enz_concs needs the biomass reaction id",
+    )
     bio_rxn = model.reactions.get_by_id(bio_rxn_id)
     if bio_rxn.upper_bound < exp_growth:
         logger.info(
@@ -256,7 +262,7 @@ def flexibilize_enz_concs(
 
     return _build_result(
         model, proteins, measured_idx, frequence,
-        flex_break, exp_growth, pool_old, pool_new,
+        flex_break, exp_growth, pool_old, pool_new, bio_rxn_id,
     )
 
 
@@ -319,6 +325,7 @@ def _build_result(
     exp_growth: float,
     pool_old: Optional[float],
     pool_new: Optional[float],
+    bio_rxn_id: str,
 ) -> FlexEnzResult:
     """Build the FlexEnzResult and apply the post-loop UB refinement."""
     flex_mask = frequence > 0
@@ -336,7 +343,6 @@ def _build_result(
     if not flex_break:
         # Refinement pass: minimize protein pool with bio_rxn at exp_growth,
         # then drop enzymes that don't actually need extra concentration.
-        bio_rxn_id = model.adapter.params.bio_rxn
         with model:
             model.reactions.get_by_id(bio_rxn_id).lower_bound = exp_growth
             model.objective = POOL_EXCHANGE_ID

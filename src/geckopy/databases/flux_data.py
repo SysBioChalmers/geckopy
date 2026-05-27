@@ -3,12 +3,15 @@ plus a ``load_flux_data`` parser for the GECKO `fluxData.tsv` format.
 """
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 # `<met_name> (<rxn_id>)` -> capture met_name and rxn_id.
@@ -220,6 +223,7 @@ def _split_exch_headers(headers: list[str]) -> tuple[list[str], list[str]]:
     """
     mets: list[str] = []
     rxns: list[str] = []
+    no_paren: list[str] = []
     for h in headers:
         m = _EXCH_HEADER_RE.match(h.strip())
         if m:
@@ -228,4 +232,15 @@ def _split_exch_headers(headers: list[str]) -> tuple[list[str], list[str]]:
         else:
             mets.append(h.strip())
             rxns.append(h.strip())
+            no_paren.append(h.strip())
+    if no_paren:
+        # The reaction id is taken from the header, so a column without the
+        # `<met> (<rxn>)` form will be matched against a reaction whose id is
+        # the metabolite name -- almost certainly wrong. Surface it.
+        logger.warning(
+            "load_flux_data: %d exchange column header(s) lack the "
+            "'<met> (<rxn>)' form; their reaction id falls back to the full "
+            "header text: %s",
+            len(no_paren), no_paren[:5],
+        )
     return mets, rxns
