@@ -265,7 +265,7 @@ def _solve_for_conv_rxn(
         ec_model.objective = objective
         ec_model.objective_direction = sense
         sol = ec_model.optimize()
-        if sol.objective_value is None or np.isnan(sol.objective_value):
+        if sol.status != "optimal":
             return out
         for i, rxn in enumerate(rxns):
             try:

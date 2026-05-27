@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from ..ec_model.pipeline.query import get_reactions_from_enzyme
+from .enzyme_usage import _lookup_flux
 
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
@@ -284,16 +285,6 @@ def _per_rxn_details(
             "per_rxn_abs": per_rxn_abs,
         })
     return details
-
-
-def _lookup_flux(fluxes, rxn_id: str) -> float:
-    if isinstance(fluxes, pd.Series):
-        if rxn_id in fluxes.index:
-            return float(fluxes[rxn_id])
-        return 0.0
-    if hasattr(fluxes, "get"):
-        return float(fluxes.get(rxn_id, 0.0))
-    return 0.0
 
 
 def _perc(value: float, denominator: float) -> float:
