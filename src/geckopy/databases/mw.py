@@ -102,16 +102,19 @@ def calculate_mw(sequence: str) -> float:
     Returns
     -------
     float
-        Molecular weight in g/mol (Da). Returns the water mass
-        (18.01528) for an empty/all-skipped sequence.
+        Molecular weight in g/mol (Da). Returns ``nan`` for an
+        empty/all-skipped sequence (no residues), so a missing sequence
+        is not mistaken for an 18 Da "protein".
     """
     upper = sequence.upper() if sequence else ""
     mw = _WATER_MASS
+    n_residues = 0
 
     unknown_chars: set[str] = set()
     for ch in upper:
         if ch in _RESIDUE_MASSES:
             mw += _RESIDUE_MASSES[ch]
+            n_residues += 1
         elif not ch.isspace() and not ch.isdigit():
             unknown_chars.add(ch)
 
@@ -122,4 +125,6 @@ def calculate_mw(sequence: str) -> float:
             ", ".join(repr(c) for c in sorted(unknown_chars)),
         )
 
+    if n_residues == 0:
+        return float("nan")
     return mw
