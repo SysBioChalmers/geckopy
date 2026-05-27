@@ -13,9 +13,12 @@ the target. The result records which enzymes were loosened and by
 how much, so a curator can review.
 
 A related function is ``relax_proteomics_greedy`` in the same
-package: same goal but a different algorithm (ranks by absolute
-shadow price instead of control coefficient). Pick the one that
-converges faster on your model.
+package: same goal, different algorithm. This one ranks by control
+coefficient, relaxes gradually, and runs a tighten-back pass, so it
+yields the *minimal* (most proteomics-faithful) relaxation but is
+slower. ``relax_proteomics_greedy`` ranks by shadow price and fully
+unconstrains each picked enzyme — faster, but looser. See
+``docs/relaxation_methods.md`` for the full comparison.
 
 Ported from GECKO MATLAB:
 src/geckomat/limit_proteins/flexibilizeEnzConcs.m.

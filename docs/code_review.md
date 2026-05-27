@@ -12,29 +12,16 @@ Scope: full sweep of the `geckopy` package (~16 k lines across `ec_model`, `gath
 - **(f)** other problems
 
 Resolved items are removed as they are fixed; see `git log` for the corresponding commits.
-Addressed and pruned so far: the entire high-priority tier (former §1.1–1.8); §2.1, §2.2,
-§2.5, §2.6, §2.7, §2.8, §2.9, §2.10, §2.11 (OKP/PubChem parts), §2.12, §2.13 (read path +
-per-param `bio_rxn`/`c_source` overrides), §2.14 (validator), §2.15 (data out of install tree),
-§2.16 (uniprot duplicate detection, flux-header warning, BRENDA protein lookup); and the
-import-hygiene bullets of §5. Verified **false
-positives** (no change): §2.3 (currency-pair stripping mutates `s_dense` live, so cumulative
-state is tracked), §2.4 (`set_kcat` base-name does not strip `_REV`, so forward/reverse stay
-distinct), §2.7-objective (usage fluxes already carry MW scaling, so the unit-weighted sum
-minimises mass), §2.11-pubchem-500 (PubChem returns 500 for unparseable names — caching it is
-intentional and tested). Remaining IDs are kept stable.
+The entire high-priority tier (former §1.1–1.8) and **all of §2** are addressed. Most of §4
+and §5 are done too; what remains below is the modeling-intent tier (§3, design calls for the
+original author), a couple of lower-priority guards (§4), and a couple of hygiene items (§5).
 
----
-
-## 2. Medium-priority (remaining)
-
-The medium tier is essentially cleared. Two deliberately-skipped low-value bits remain:
-
-- `pax_db_loader.py:113` — a non-numeric abundance (`NA`/`-`) is dropped silently; arguably
-  correct (an unusable value), but a debug/info count would aid diagnosis. Low value.
-- `dlkcat_ignore_lists.py:122-125` — the ignore-list TSV reader assumes no header row; a header
-  would add a harmless bogus blocklist entry. Low value. (The `flux_data` `(rxn)`-less header
-  case now warns; the uniprot adjacent-duplicate detection, KEGG fewer-entries handling, and
-  BRENDA protein-id lookup were fixed.)
+Verified **false positives** (no change): §2.3 (currency-pair stripping mutates `s_dense` live,
+so cumulative state is tracked), §2.4 (`set_kcat` base-name does not strip `_REV`, so
+forward/reverse stay distinct), §2.7-objective (usage fluxes already carry MW scaling, so the
+unit-weighted sum minimises mass), §2.11-pubchem-500 (PubChem returns 500 for unparseable names
+— caching it is intentional and tested). `pax_db_loader` non-numeric-abundance drop was judged
+correct as-is (dropped by request). Remaining IDs are kept stable.
 
 ---
 
@@ -56,12 +43,12 @@ defensible aggregate for log-distributed rate constants.
 
 ### 3.3 Greedy relaxation over-relaxes
 `limit_proteins/relax_proteomics_greedy.py:122` jumps a limiting enzyme straight to ub=1000
-(effectively unconstrained), whereas `flexibilize_enz_concs` ramps gradually. The two routines
-are framed as interchangeable but produce models of very different stringency; greedy yields a
-much looser model. Add a tighten-back refinement pass, or document the difference.
-Also `:114` ranks by `abs(shadow_price)` — relaxation should help the objective in one
-direction, so rank by signed contribution. Reading duals after `slim_optimize()` (`:95,112`) is
-fragile; prefer `model.optimize()` and read from the returned solution.
+(effectively unconstrained), whereas `flexibilize_enz_concs` ramps gradually and tightens back.
+The difference is now documented (`docs/relaxation_methods.md`, and both docstrings); the
+**remaining** modeling work is to give greedy an optional tighten-back / graded step so it
+isn't systematically looser. Also `:114` ranks by `abs(shadow_price)` — relaxation should help
+the objective in one direction, so rank by signed contribution; and reading duals after
+`slim_optimize()` (`:95,112`) is fragile, prefer `model.optimize()` + the returned solution.
 
 ### 3.4 Finite-difference control coefficients
 `limit_proteins/get_conc_control_coeffs.py:107-115` re-solves the LP per candidate protein with
@@ -85,49 +72,36 @@ protein. Consider NaN for empty input.
 
 ---
 
-## 4. Lower-priority bugs & sanity guards — **(a)(f)**
+## 4. Lower-priority bugs & sanity guards — **(a)(f)** (remaining)
 
 - `kcat_sensitivity_analysis/sensitivity_tuning.py:283` — tuned kcat has no physical ceiling
   (can exceed the ~1e7 s⁻¹ diffusion limit); `:313-322` recovers the pre-tune kcat by
   string-parsing the `notes` field — store it in a numeric dict instead. (A `max_iterations`
-  cap and stall tolerance were added.)
-- `ec_model/pipeline/expand.py:106-129` — expanded reactions don't copy
-  `objective_coefficient`; an OR-GPR reaction in the objective is dropped from it. No guard
-  against combinatorial GPR explosion.
-- `limit_proteins/constrain_enz_concs.py:117` — no `conc >= 0` validation; a negative proteomics
-  value becomes `ub < lb` (infeasible). Same NaN/negative concern in `fill_enz_concs.py:91`.
-- `limit_proteins/calculate_f_factor.py:90-100` — returns `0.0` both when proteome mass is zero
-  and when no in-model enzyme matched (a mapping bug), silently zeroing the protein budget; warn
-  when nothing matched.
-- `utilities/add_new_rxns_to_ec.py:161` — no pre-check that new reaction IDs (and their
-  `_EXP_`/`_REV` expansions) don't collide with existing reactions; partial mutation leaves a
-  half-modified model on failure.
-- `utilities/load_conventional_gem.py:54-56` — no `.json`/`.mat` dispatch; a JSON GEM is fed to
-  the SBML reader and fails confusingly.
-- `gather_kcats/run_dlkcat.py:113-115` — `subprocess.TimeoutExpired` propagates raw instead of
-  as the documented `RuntimeError`.
-- `databases/brenda/parse.py:136` — kcat ceiling exists, but SA/MW have no sanity bound, so a
-  bogus MW corrupts SA-derived kcats.
+  cap and stall tolerance were already added.)
+- `limit_proteins/fill_enz_concs.py:91` — same NaN/negative-concentration concern as
+  `constrain_enz_concs` (which now skips negatives); a guard here would be consistent.
+- `expand.py` objective-coefficient / GPR-explosion guard — **intentionally not changed**
+  (dropped by request).
+
+Fixed this round: `constrain_enz_concs` negative-conc guard, `calculate_f_factor` no-match
+warning, `add_new_rxns_to_ec` id-collision pre-check, `load_conventional_gem` json/mat dispatch,
+`run_dlkcat` timeout→RuntimeError, BRENDA SA/MW sanity bounds.
 
 ---
 
-## 5. Organization / API hygiene — **(c)(d)(f)**
+## 5. Organization / API hygiene — **(c)(d)(f)** (remaining)
 
-- `_lookup_flux` duplicated between `enzyme_usage.py:142-150` and
-  `report_enzyme_usage.py:286-293`; two `_build_*_gene_to_indices` near-duplicates in
-  `ec_from_database.py:211-270`. (The `_REV` canonicalization was unified into
-  `canonicalize_rxn_id`.)
-- Infeasibility checks are inconsistent across the package (`sol.status` vs `sol.fluxes is None`
-  vs `sol.objective_value` vs nothing). The flexibilize/tuning initial-solve and ec_fseof cases
-  were fixed; remaining sites (e.g. `bottlenecks`, parts of `ec_fva`) could standardise on
-  `sol.status == "optimal"`.
-- `adapter/adapter.py:92-116` — 25 lines of commented-out auto-discovery shipped in the module.
-- Two near-duplicate relaxation algorithms (`flexibilize_enz_concs`, `relax_proteomics_greedy`)
-  with different result dataclasses and failure modes (one returns `converged=False`, the other
-  raises) — consider a shared core with a pluggable ranking strategy.
+- Two relaxation algorithms (`flexibilize_enz_concs`, `relax_proteomics_greedy`) — **evaluated**
+  (`docs/relaxation_methods.md`): they are complementary, not duplicates, and should stay
+  separate. Remaining nicety: align their failure conventions (one returns `converged=False`,
+  the other raises).
 - The deprecated-alias surface (10 in `__init__.py`, plus private `_…` aliases kept in
   `fuzzy_kcat_matching/__init__.py:43-52`) is large; plan to drop on the next major and ensure
   tests import the public names.
+
+Fixed this round: deduped `_lookup_flux` and the gene-to-index builders, standardised the
+`ec_fva` solve check on `sol.status`, removed the commented-out adapter auto-discovery block.
+(The `_REV` canonicalization was unified into `canonicalize_rxn_id` earlier.)
 
 ---
 
