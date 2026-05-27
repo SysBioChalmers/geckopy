@@ -48,6 +48,9 @@ _TUNING_SOURCE = "sensitivityTuning"
 # than this (absolute, 1/h). Using a tolerance instead of exact equality
 # avoids spinning on sub-numerical-noise increases.
 _GROWTH_STALL_TOL = 1e-9
+# Physical upper bound for a tuned kcat (Bar-Even et al. 2011); tuning never
+# pushes a kcat above the diffusion limit, no matter how limiting it looks.
+_MAX_TUNED_KCAT = 1e7
 
 
 @dataclass
@@ -196,6 +199,9 @@ def sensitivity_tuning(
 
     last_growth = float("nan")
     tuned_ec_indices: list[int] = []  # indices into model.ec.rxns
+    # ec_idx -> (pre-tune kcat, pre-tune source), captured the first time a
+    # reaction is tuned so the result doesn't have to re-parse ec.notes.
+    pretune: dict[int, tuple[float, str]] = {}
     iteration = 1
 
     while iteration <= max_iterations:
@@ -282,8 +288,13 @@ def sensitivity_tuning(
             break
         ec_idx = model.ec.rxns.index(target_rxn.id)
 
-        # Annotate notes (idempotently).
+        # Record the pre-tune kcat/source the first time this reaction is
+        # tuned, and annotate notes (idempotently).
         if model.ec.source[ec_idx] != _TUNING_SOURCE:
+            pretune.setdefault(
+                ec_idx,
+                (float(model.ec.kcat[ec_idx]), model.ec.source[ec_idx]),
+            )
             old_note = model.ec.notes[ec_idx]
             new_note = (
                 f"preTuneKcat={model.ec.kcat[ec_idx]} | "
@@ -293,7 +304,14 @@ def sensitivity_tuning(
                 f"{old_note}; {new_note}" if old_note else new_note
             )
 
-        model.ec.kcat[ec_idx] = float(model.ec.kcat[ec_idx]) * fold_change
+        target_kcat = float(model.ec.kcat[ec_idx]) * fold_change
+        if target_kcat > _MAX_TUNED_KCAT:
+            target_kcat = _MAX_TUNED_KCAT
+            logger.warning(
+                "sensitivity_tuning: kcat for %s capped at the physical "
+                "ceiling %g /s.", target_rxn.id, _MAX_TUNED_KCAT,
+            )
+        model.ec.kcat[ec_idx] = target_kcat
         model.ec.source[ec_idx] = _TUNING_SOURCE
         apply_kcat_constraints(model, update_rxns=[target_rxn.id])
 
@@ -306,11 +324,13 @@ def sensitivity_tuning(
             max_iterations, desired_growth_rate,
         )
 
-    return _build_result(model, tuned_ec_indices)
+    return _build_result(model, tuned_ec_indices, pretune)
 
 
 def _build_result(
-    model: "EcModel", ec_indices: list[int],
+    model: "EcModel",
+    ec_indices: list[int],
+    pretune: dict[int, tuple[float, str]],
 ) -> TunedKcatsResult:
     """Snapshot pre/post kcat values for tuned reactions."""
     if not ec_indices:
@@ -324,26 +344,13 @@ def _build_result(
         [float(model.ec.kcat[i]) for i in ec_indices], dtype=float,
     )
 
-    # Recover old_kcat from notes (the "preTuneKcat=X" annotation).
+    # Pre-tune kcat/source come from the dict captured during tuning.
     old_kcat: list[float] = []
     sources: list[str] = []
     for i in ec_indices:
-        note = model.ec.notes[i]
-        if "preTuneKcat=" in note:
-            tail = note.split("preTuneKcat=")[-1]
-            num_str = tail.split(" ")[0]
-            try:
-                old_kcat.append(float(num_str))
-            except ValueError:
-                old_kcat.append(float("nan"))
-            if "source:" in note:
-                src = note.split("source:")[-1]
-                sources.append(src.strip())
-            else:
-                sources.append("")
-        else:
-            old_kcat.append(float("nan"))
-            sources.append("")
+        old, src = pretune.get(i, (float("nan"), ""))
+        old_kcat.append(old)
+        sources.append(src)
 
     enzymes: list[str] = []
     rxn_enz_dense = model.ec.rxn_enz_mat.toarray()

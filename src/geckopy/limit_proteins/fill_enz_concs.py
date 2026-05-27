@@ -14,6 +14,7 @@ src/geckomat/limit_proteins/fillEnzConcs.m.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -21,6 +22,8 @@ import numpy as np
 if TYPE_CHECKING:
     from ..databases.pax_db_loader import ProtData
     from ..ec_model.ec_model import EcModel
+
+logger = logging.getLogger(__name__)
 
 
 def fill_enz_concs(
@@ -87,5 +90,15 @@ def fill_enz_concs(
     enzyme_to_idx = {enz: i for i, enz in enumerate(model.ec.enzymes)}
     for uid, conc in zip(prot_data.uniprot_ids, column):
         idx = enzyme_to_idx.get(uid)
-        if idx is not None:
-            model.ec.concs[idx] = float(conc)
+        if idx is None:
+            continue
+        value = float(conc)
+        if value < 0:
+            # A measured concentration can't be negative; skip it so it
+            # doesn't become an infeasible bound in constrain_enz_concs.
+            logger.warning(
+                "fill_enz_concs: negative concentration %g for %r; skipped.",
+                value, uid,
+            )
+            continue
+        model.ec.concs[idx] = value
