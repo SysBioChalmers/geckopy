@@ -117,6 +117,26 @@ def test_best_sigma_close_to_target_growth(tmp_path):
     assert result.error_grid[best_idx] < 1e-6
 
 
+def test_bisect_matches_grid_optimum_with_fewer_solves(tmp_path):
+    """method='bisect' finds the same optimum as the full grid using far
+    fewer LP solves (growth is monotone in sigma)."""
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
+    model = _build_pool_only_model(adapter)
+    result = fit_sigma(model, method="bisect")
+    assert result.sigma == pytest.approx(0.01, abs=1e-4)
+    # ~log2 evaluations instead of the 100-point grid.
+    assert len(result.sigma_grid) < 30
+    pool_ub = model.reactions.get_by_id("prot_pool_exchange").upper_bound
+    assert pool_ub == pytest.approx(1000.0 * result.sigma)
+
+
+def test_bisect_invalid_method_raises(tmp_path):
+    adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
+    model = _build_pool_only_model(adapter)
+    with pytest.raises(ValueError, match="method"):
+        fit_sigma(model, method="nope")
+
+
 def test_growth_grid_scales_linearly_with_sigma(tmp_path):
     """For the toy model, growth = 1000*sigma."""
     adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
