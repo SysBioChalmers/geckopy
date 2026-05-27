@@ -15,6 +15,15 @@ from pathlib import Path
 # Match MATLAB `lower(regexprep(name, '[^0-9a-zA-Z]+', ''))`.
 _NORMALIZE_RE = re.compile(r"[^0-9a-zA-Z]+")
 
+# Column-label tokens used to detect (and skip) an optional header row. Real
+# data cells (e.g. "H2O", "ATP", a SMILES string) never match these, so a
+# header-less file is unaffected.
+_HEADER_TOKENS = frozenset({
+    "name", "names", "met", "mets", "metname", "metnames", "metabolite",
+    "metabolites", "metabolite1", "metabolite2", "met1", "met2", "compound",
+    "compounds", "smiles", "substrate", "product",
+})
+
 
 def _normalize(name: str) -> str:
     """Lowercase + strip non-alphanumeric characters."""
@@ -75,12 +84,12 @@ def load_dlkcat_ignore_lists(
         Normalized ignore lists ready to feed to
         ``write_dlkcat_input``.
     """
-    ignore_lines = _read_lines(
+    ignore_lines = _strip_header(_read_lines(
         _resolve_path(project_data_folder, "DLKcatIgnoreMets.tsv")
-    )
-    currency_lines = _read_lines(
+    ))
+    currency_lines = _strip_header(_read_lines(
         _resolve_path(project_data_folder, "DLKcatCurrencyMets.tsv")
-    )
+    ))
 
     ignore_names: list[str] = []
     ignore_smiles: list[str] = []
@@ -123,3 +132,12 @@ def _read_lines(path) -> list[str]:
     """Read non-empty stripped lines from a Path or importlib Traversable."""
     text = path.read_text(encoding="utf-8")
     return [line for line in text.splitlines() if line.strip()]
+
+
+def _strip_header(lines: list[str]) -> list[str]:
+    """Drop a leading header row if the first line's cells are column labels."""
+    if lines:
+        first_cells = [c.strip().lower() for c in lines[0].split("\t")[:2]]
+        if any(c in _HEADER_TOKENS for c in first_cells if c):
+            return lines[1:]
+    return lines

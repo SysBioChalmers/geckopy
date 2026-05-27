@@ -146,15 +146,32 @@ def add_new_rxns_to_ec(
 
     _validate_genes_present(model, new_rxns, new_enzymes)
 
+    expanded = []
+    for rxn in new_rxns:
+        expanded.extend(_expand_new_rxn(rxn))
+
+    # Pre-check ids before any mutation, so a collision can't leave the model
+    # half-modified (pseudometabolites added, reactions not).
+    expanded_ids = [r.id for r in expanded]
+    existing_rxn_ids = {r.id for r in model.reactions}
+    collisions = sorted(set(expanded_ids) & existing_rxn_ids)
+    if collisions:
+        raise ValueError(
+            f"{len(collisions)} new reaction id(s) already exist in the "
+            f"model (examples: {collisions[:5]}). Use unique ids; expansion "
+            f"adds _EXP_<n>/_REV suffixes."
+        )
+    dupes = sorted({rid for rid in expanded_ids if expanded_ids.count(rid) > 1})
+    if dupes:
+        raise ValueError(
+            f"new reactions expand to duplicate ids (examples: {dupes[:5]})."
+        )
+
     if new_enzymes:
         comp_id = _resolve_enzyme_compartment_id(
             model, adapter.params.enzyme_comp,
         )
         _add_protein_pseudometabolites(model, new_enzymes, comp_id)
-
-    expanded = []
-    for rxn in new_rxns:
-        expanded.extend(_expand_new_rxn(rxn))
 
     model.add_reactions(expanded)
 

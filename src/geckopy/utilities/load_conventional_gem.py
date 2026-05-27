@@ -6,8 +6,9 @@ without any GECKO additions. This is the model that
 
 This helper reads that file from the path set in the adapter
 (``adapter.params.conv_gem``). The extension picks the reader:
-YAML files go through ``cobra.io.load_yaml_model``, anything
-else through ``cobra.io.read_sbml_model``.
+``.yml``/``.yaml`` via ``load_yaml_model``, ``.json`` via
+``load_json_model``, ``.mat`` via ``load_matlab_model``, and
+anything else via ``read_sbml_model``.
 
 Ported from GECKO MATLAB:
 src/geckomat/utilities/loadConventionalGEM.m.
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
 
 
 _YAML_SUFFIXES = {".yml", ".yaml"}
+_JSON_SUFFIXES = {".json"}
+_MAT_SUFFIXES = {".mat"}
 
 
 def load_conventional_gem(adapter: "ModelAdapter") -> cobra.Model:
@@ -51,6 +54,11 @@ def load_conventional_gem(adapter: "ModelAdapter") -> cobra.Model:
     path = Path(adapter.params.conv_gem)
     if not path.is_file():
         raise FileNotFoundError(f"conv_gem file not found: {path}")
-    if path.suffix.lower() in _YAML_SUFFIXES:
+    suffix = path.suffix.lower()
+    if suffix in _YAML_SUFFIXES:
         return cobra.io.load_yaml_model(str(path))
+    if suffix in _JSON_SUFFIXES:
+        return cobra.io.load_json_model(str(path))
+    if suffix in _MAT_SUFFIXES:
+        return cobra.io.load_matlab_model(str(path))
     return cobra.io.read_sbml_model(str(path))

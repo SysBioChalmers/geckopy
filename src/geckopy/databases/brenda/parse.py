@@ -26,6 +26,11 @@ _MISSING_VALUE = -999.0
 # Bar-Even et al. 2011, Biochemistry 50:4402 - physical upper bound for kcat.
 _MAX_PHYSICAL_KCAT = 1e7
 
+# Upper bound for a protein molecular weight in Da (~10 MDa, well above any
+# single chain). A parse error yielding e.g. 1e9 would otherwise flow into
+# max_mw.tsv and corrupt the SA-derived kcats that multiply by it.
+_MAX_PHYSICAL_MW = 1e7
+
 # Matches "23.5", "0.1-2.5", "1e-3", optionally followed by " {substrate}".
 _VALUE_RE = re.compile(
     r"""
@@ -134,6 +139,11 @@ def _parse_one(
     if value == _MISSING_VALUE:
         return
     if kind == "kcat" and value > _MAX_PHYSICAL_KCAT:
+        return
+    # SA and MW must be positive; an absurd MW would corrupt SA-derived kcats.
+    if kind in ("sa", "mw") and value <= 0:
+        return
+    if kind == "mw" and value > _MAX_PHYSICAL_MW:
         return
 
     substrate_raw = match["substrate"]
