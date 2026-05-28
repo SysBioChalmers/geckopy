@@ -83,18 +83,15 @@ def fit_sigma(
     p_tot: Optional[float] = None,
     f: Optional[float] = None,
     n_sigma_steps: int = 100,
-    method: Literal["grid", "bisect"] = "grid",
+    method: Literal["grid", "bisect"] = "bisect",
 ) -> SigmaFitterResult:
     """Sweep sigma and pick the one matching ``growth_rate`` best.
 
-    With ``method="grid"`` (default), for each sigma in
-    ``[1/n, 2/n, ..., 1.0]`` the protein pool size is set to
-    ``p_tot * f * sigma``, the LP is solved, and the sigma minimising
-    ``|relative_error|`` is recorded. ``method="bisect"`` exploits the
-    fact that growth is monotone non-decreasing in sigma to find the
-    same best sigma (to a resolution of ``1/n_sigma_steps``) in about
-    ``log2(n)`` solves instead of ``n`` — useful for large models. The
+    Growth is monotone non-decreasing in sigma, so ``method="bisect"``
+    (default) finds the best sigma in about ``log2(n)`` solves; the
     returned grids then contain only the sigmas actually evaluated.
+    ``method="grid"`` keeps the legacy ``[1/n, 2/n, ..., 1.0]`` sweep
+    for diagnostic plotting (every grid point evaluated).
 
     The best sigma is re-applied to ``model`` before return.
 
