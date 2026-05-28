@@ -229,7 +229,7 @@ def test_shadow_price_matches_finite_difference_coeff(ub, coeff_in_R, expected):
     prot_<id>), so it reads 2x here. Use the metabolite shadow price.
     """
     model = _build_toy_ec_model(enzyme_ub=ub, enzyme_coeff_in_R=coeff_in_R)
-    _, coeffs = get_conc_control_coeffs(model)  # finite-difference
+    _, coeffs = _fd_helper(model)  # finite-difference ground truth
     model.optimize()  # single solve
     shadow = abs(model.enzymes.get_by_id("E").shadow_price)
     assert coeffs[0] == pytest.approx(expected)
@@ -243,42 +243,27 @@ def test_shadow_price_matches_finite_difference_coeff(ub, coeff_in_R, expected):
 # breakpoint -- documented at the bottom.)
 # --------------------------------------------------------------------------- #
 
-def _shadow_price_control_coeffs(
-    model, proteins=None, limit: float = 0.0,
-):
-    """Single-solve analog of get_conc_control_coeffs using the metabolite
-    shadow price. Mirrors the production function's contract (enz_mask /
-    coeffs and the same gating: usage rxn present, ub > 0,
-    usage_flux/ub > limit)."""
-    from geckopy.ec_model.constants import USAGE_PREFIX
+# Both implementations live in the production module after the swap; tests
+# compare them as ground-truth helpers (the dispatcher uses shadow-price by
+# default and falls back to finite-difference on scipy).
+from geckopy.limit_proteins.get_conc_control_coeffs import (  # noqa: E402
+    _finite_difference_coeffs as _fd_coeffs,
+    _shadow_price_coeffs as _sp_coeffs,
+)
+
+
+def _shadow_helper(model, proteins=None, limit: float = 0.0):
     if proteins is None:
         proteins = list(model.ec.enzymes)
-    n = len(proteins)
-    enz_mask = np.zeros(n, dtype=bool)
-    coeffs = np.zeros(n, dtype=float)
-    if n == 0:
-        return enz_mask, coeffs
-    sol = model.optimize()
-    if sol.objective_value is None or np.isnan(sol.objective_value):
-        return enz_mask, coeffs
-    fluxes = sol.fluxes
-    rxn_ids = {r.id for r in model.reactions}
-    for i, p in enumerate(proteins):
-        rxn_id = f"{USAGE_PREFIX}{p}"
-        if rxn_id not in rxn_ids:
-            continue
-        rxn = model.reactions.get_by_id(rxn_id)
-        ub = rxn.upper_bound
-        if ub <= 0:
-            continue
-        usage = float(fluxes.get(rxn_id, 0.0))
-        if usage / ub <= limit:
-            continue
-        enz_mask[i] = True
-        sp = abs(model.enzymes.get_by_id(p).shadow_price)
-        if sp > 1e-10:
-            coeffs[i] = sp
-    return enz_mask, coeffs
+    return _sp_coeffs(model, proteins, limit)
+
+
+def _fd_helper(
+    model, proteins=None, limit: float = 0.0, fold_change: float = 2.0,
+):
+    if proteins is None:
+        proteins = list(model.ec.enzymes)
+    return _fd_coeffs(model, proteins, fold_change, limit)
 
 
 def _build_two_enzyme_model(
@@ -340,8 +325,8 @@ def _build_two_enzyme_model(
 )
 def test_equiv_single_enzyme_default(ub, coeff_in_R):
     model = _build_toy_ec_model(enzyme_ub=ub, enzyme_coeff_in_R=coeff_in_R)
-    fm, fc = get_conc_control_coeffs(model)
-    sm, sc = _shadow_price_control_coeffs(model)
+    fm, fc = _fd_helper(model)
+    sm, sc = _shadow_helper(model)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
 
@@ -351,8 +336,8 @@ def test_equiv_limit_param_skips_both():
     model = _build_toy_ec_model(enzyme_ub=5.0)
     # Cap upstream so usage/ub = 1/5 = 0.2.
     model.reactions.get_by_id("EX_A").lower_bound = -1.0
-    fm, fc = get_conc_control_coeffs(model, limit=0.5)
-    sm, sc = _shadow_price_control_coeffs(model, limit=0.5)
+    fm, fc = _fd_helper(model, limit=0.5)
+    sm, sc = _shadow_helper(model, limit=0.5)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
     assert not fm.any()  # both correctly skip the under-used enzyme
@@ -364,8 +349,8 @@ def test_equiv_non_binding_enzyme():
     handle the relationship consistently."""
     model = _build_toy_ec_model(enzyme_ub=1000.0)
     model.reactions.get_by_id("EX_A").lower_bound = -10.0
-    fm, fc = get_conc_control_coeffs(model)
-    sm, sc = _shadow_price_control_coeffs(model)
+    fm, fc = _fd_helper(model)
+    sm, sc = _shadow_helper(model)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
 
@@ -374,8 +359,8 @@ def test_equiv_two_enzymes_only_one_binding():
     """E1 is slack, E2 is the bottleneck; both methods agree on which is
     flagged and with what coefficient."""
     model = _build_two_enzyme_model(ub_E1=100.0, ub_E2=3.0)
-    fm, fc = get_conc_control_coeffs(model)
-    sm, sc = _shadow_price_control_coeffs(model)
+    fm, fc = _fd_helper(model)
+    sm, sc = _shadow_helper(model)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
 
@@ -383,8 +368,8 @@ def test_equiv_two_enzymes_only_one_binding():
 def test_equiv_subset_proteins():
     model = _build_two_enzyme_model(ub_E1=5.0, ub_E2=5.0)
     proteins = ["E2"]  # only ask about one
-    fm, fc = get_conc_control_coeffs(model, proteins=proteins)
-    sm, sc = _shadow_price_control_coeffs(model, proteins=proteins)
+    fm, fc = _fd_helper(model, proteins=proteins)
+    sm, sc = _shadow_helper(model, proteins=proteins)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
 
@@ -395,8 +380,8 @@ def test_equiv_infeasible_model_both_zero():
     # Force infeasibility: require growth > what the model can deliver.
     sk = model.reactions.get_by_id("SK_B")
     sk.lower_bound = 1000.0  # impossible
-    fm, fc = get_conc_control_coeffs(model)
-    sm, sc = _shadow_price_control_coeffs(model)
+    fm, fc = _fd_helper(model)
+    sm, sc = _shadow_helper(model)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
     assert not fm.any() and not sm.any()
@@ -432,8 +417,8 @@ def test_equiv_across_solvers(solver):
         pytest.skip(f"{solver} not installed")
     model = _build_toy_ec_model(enzyme_ub=5.0)
     model.solver = solver
-    fm, fc = get_conc_control_coeffs(model)
-    sm, sc = _shadow_price_control_coeffs(model)
+    fm, fc = _fd_helper(model)
+    sm, sc = _shadow_helper(model)
     np.testing.assert_array_equal(fm, sm)
     np.testing.assert_allclose(fc, sc, rtol=1e-6, atol=1e-12)
 
@@ -448,10 +433,59 @@ def test_finite_diff_underestimates_when_step_crosses_breakpoint():
     # enzyme_ub=8, substrate cap=10. Doubling ub to 16 saturates at 10.
     model = _build_toy_ec_model(enzyme_ub=8.0)
     model.reactions.get_by_id("EX_A").lower_bound = -10.0
-    _, fc = get_conc_control_coeffs(model, fold_change=2.0)
-    sm, sc = _shadow_price_control_coeffs(model)
+    _, fc = _fd_helper(model, fold_change=2.0)
+    sm, sc = _shadow_helper(model)
     # finite-diff averages: (10 - 8) / (16 - 8) = 0.25.
     assert fc[0] == pytest.approx(0.25, rel=1e-6)
     # shadow price is the local marginal at the binding ub: 1.0.
     assert sc[0] == pytest.approx(1.0, rel=1e-6)
     assert sm[0] and sc[0] > fc[0]
+
+
+# --------------------------------------------------------------------------- #
+# Dispatcher: the public function defaults to shadow-price and falls back to
+# finite-difference on solvers (scipy) that do not expose duals.
+# --------------------------------------------------------------------------- #
+
+def test_dispatcher_uses_shadow_price_on_default_solver():
+    """On glpk (cobra default), the public function takes the shadow-price
+    path. Verified by matching the shadow-price helper exactly (the
+    finite-difference would diverge on a breakpoint scenario)."""
+    model = _build_toy_ec_model(enzyme_ub=8.0)
+    model.reactions.get_by_id("EX_A").lower_bound = -10.0  # breakpoint setup
+    pm, pc = get_conc_control_coeffs(model, fold_change=2.0)
+    sm, sc = _shadow_helper(model)
+    np.testing.assert_array_equal(pm, sm)
+    np.testing.assert_allclose(pc, sc, rtol=1e-6, atol=1e-12)
+    # And it disagrees with the finite-difference at the breakpoint, proving
+    # the shadow-price path was actually taken.
+    _, fc = _fd_helper(model, fold_change=2.0)
+    assert pc[0] != pytest.approx(fc[0])
+
+
+def test_dispatcher_falls_back_to_finite_diff_on_scipy(caplog):
+    """With the scipy solver (no LP duals), the dispatcher uses the
+    finite-difference path and reports the fallback once."""
+    from cobra.util.solver import solvers
+    if "scipy" not in solvers:
+        pytest.skip("scipy not installed")
+    import importlib
+    import logging
+    # Use importlib because the submodule name shadows the same-named
+    # function re-exported on `geckopy.limit_proteins`.
+    mod_ccc = importlib.import_module(
+        "geckopy.limit_proteins.get_conc_control_coeffs"
+    )
+    # Reset the one-shot guard so the info log fires for this test.
+    mod_ccc._FALLBACK_REPORTED.clear()
+
+    model = _build_toy_ec_model(enzyme_ub=8.0)
+    model.reactions.get_by_id("EX_A").lower_bound = -10.0
+    model.solver = "scipy"
+
+    with caplog.at_level(logging.INFO, logger=mod_ccc.__name__):
+        pm, pc = get_conc_control_coeffs(model, fold_change=2.0)
+    fm, fc = _fd_helper(model, fold_change=2.0)
+    np.testing.assert_array_equal(pm, fm)
+    np.testing.assert_allclose(pc, fc, rtol=1e-6, atol=1e-12)
+    assert "does not expose LP duals" in caplog.text
