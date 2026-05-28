@@ -1,36 +1,31 @@
 # geckopy code review — open items
 
-Remaining items only. These are **modeling-intent / optional design decisions**;
-each would change the numbers the model produces, so they are choices, not bugs.
+One decision left.
 
-## Default kcat aggregation (max / mean) vs median
-`fuzzy_kcat_matching` now takes `aggregate="max"|"median"`, and
-`fill_kcats_from_isozymes` takes `aggregate="mean"|"median"|"max"`; the
-per-subsystem standard kcat now uses the median (like the global standard).
-The **defaults are still `max` / `mean`** for MATLAB-GECKO reproducibility.
-Open decision: whether to flip the shipped defaults to `median` (more robust to
-assay outliers / engineered mutants), and whether to extend the flag to the
-`brenda/parse.py` range collapse (currently always the upper bound) and to
-`apply_kcat_list` (which already supports `criteria="median"`).
+## Default kcat aggregation: flip `max` / `mean` → `median`?
 
-## ecFVA reports an envelope, not exact per-reaction bounds
-`utilities/ec_fva.py`. For a reaction split into several isozyme variants
-(and/or forward + `_REV`), each variant's extreme can occur in a *different* LP
-solution, so reducing per variant and summing gives
-`Σ_v max_k v_variant(optᵏ) ≥ max_k Σ_v v_variant(optᵏ)` — an **outer envelope**
-wider than the true combined range (exact for single-variant reactions,
-conservative otherwise). Now documented in the `ec_fva` docstring. Fix option
-(changes results): read each conventional reaction's combined flux from its own
-max/min solution (the diagonal) instead of nan-reducing every variant across every
-column. Left as a semantics decision.
+The flags are wired (`fuzzy_kcat_matching(aggregate=…)`,
+`fill_kcats_from_isozymes(aggregate=…)`); only the **shipped defaults** are
+open. Empirical comparison on the bundled BRENDA snapshot
+([`docs/kcat_aggregation.md`](kcat_aggregation.md)):
 
-## Greedy relaxation over-relaxes (kept as-is by request)
-`relax_proteomics_greedy` fully unconstrains each picked enzyme, so it yields a
-looser model than `flexibilize_enz_concs` (the two are intentionally kept as
-complementary methods — `docs/relaxation_methods.md`). Not changed per request;
-recorded only so the trade-off stays visible.
+- 1 723 EC codes with ≥ 5 BRENDA measurements; median ratio `median/max` =
+  **0.073**, i.e. `max` is **~14×** the median for the typical reaction.
+- **57 %** of EC codes have `max ≥ 10×` the median; **22.5 %** ≥ 100×;
+  **7.9 %** ≥ 1 000×.
+- Heavily-studied hydrolases / kinases / cytochromes are 10⁴–10⁵× spread
+  (trypsin 3.4.21.4: max 910 000, median 5.1; esterase 3.1.1.1: max 431 000,
+  median 29).
 
-## MW of `X` residue
-`databases/mw.py` uses an unweighted mean of the 20 standard residues for `X`
-(differs from MATLAB's 126.5 Da by ~7 Da). Minor; left for consistency discussion.
-(Empty-sequence handling now returns NaN.)
+Choosing `max` picks engineered mutants / non-physiological substrates and
+inflates kcats by ≥ 1 order of magnitude for over half of all reactions.
+Downstream this *deflates* predicted enzyme demand commensurately.
+
+The decision: flip the default to `median` (more defensible scientifically,
+breaks MATLAB-GECKO byte-for-byte reproducibility) or keep `max` (faithful
+port, biased). A middle option: flip the default but document
+`aggregate="max"` for MATLAB-compatible re-runs.
+
+Also still open: extending the flag to (a) `brenda/parse.py`'s range collapse
+(always upper bound today) and (b) the default of `apply_kcat_list`
+(`criteria="max"` today, already supports `"median"`).
