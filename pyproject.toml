@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geckopy"
+version = "0.1.0"
+description = "Enzyme-constrained genome-scale metabolic modeling in Python, inspired by the GECKO Toolbox"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "cobra>=0.29",
+    "numpy>=1.21",
+    "pydantic>=2",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov",
+]
+
+[project.scripts]
+geckopy = "geckopy.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/geckopy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
