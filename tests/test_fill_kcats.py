@@ -1,0 +1,223 @@
+"""Tests for get_kcat_across_isozymes."""
+import logging
+from pathlib import Path
+
+import cobra
+import numpy as np
+import pytest
+
+from geckopy import EcModel, ModelAdapter, make_ec_model
+from geckopy.ec_model.pipeline import (
+    get_kcat_across_isozymes,
+    set_kcat_for_reactions,
+)
+
+EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
+
+
+# --------------------------------------------------------------------------- #
+# Helpers
+# --------------------------------------------------------------------------- #
+
+def _ectestgem_ec_model() -> EcModel:
+    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+    return make_ec_model(cobra_model, adapter)
+
+
+def _kcat(model: EcModel, rxn_id: str) -> float:
+    return float(model.ec.kcat[model.ec.rxns.index(rxn_id)])
+
+
+def _source(model: EcModel, rxn_id: str) -> str:
+    return model.ec.source[model.ec.rxns.index(rxn_id)]
+
+
+# --------------------------------------------------------------------------- #
+# Basic isozyme averaging
+# --------------------------------------------------------------------------- #
+
+def test_fills_single_missing_isozyme_with_sibling_kcat():
+    """R2_EXP_1 known, R2_EXP_2 missing; the missing one should get the
+    same kcat as R2_EXP_1 (mean of one element is itself)."""
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert _kcat(ec_model, "R2_EXP_1") == 100.0
+    assert _kcat(ec_model, "R2_EXP_2") == 100.0
+    assert _source(ec_model, "R2_EXP_2") == "isozymes"
+
+
+def test_fills_with_mean_of_multiple_known_siblings():
+    """If R2_EXP_1=80 and R2_EXP_2 missing, fill with 80. If a third
+    isozyme were known too, the mean would be used."""
+    # ecTestGEM only has two isozymes for R2 in each direction, so
+    # construct the case manually.
+    ec_model = _ectestgem_ec_model()
+
+    # R2 (forward) has R2_EXP_1 and R2_EXP_2. Set both, then unset one.
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 80.0, apply=False)
+    set_kcat_for_reactions(ec_model, ["R2_EXP_2"], 120.0, apply=False)
+
+    # R2_REV has R2_REV_EXP_1 and R2_REV_EXP_2. Leave R2_REV_EXP_2 NaN
+    # and set R2_REV_EXP_1 = 50. The average of {50} is 50.
+    set_kcat_for_reactions(ec_model, ["R2_REV_EXP_1"], 50.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert _kcat(ec_model, "R2_REV_EXP_2") == 50.0
+    # The forward R2 kcats already had values, so they should be unchanged.
+    assert _kcat(ec_model, "R2_EXP_1") == 80.0
+    assert _kcat(ec_model, "R2_EXP_2") == 120.0
+
+
+def test_does_not_overwrite_known_kcats():
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+    set_kcat_for_reactions(ec_model, ["R2_EXP_2"], 200.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert _kcat(ec_model, "R2_EXP_1") == 100.0
+    assert _kcat(ec_model, "R2_EXP_2") == 200.0
+    # Neither got the "isozymes" source, since neither was filled.
+    assert _source(ec_model, "R2_EXP_1") != "isozymes"
+    assert _source(ec_model, "R2_EXP_2") != "isozymes"
+
+
+# --------------------------------------------------------------------------- #
+# Reverse direction is treated separately
+# --------------------------------------------------------------------------- #
+
+def test_rev_direction_is_not_a_sibling_of_forward():
+    """R2_EXP_1 known; R2_REV_EXP_1 is NOT considered a sibling and
+    should not be filled even though they share the underlying chemistry."""
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_1"))
+    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_2"))
+
+
+def test_rev_isozymes_share_among_themselves():
+    """R2_REV_EXP_1 known should fill R2_REV_EXP_2 but not R2_EXP_*."""
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_REV_EXP_1"], 75.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert _kcat(ec_model, "R2_REV_EXP_2") == 75.0
+    assert np.isnan(_kcat(ec_model, "R2_EXP_1"))
+    assert np.isnan(_kcat(ec_model, "R2_EXP_2"))
+
+
+# --------------------------------------------------------------------------- #
+# Single-isozyme reactions
+# --------------------------------------------------------------------------- #
+
+def test_single_isozyme_reaction_stays_nan():
+    """R3 has no siblings (it was never expanded; ec.rxns has just 'R3').
+    With NaN kcat and no siblings, it should stay NaN."""
+    ec_model = _ectestgem_ec_model()
+    # All NaN, including R3. R3 has no _EXP_ siblings.
+    get_kcat_across_isozymes(ec_model, apply=False)
+    assert np.isnan(_kcat(ec_model, "R3"))
+
+
+def test_single_isozyme_does_not_fill_itself():
+    """R3 with R3=10 should stay 10; the function should not invent siblings."""
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R3"], 10.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert _kcat(ec_model, "R3") == 10.0
+    assert _source(ec_model, "R3") != "isozymes"
+
+
+# --------------------------------------------------------------------------- #
+# Edge cases
+# --------------------------------------------------------------------------- #
+
+def test_all_nan_kcats_does_nothing(caplog):
+    ec_model = _ectestgem_ec_model()
+    with caplog.at_level(logging.WARNING):
+        get_kcat_across_isozymes(ec_model, apply=False)
+    assert "no known values" in caplog.text
+    assert np.isnan(ec_model.ec.kcat).all()
+
+
+def test_no_missing_to_fill_logs_info(caplog):
+    """If every kcat is set, the function should be a quiet no-op
+    (or info-level log)."""
+    ec_model = _ectestgem_ec_model()
+    ec_model.ec.kcat[:] = 50.0  # all set
+
+    with caplog.at_level(logging.INFO):
+        get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert np.all(ec_model.ec.kcat == 50.0)
+
+
+def test_gecko_light_raises():
+    ec_model = _ectestgem_ec_model()
+    ec_model.ec.gecko_light = True
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        get_kcat_across_isozymes(ec_model)
+
+
+def test_empty_ec_model():
+    """A freshly-constructed EcModel (no make_ec_model run) should not crash."""
+    ec_model = EcModel("empty")
+    # ec.kcat is shape (0,), nothing to iterate.
+    get_kcat_across_isozymes(ec_model, apply=False)
+    assert ec_model.ec.kcat.shape == (0,)
+
+
+# --------------------------------------------------------------------------- #
+# apply parameter and S matrix
+# --------------------------------------------------------------------------- #
+
+def test_apply_true_writes_to_s_matrix():
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=True)
+
+    r = ec_model.reactions.get_by_id("R2_EXP_2")
+    coef_p3 = next(
+        (c for m, c in r.metabolites.items() if m.id == "prot_P3"), 0.0
+    )
+    assert coef_p3 != 0.0
+
+
+def test_apply_false_leaves_s_matrix_unchanged():
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    r = ec_model.reactions.get_by_id("R2_EXP_2")
+    coef_p3 = next(
+        (c for m, c in r.metabolites.items() if m.id == "prot_P3"), 0.0
+    )
+    assert coef_p3 == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Source attribution
+# --------------------------------------------------------------------------- #
+
+def test_filled_kcats_have_isozymes_source():
+    ec_model = _ectestgem_ec_model()
+    set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 100.0, apply=False)
+
+    get_kcat_across_isozymes(ec_model, apply=False)
+
+    assert _source(ec_model, "R2_EXP_2") == "isozymes"
+    # The source of the originally-set reaction should still be 'manual'.
+    assert _source(ec_model, "R2_EXP_1") == "manual"

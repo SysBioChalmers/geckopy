@@ -1,13 +1,10 @@
 """Top-level orchestrator: build an EcModel from a conventional GEM.
 
 Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
-
-This function runs all 12 stages of the original makeEcModel in order,
-returning the populated EcModel plus the list of model genes not found
-in the UniProt database.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Optional
 
 import cobra
@@ -32,34 +29,33 @@ if TYPE_CHECKING:
     from ..adapter import ModelAdapter
 
 
+logger = logging.getLogger(__name__)
+
+
 def make_ec_model(
     model: cobra.Model,
     adapter: "ModelAdapter",
     *,
     gecko_light: bool = False,
     uniprot_db: Optional[UniprotDB] = None,
-) -> tuple[EcModel, list[str]]:
+) -> EcModel:
     """Expand a conventional GEM into a basic enzyme-constrained model.
 
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
 
-    Runs the full 12-stage pipeline:
+    Runs the full 12-stage pipeline and returns the populated EcModel.
+    Genes that could not be matched to a UniProt entry are reported as
+    a logged warning and individually annotated on each affected
+    reaction via ``rxn.notes["geckopy_warning"]`` (set by stage 7).
 
-    1. Remove GPRs from pseudoreactions.
-    2. Invert reactions constrained to negative flux only.
-    3. (Merged into stage 4.)
-    4. Convert non-exchange reversible reactions to forward/reverse pair.
-    5. Expand reactions with isozymes (OR in GPR) into one per isozyme.
-    6. Allocate empty ec substructure (per-reaction slots).
-    7. Populate ec with per-enzyme UniProt data.
-    8. Build the reaction-enzyme coupling matrix.
-    9. Add ``prot_<enzyme>`` pseudometabolites.
-    10. Add the ``prot_pool`` pseudometabolite.
-    11. Add ``usage_prot_<enzyme>`` reactions.
-    12. Add the ``prot_pool_exchange`` reaction.
+    MATLAB-COMPAT: GECKO MATLAB returns the list of unmatched genes as
+    a separate output (``noUniprot``). geckopy logs a warning summary
+    instead, since the per-reaction annotations are typically more
+    useful for debugging than the flat list.
 
-    kcat values are not set here. Call applyKcatConstraints (future)
-    after populating ec.kcat with values from gather_kcats functions.
+    kcat values are not set here. Call apply_kcat_constraints (after
+    populating ec.kcat with values from gather_kcats functions, or via
+    set_kcat_for_reactions).
 
     Parameters
     ----------
@@ -70,22 +66,16 @@ def make_ec_model(
         Loaded ModelAdapter providing organism parameters and the
         location of the UniProt TSV.
     gecko_light
-        If True, generate a simplified gecko-light model. Not yet
-        implemented; raises NotImplementedError.
+        Not yet implemented; raises NotImplementedError.
     uniprot_db
         Pre-loaded UniprotDB. If None, loaded from
-        ``adapter.params.path / "data" / "uniprot.tsv"``. Provided as a
-        parameter mainly for testing.
+        ``adapter.params.path / "data" / "uniprot.tsv"``.
 
     Returns
     -------
-    ec_model
+    EcModel
         An EcModel with populated ec substructure, protein
         pseudometabolites, and pool machinery.
-    no_uniprot
-        List of model gene IDs that could not be matched to any UniProt
-        entry. These reactions are flagged via rxn.notes but remain in
-        the model.
 
     Raises
     ------
@@ -94,18 +84,13 @@ def make_ec_model(
     FileNotFoundError
         If ``uniprot_db`` is None and no uniprot.tsv is found.
     ValueError
-        Propagated from the individual stages on any consistency error
-        (unresolvable compartment, no UniProt matches, etc.).
+        Propagated from individual stages on consistency errors.
     """
     if gecko_light:
         raise NotImplementedError(
-            "gecko_light mode is not yet implemented in geckopy. "
-            "Only full ecModels are currently supported."
+            "gecko_light mode is not yet implemented in geckopy."
         )
 
-    # Pre-flight: refuse to run twice on the same model. An existing
-    # model.ec populated substructure is a strong signal the model has
-    # already been converted.
     if isinstance(model, EcModel) and model.ec.n_rxns > 0:
         raise ValueError(
             "make_ec_model was called on a model that already has a "
@@ -137,4 +122,16 @@ def make_ec_model(
     add_protein_usage_reactions(ec_model)
     add_protein_pool_exchange_reaction(ec_model)
 
-    return ec_model, no_uniprot
+    if no_uniprot:
+        preview = ", ".join(no_uniprot[:5])
+        more = "" if len(no_uniprot) <= 5 else f" (and {len(no_uniprot) - 5} more)"
+        logger.warning(
+            "%d gene(s) not found in UniProt and left enzyme-unconstrained: "
+            "%s%s. Affected reactions are annotated via "
+            "rxn.notes['geckopy_warning'].",
+            len(no_uniprot),
+            preview,
+            more,
+        )
+
+    return ec_model

@@ -85,6 +85,13 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
     (stage 7).
 
+    MATLAB-COMPAT: GECKO MATLAB iterates model.genes in their original
+    model order. geckopy iterates them in alphabetical order so that
+    ec.genes / ec.enzymes / ec.mw / ec.sequence are deterministic
+    regardless of how the SBML was loaded. MATLAB GECKO should adopt
+    the same alphabetical sort to produce byte-identical ec
+    substructures across the two implementations.
+
     For every gene in the model (sorted alphabetically for reproducibility),
     a lookup is performed:
 
@@ -98,6 +105,12 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
     ec.sequence (same length as ec.genes), and ec.concs is allocated as
     NaN of matching length. Unmatched genes are returned as a list
     (the equivalent of MATLAB's ``noUniprot``).
+
+    MATLAB-COMPAT: GECKO MATLAB only returns the noUniprot list and
+    does not annotate the affected reactions. geckopy additionally
+    writes a note to rxn.notes['geckopy_warning'] for each affected
+    reaction so users can see the issue when inspecting individual
+    reactions. MATLAB GECKO could be updated to do the same.
 
     Reactions whose GPR references an unmatched gene get a warning note
     added to ``rxn.notes[geckopy_warning]``. If such a reaction has at

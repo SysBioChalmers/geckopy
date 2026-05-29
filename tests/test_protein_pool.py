@@ -361,3 +361,78 @@ def test_ectestgem_usage_gpr_matches_enzyme():
 def test_ectestgem_validate_ec_after_all_stages():
     ec_model = _run_all_stages_on_ectestgem()
     ec_model.validate_ec()
+
+
+# --------------------------------------------------------------------------- #
+# set_prot_pool_size
+# --------------------------------------------------------------------------- #
+
+from geckopy.ec_model.pipeline import set_prot_pool_size
+
+
+def _tiny_ec_model_with_pool(tmp_path: Path) -> EcModel:
+    """Tiny EcModel with the full stages 1-12 completed, so pool_exchange exists."""
+    ec_model = _tiny_ec_model_with_two_enzymes(tmp_path)
+    add_protein_pseudometabolites(ec_model)
+    add_protein_pool_pseudometabolite(ec_model)
+    add_protein_usage_reactions(ec_model)
+    add_protein_pool_exchange_reaction(ec_model)
+    return ec_model
+
+
+def test_set_prot_pool_size_default_uses_adapter_params(tmp_path):
+    ec_model = _tiny_ec_model_with_pool(tmp_path)
+    # adapter defaults: p_tot=0.5, f=0.5, sigma=0.5 -> 0.5*0.5*0.5*1000 = 125.0
+    bound = set_prot_pool_size(ec_model)
+    assert bound == 125.0
+    assert ec_model.reactions.get_by_id(
+        "prot_pool_exchange"
+    ).upper_bound == 125.0
+
+
+def test_set_prot_pool_size_explicit_overrides_adapter(tmp_path):
+    ec_model = _tiny_ec_model_with_pool(tmp_path)
+    bound = set_prot_pool_size(ec_model, p_tot=0.4, f=0.3, sigma=0.2)
+    assert bound == pytest.approx(0.4 * 0.3 * 0.2 * 1000.0)
+    assert ec_model.reactions.get_by_id(
+        "prot_pool_exchange"
+    ).upper_bound == pytest.approx(24.0)
+
+
+def test_set_prot_pool_size_partial_override(tmp_path):
+    """Override only p_tot; f and sigma come from adapter (both 0.5)."""
+    ec_model = _tiny_ec_model_with_pool(tmp_path)
+    bound = set_prot_pool_size(ec_model, p_tot=1.0)
+    assert bound == 1.0 * 0.5 * 0.5 * 1000.0  # = 250.0
+
+
+def test_set_prot_pool_size_raises_without_pool_exchange(tmp_path):
+    """If prot_pool_exchange is absent, the function must raise."""
+    ec_model = _tiny_ec_model_with_two_enzymes(tmp_path)
+    # Intentionally do not add the pool machinery.
+    with pytest.raises(ValueError, match="prot_pool_exchange"):
+        set_prot_pool_size(ec_model)
+
+
+def test_set_prot_pool_size_raises_without_adapter_when_args_missing(tmp_path):
+    """If the adapter is absent and an arg is missing, raise."""
+    ec_model = _tiny_ec_model_with_pool(tmp_path)
+    ec_model.adapter = None
+    with pytest.raises(ValueError, match="adapter is None"):
+        set_prot_pool_size(ec_model)  # all three args missing
+
+
+def test_set_prot_pool_size_works_without_adapter_when_all_args_given(tmp_path):
+    """No adapter is fine if the user supplies all three values."""
+    ec_model = _tiny_ec_model_with_pool(tmp_path)
+    ec_model.adapter = None
+    bound = set_prot_pool_size(ec_model, p_tot=0.5, f=0.5, sigma=0.5)
+    assert bound == 125.0
+
+
+def test_set_prot_pool_size_is_idempotent(tmp_path):
+    """Calling twice with the same args yields the same bound."""
+    ec_model = _tiny_ec_model_with_pool(tmp_path)
+    bound1 = set_prot_pool_size(ec_model, p_tot=0.3, f=0.4, sigma=0.5)
+    bound2 = set_prot_pool_size(ec_model, p_tot=0.3, f=0.4, sigma=0.5)
+    assert bound1 == bound2

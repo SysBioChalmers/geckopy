@@ -137,6 +137,16 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
 def add_protein_usage_reactions(model: "EcModel") -> list[str]:
     """Stage 11: add ``usage_prot_<enzyme>`` reactions.
 
+    MATLAB-COMPAT: GECKO MATLAB writes these reactions as
+    ``prot_<enzyme> -> prot_pool`` with bounds ``(-1000, 0)``, so flux
+    is negative when the enzyme is being produced. geckopy uses the
+    forward direction ``prot_pool -> prot_<enzyme>`` with bounds
+    ``(0, 1000)``, matching cobrapy convention. To make the two
+    representations interchangeable, MATLAB GECKO should switch to
+    the forward direction in a future release. The model I/O layer
+    (when written) detects and translates the old form on read.
+
+
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
     (stage 11, full-model branch only).
 
@@ -196,6 +206,14 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
 def add_protein_pool_exchange_reaction(model: "EcModel") -> None:
     """Stage 12: add the single ``prot_pool_exchange`` reaction.
 
+    MATLAB-COMPAT: GECKO MATLAB writes this as
+    ``prot_pool -> (nothing)`` with bounds ``(-1000, 0)``, so negative
+    flux imports protein. geckopy uses the forward direction
+    ``(nothing) -> prot_pool`` with bounds ``(0, 1000)``. As with the
+    usage reactions, MATLAB GECKO should switch to the forward
+    direction.
+
+
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
     (stage 12).
 
@@ -222,3 +240,85 @@ def add_protein_pool_exchange_reaction(model: "EcModel") -> None:
     rxn.add_metabolites({pool_met: 1.0})
     rxn.subsystem = _PROTEIN_USAGE_SUBSYSTEM
     model.add_reactions([rxn])
+
+
+# --------------------------------------------------------------------------- #
+# setProtPoolSize (post-makeEcModel utility, same subsystem)
+# --------------------------------------------------------------------------- #
+
+def set_prot_pool_size(
+    model: "EcModel",
+    *,
+    p_tot: float | None = None,
+    f: float | None = None,
+    sigma: float | None = None,
+) -> float:
+    """Set the upper bound of ``prot_pool_exchange`` to limit total protein use.
+
+    MATLAB-COMPAT: GECKO MATLAB sets the (negative) lower bound,
+    geckopy sets the (positive) upper bound. The numerical value is
+    identical in absolute terms. When MATLAB GECKO switches its pool
+    exchange to the forward direction, this function in MATLAB will
+    also switch from setting lb to setting ub.
+
+
+    Ported from GECKO MATLAB: src/geckomat/change_model/setProtPoolSize.m.
+
+    The bound is ``p_tot * f * sigma * 1000``, where:
+
+    - ``p_tot`` is total cellular protein content (g/gDCW),
+    - ``f`` is the estimated fraction of modeled enzymes out of total
+      protein (g enzyme / g protein),
+    - ``sigma`` is the average enzyme saturation factor (unitless, 0-1).
+
+    The 1000 factor reconciles units: ec.mw is in Da (equivalent to
+    mg/mmol) and fluxes are in mmol/gDW/h, so the protein balance
+    evaluates correctly (p_tot is g/gDW and multiplying by 1000 brings
+    it to mg/gDW, matching the mg/mmol MW units).
+
+    Direction note: in MATLAB, the same quantity is written as the
+    negative lower bound of a reverse-direction pool exchange reaction.
+    geckopy uses the forward direction, so the same numerical value is
+    applied to the upper bound.
+
+    Parameters
+    ----------
+    model
+        An EcModel with ``prot_pool_exchange`` already added (stage 12).
+    p_tot, f, sigma
+        Override values. If None, read from ``model.adapter.params``.
+
+    Returns
+    -------
+    float
+        The bound that was set (for logging or assertions).
+
+    Raises
+    ------
+    ValueError
+        If the model has no adapter and any argument is None, or if
+        ``prot_pool_exchange`` is not in the model.
+    """
+    if p_tot is None or f is None or sigma is None:
+        if model.adapter is None:
+            raise ValueError(
+                "model.adapter is None; cannot look up p_tot/f/sigma "
+                "defaults. Either attach an adapter or pass explicit values."
+            )
+        params = model.adapter.params
+        if p_tot is None:
+            p_tot = params.p_tot
+        if f is None:
+            f = params.f
+        if sigma is None:
+            sigma = params.sigma
+
+    if _POOL_EXCHANGE_ID not in {r.id for r in model.reactions}:
+        raise ValueError(
+            f"Reaction '{_POOL_EXCHANGE_ID}' not found. Call make_ec_model "
+            f"or add_protein_pool_exchange_reaction first."
+        )
+
+    bound = p_tot * f * sigma * 1000.0
+    model.reactions.get_by_id(_POOL_EXCHANGE_ID).upper_bound = bound
+    return bound

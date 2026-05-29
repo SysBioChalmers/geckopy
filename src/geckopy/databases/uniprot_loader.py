@@ -70,6 +70,14 @@ def load_uniprot_tsv(
         expanded rows. This matches how cases like UniProt's
         `gene_names` field return multiple synonyms per entry.
 
+        MATLAB-COMPAT: GECKO MATLAB does not split multi-gene cells.
+        For organisms where the UniProt gene_oln field returns
+        space-separated multiple ORF names per entry, MATLAB matches
+        on the whole string and silently misses those genes. geckopy
+        provides ``split_gene_cells=True`` as an opt-in fix, but the
+        default mirrors MATLAB. MATLAB GECKO should adopt the same
+        splitting logic.
+
         If False (the default and MATLAB-equivalent behavior), the cell
         is stored verbatim, including any embedded whitespace.
 

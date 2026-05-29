@@ -1,4 +1,5 @@
 """Tests for the top-level make_ec_model orchestrator."""
+import logging
 from pathlib import Path
 
 import cobra
@@ -23,20 +24,21 @@ def _load_fresh_ectestgem() -> tuple[cobra.Model, ModelAdapter]:
 
 def test_make_ec_model_returns_ec_model_instance():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     assert isinstance(ec_model, EcModel)
 
 
-def test_make_ec_model_returns_no_uniprot_list():
+def test_make_ec_model_no_unmatched_genes_in_ectestgem(caplog):
+    """All 5 genes in ecTestGEM match UniProt, so no warning is logged."""
     model, adapter = _load_fresh_ectestgem()
-    _, no_uniprot = make_ec_model(model, adapter)
-    # In ecTestGEM, all 5 genes match. Expect empty list.
-    assert no_uniprot == []
+    with caplog.at_level(logging.WARNING, logger="geckopy.ec_model.make_ec_model"):
+        make_ec_model(model, adapter)
+    assert "not found in UniProt" not in caplog.text
 
 
 def test_make_ec_model_populates_ec_rxns():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     assert sorted(ec_model.ec.rxns) == sorted([
         "R2_EXP_1", "R2_EXP_2",
         "R2_REV_EXP_1", "R2_REV_EXP_2",
@@ -46,7 +48,7 @@ def test_make_ec_model_populates_ec_rxns():
 
 def test_make_ec_model_populates_ec_genes_alphabetically():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     assert ec_model.ec.genes == ["G1", "G2", "G3", "G4", "G5"]
     assert ec_model.ec.enzymes == ["P1", "P2", "P3", "P4", "P5"]
     np.testing.assert_array_almost_equal(
@@ -56,13 +58,13 @@ def test_make_ec_model_populates_ec_genes_alphabetically():
 
 def test_make_ec_model_kcat_initialized_nan():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     assert np.isnan(ec_model.ec.kcat).all()
 
 
 def test_make_ec_model_adds_prot_metabolites():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     met_ids = {m.id for m in ec_model.metabolites}
     assert "prot_pool" in met_ids
     for p in ["prot_P1", "prot_P2", "prot_P3", "prot_P4", "prot_P5"]:
@@ -71,7 +73,7 @@ def test_make_ec_model_adds_prot_metabolites():
 
 def test_make_ec_model_adds_usage_and_exchange_reactions():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     rxn_ids = {r.id for r in ec_model.reactions}
     assert "prot_pool_exchange" in rxn_ids
     for u in [f"usage_prot_P{i}" for i in range(1, 6)]:
@@ -80,7 +82,7 @@ def test_make_ec_model_adds_usage_and_exchange_reactions():
 
 def test_make_ec_model_coupling_matrix_shape_and_values():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     mat = ec_model.ec.rxn_enz_mat.toarray()
     assert mat.shape == (6, 5)
     assert set(np.unique(mat)).issubset({0.0, 1.0})
@@ -89,13 +91,13 @@ def test_make_ec_model_coupling_matrix_shape_and_values():
 
 def test_make_ec_model_validates_ec_consistency():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     ec_model.validate_ec()
 
 
 def test_make_ec_model_attaches_adapter():
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
     assert ec_model.adapter is adapter
 
 
@@ -106,8 +108,7 @@ def test_make_ec_model_attaches_adapter():
 def test_make_ec_model_accepts_preloaded_uniprot_db():
     model, adapter = _load_fresh_ectestgem()
     db = load_uniprot_tsv(EXAMPLE_DIR / "data" / "uniprot.tsv")
-    ec_model, no_uniprot = make_ec_model(model, adapter, uniprot_db=db)
-    assert no_uniprot == []
+    ec_model = make_ec_model(model, adapter, uniprot_db=db)
     assert ec_model.ec.n_enzymes == 5
 
 
@@ -120,9 +121,12 @@ def test_make_ec_model_gecko_light_raises():
 def test_make_ec_model_missing_uniprot_tsv_raises(tmp_path):
     """If the adapter points at a folder without uniprot.tsv, and no
     explicit uniprot_db is given, raise FileNotFoundError."""
-    (tmp_path / "model_adapter.toml").write_text(
-        'conv_gem = "dummy.xml"\norg_name = "test"\nenzyme_comp = "c"\n'
+    toml = (
+        'conv_gem = "dummy.xml"\n'
+        'org_name = "test"\n'
+        'enzyme_comp = "c"\n'
     )
+    (tmp_path / "model_adapter.toml").write_text(toml)
     adapter = ModelAdapter.from_folder(tmp_path)
 
     model = cobra.Model("m")
@@ -141,19 +145,21 @@ def test_make_ec_model_refuses_rerun_on_populated_ecmodel():
     """Calling make_ec_model twice on the same model should raise the
     second time, because the model already has a populated ec."""
     model, adapter = _load_fresh_ectestgem()
-    ec_model, _ = make_ec_model(model, adapter)
+    ec_model = make_ec_model(model, adapter)
 
     with pytest.raises(ValueError, match="already has a populated ec"):
         make_ec_model(ec_model, adapter)
 
 
-def test_make_ec_model_unmatched_genes_listed_and_annotated(tmp_path):
-    """A model whose gene is absent from the UniProt DB should appear
-    in the no_uniprot return list, and its reactions should be flagged
-    via rxn.notes."""
-    (tmp_path / "model_adapter.toml").write_text(
-        'conv_gem = "dummy.xml"\norg_name = "test"\nenzyme_comp = "c"\n'
+def test_make_ec_model_unmatched_genes_logged_and_annotated(tmp_path, caplog):
+    """A model whose gene is absent from the UniProt DB should produce
+    a logged warning and per-reaction note, but no return value."""
+    toml = (
+        'conv_gem = "dummy.xml"\n'
+        'org_name = "test"\n'
+        'enzyme_comp = "c"\n'
     )
+    (tmp_path / "model_adapter.toml").write_text(toml)
     adapter = ModelAdapter.from_folder(tmp_path)
 
     model = cobra.Model("m")
@@ -174,9 +180,10 @@ def test_make_ec_model_unmatched_genes_listed_and_annotated(tmp_path):
         sequences=["S"],
     )
 
-    ec_model, no_uniprot = make_ec_model(model, adapter, uniprot_db=db)
+    with caplog.at_level(logging.WARNING, logger="geckopy.ec_model.make_ec_model"):
+        ec_model = make_ec_model(model, adapter, uniprot_db=db)
 
-    assert no_uniprot == ["g_missing"]
+    assert "g_missing" in caplog.text
     warned = ec_model.reactions.get_by_id("r1")
     assert "geckopy_warning" in warned.notes
     assert "g_missing" in warned.notes["geckopy_warning"]
