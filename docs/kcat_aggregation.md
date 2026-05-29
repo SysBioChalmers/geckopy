@@ -1,34 +1,87 @@
-# kcat aggregation: real-world impact of `max` vs `median`
+# kcat aggregation: how far is `max` from `median` on BRENDA?
 
-Compiled by running the per-EC distribution across the bundled BRENDA snapshot
-(`src/geckopy/data/brenda/max_kcat.tsv`, 39 318 rows, 3 567 unique EC codes).
-For each EC code with ≥ 5 reported kcat measurements (1 723 codes), we computed
-the max and the median.
+The bundled BRENDA snapshot ships **both** the per-(ec, substrate,
+organism) max and the per-triple median of all raw measurements that
+fell into the triple. They live in the same `kcat.tsv` / `sa.tsv` file
+distinguished by an `aggregation` column; `load_brenda_data` splits
+them into `BrendaData.kcat_max` / `.kcat_median` (and `.sa_*`) so
+consumers never see doubled-up rows. The default
+(`kcat_aggregate_brenda = "max"` on `ModelParameters`) preserves
+MATLAB-GECKO behaviour; flipping that field to `"median"` (or passing
+`fuzzy_kcat_matching(aggregate="median")` per call) makes both
+aggregation layers — the per-triple snapshot view and the per-EC
+runtime collapse — use median together.
 
-## Global statistic
+This document quantifies the two layers separately by walking the raw
+BRENDA JSON (BRENDA release 2026.1, ~57 900 raw kcat rows, ~39 000
+unique triples after dropping trypsin 3.4.21.4 and the
+diffusion-limited filter in `parse_brenda_json`):
+
+- [`scripts/kcat_aggregation_raw.py`](../scripts/kcat_aggregation_raw.py)
+  walks the raw JSON and answers both questions below.
+- [`scripts/kcat_aggregation_compare.py`](../scripts/kcat_aggregation_compare.py)
+  reads only the bundled TSV (no 710 MB JSON needed) and compares
+  per-EC max-of-max vs median-of-median over the pre-aggregated views.
+
+> **3.4.21.4 (trypsin) is excluded** from these analyses: its BRENDA
+> entries are known to be unreliable (many non-physiological mutants
+> and unrelated substrates).
+
+## Layer 1 — within-triple aggregation
+
+When several raw measurements share an (ec, substrate, organism)
+triple, the snapshot has to collapse them. The historical `max`-only
+snapshot threw the rest away.
+
+24.5 % of triples (9 549 of 39 053) have ≥ 2 raw measurements.
+Across those:
 
 | | quartiles | mean | p90 |
+|---|---:|---:|---:|
+| within-triple `log10(max / median)` | 0.05 / 0.16 / 0.28 | **0.26** | 0.58 |
+
+So within a triple the max sits typically ~1.8× above the median;
+4.8 % of multi-measurement triples have max ≥ 10× the median, 1.2 %
+have max ≥ 100×. Small effect — *within* a triple BRENDA measurements
+are usually close enough that picking max vs median doesn't move the
+needle much.
+
+## Layer 2 — per-EC aggregation
+
+For each EC code with ≥ 5 triples (1 722 EC codes), we collapse
+triples to a single per-EC kcat. There are four possible
+"snapshot × runtime" combinations:
+
+| snapshot view | runtime aggregate | shorthand | meaning |
 |---|---|---|---|
-| `median / max` ratio | 0.013 / 0.073 / 0.236 | – | – |
-| `log10(max / median)` | – | 1.39 | 2.78 |
+| max | max | **maxmax** | historical default (MATLAB GECKO) |
+| max | median | **maxmed** | the runtime-only median flag we had before |
+| median | median | **medmed** | adapter `kcat_aggregate_brenda="median"` |
+| median | max | medmax | unused; included for symmetry |
 
-So for the typical (median) EC code, `max` is **~14×** the median; on average
-**~25×**. The right tail is much heavier:
+`log10` spreads:
 
-| fraction of EC codes where `max` ≥ … × `median` | |
-|---|---|
-| 10× | **57 %** |
-| 100× | **22.5 %** |
-| 1 000× | **7.9 %** |
+| | quartiles | mean | p90 |
+|---|---:|---:|---:|
+| `maxmax / medmed` (true historical bias) | 0.68 / 1.20 / 1.97 | **1.45** | 2.81 |
+| `maxmed / medmed` (snapshot-only swap) | 0.00 / 0.00 / 0.07 | 0.06 | 0.20 |
+| `maxmax / maxmed` (runtime-only swap) | 0.63 / 1.14 / 1.90 | 1.38 | 2.77 |
 
-I.e. for *more than half* of all enzymes BRENDA has data for, the current
-default of taking the largest reported turnover inflates the kcat by an order
-of magnitude or more relative to the median; for ~8 %, by *three* orders of
-magnitude.
+Fraction of ECs where the historical default is N× above the "true"
+median-of-medians:
 
-## Top 20 best-measured EC codes
+| | fraction of ECs |
+|---|---:|
+| `maxmax ≥ 10× medmed` | **59.5 %** |
+| `maxmax ≥ 100× medmed` | 24.2 % |
+| `maxmax ≥ 1 000× medmed` | 8.6 % |
 
-Sorted by number of BRENDA measurements (so the statistics are least noisy).
+For 60 % of well-measured ECs, the shipped default kcat is ≥ 10× the
+typical BRENDA assay; for 8.6 % it is ≥ 1 000× above. Most of that
+comes from the runtime aggregation layer (`maxmax / maxmed` ≈ 1.38),
+with a small further bias from the snapshot layer (`maxmed / medmed`
+≈ 0.06). Both swap together when the user sets
+`kcat_aggregate_brenda = "median"`.
 
 | EC | n | max [1/s] | median [1/s] | max / median |
 |---:|---:|---:|---:|---:|
@@ -53,32 +106,57 @@ Sorted by number of BRENDA measurements (so the statistics are least noisy).
 | 3.4.24.16 | 122 | 11.9 | 1.55 | 7.7× |
 | 3.4.11.1 | 112 | 34 500 | 2.94 | **11 735×** |
 
-The extremes — trypsin (3.4.21.4) at 910 000 /s vs median 5 /s, esterase
-(3.1.1.1) at 431 000 /s vs median 29 /s — are characteristic of small, fast
-hydrolases where engineered mutants and non-physiological substrates land in
-BRENDA alongside the natural reaction. Taking `max` picks those outliers.
+| EC | n_triples | maxmax (default) | maxmed | medmed | maxmax / medmed |
+|---:|---:|---:|---:|---:|---:|
+| 3.5.2.6 | 601 | 7 150 | 20.0 | 15.0 | 477× |
+| 3.1.1.1 (esterase) | 355 | 431 000 | 29.0 | **24.0** | **17 958×** |
+| 1.1.1.1 (alcohol DH) | 318 | 3 500 | 3.1 | 2.83 | 1 237× |
+| 3.2.1.21 | 289 | 1 214 290 | 14.0 | 13.9 | **87 359×** |
+| 1.10.3.2 | 269 | 158 300 | 42.1 | 38.0 | 3 760× |
+| 2.3.2.5 | 264 | 220 | 22.95 | 22.0 | 10× |
+| 3.1.1.73 | 235 | 14 793 | 10.0 | 8.6 | 1 720× |
+| 3.4.21.83 | 213 | 11 300 | 18.0 | 17.5 | 646× |
+| 1.1.99.18 | 203 | 156 | 17.0 | 13.9 | 11× |
+| 1.14.18.1 | 181 | 219 000 | 26.7 | 26.7 | 8 202× |
+| 4.1.1.39 (RuBisCO) | 168 | 23.1 | 4.2 | 3.1 | 8× |
+| 3.4.21.35 | 165 | 1 380 | 0.81 | 0.81 | 1 704× |
+| 2.5.1.18 | 161 | 9 600 | 9.0 | 6.74 | 1 424× |
+| 3.4.24.15 | 156 | 179 | 4.75 | 4.0 | 45× |
+| 3.2.1.20 | 139 | 1 278 | 26.2 | 25.48 | 50× |
+| 3.1.8.1 | 133 | 30 900 | 11.72 | 8.52 | 3 627× |
+| 3.1.2.20 | 128 | 190 | 2.15 | 1.68 | 113× |
+| 3.4.24.16 | 122 | 11.9 | 1.55 | 1.35 | 9× |
+| 3.4.11.1 | 112 | 34 500 | 2.94 | 2.44 | **14 139×** |
+| 3.2.1.1 (α-amylase) | 112 | 40 000 | 167.25 | 149.0 | 268× |
 
-## Implication
+Esterase 3.1.1.1 stays the clearest worry: 355 triples, true median
+24/s, MATLAB-default 431 000/s (~18 000× above).
 
-Inside the ec-pipeline an inflated kcat shows up as a *deflated* protein
-demand (stoichiometric coefficient on `prot_<id>` is `-MW / (kcat·3600)`), so
-**the model systematically thinks each reaction needs less enzyme than it
-actually does**. Switching the default to `median` would tighten the protein
-budget for most reactions; for the ones with the most extreme spread (heavily
-studied hydrolases / kinases / cytochromes) the change is 1–3 orders of
-magnitude on the kcat and a commensurate increase in predicted enzyme demand.
+## File format on disk
 
-## Recommendation
+```
+# BRENDA release 2026.1 generated 2026-05-28 - CC BY 4.0 - kcat in 1/s
+ec_code	substrate	organism	kcat_max	kcat_median	n	references
+1.1.1.1	(2e)-but-2-en-1-ol	yokenella sp.	101.0	101.0	1	PMID:24509923
+1.1.1.1	(r)-1-indanol	sulfolobus acidocaldarius	7.1	7.1	1	PMID:20049620
+...
+```
 
-The flag is already in place (`fuzzy_kcat_matching(..., aggregate="median")`,
-`fill_kcats_from_isozymes(..., aggregate="median")`); flipping the **default**
-to `median` is a one-line change. The trade-off is reproducibility against
-MATLAB GECKO results — anyone re-running an existing study would see different
-numbers. A reasonable middle ground would be to flip the default for new
-projects (so the more defensible choice is the out-of-box one) and document
-how to pin `aggregate="max"` for MATLAB-compatible runs.
+One **wide** row per (ec, substrate, organism) triple. `kcat_max` and
+`kcat_median` carry the two statistics computed from the raw
+measurements that fell into the triple. `n` is the count of raw
+measurements aggregated (so `n=1` rows have max == median, as above).
+`sa.tsv` has the same shape with `sa_max` / `sa_median` columns.
+`mw.tsv` keeps a single-valued shape (MW is a per-protein physical
+property; no aggregation question) — header
+`ec_code\tsubstrate\torganism\tmw\tn\treferences`.
 
 ## Reproduce
 
-The script is in `scripts/kcat_aggregation_compare.py` (also generated this
-report); ~30 s to run against the bundled snapshot.
+```bash
+python scripts/kcat_aggregation_raw.py       # raw-JSON, both layers
+python scripts/kcat_aggregation_compare.py   # snapshot-only, per-EC
+```
+
+Raw-JSON takes ~6 min on the bundled snapshot (limited by 710 MB JSON
+load via WSL2 /mnt/c); snapshot-only runs in ~10 s.

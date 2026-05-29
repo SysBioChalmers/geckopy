@@ -162,8 +162,11 @@ ecModels move between the two tools without conversion:
   GECKO 3 model opened in geckopy and saved comes out as a current
   model.
 
-The BRENDA database files use the same refreshed schema
-(`max_kcat.tsv` / `max_sa.tsv` / `max_mw.tsv`) on both sides.
+The BRENDA database files use a refreshed schema. geckopy ships
+`kcat.tsv` / `sa.tsv` / `mw.tsv` with both max and median rows per
+(ec, substrate, organism) triple, while MATLAB GECKO still ships
+only max in `max_KCAT.txt` etc. See
+[kcat_aggregation.md](kcat_aggregation.md) for the rationale.
 
 ---
 

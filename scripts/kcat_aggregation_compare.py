@@ -1,4 +1,15 @@
-"""Compare max vs median aggregation across real BRENDA + ecTestGEM."""
+"""Compare snapshot max vs snapshot median over the bundled BRENDA TSVs.
+
+The snapshot now ships both views (one row per (ec, substrate, organism)
+in ``kcat_max``, another in ``kcat_median``). This script aggregates each
+view across all triples per EC and reports how far the per-EC max-of-max
+sits from the per-EC median-of-median. Trypsin (3.4.21.4) is excluded
+because its BRENDA entries are known unreliable.
+
+For the full raw-JSON spread, use ``kcat_aggregation_raw.py``.
+
+Run from the repo root: ``python scripts/kcat_aggregation_compare.py``.
+"""
 import sys
 from pathlib import Path
 
@@ -7,76 +18,83 @@ import pandas as pd
 import cobra
 
 sys.path.insert(0, "src")
-from geckopy import ModelAdapter, make_ec_model, fuzzy_kcat_matching
-from geckopy.databases import load_brenda_data, load_phyl_dist
+from geckopy.databases import load_brenda_data
 
 ROOT = Path("/mnt/c/Work/GitHub/geckopy")
 BRENDA_DIR = ROOT / "src" / "geckopy" / "data" / "brenda"
 EXAMPLE = ROOT / "examples" / "ecTestGEM"
 
-print("=" * 70)
-print("Loading bundled BRENDA snapshot")
-brenda = load_brenda_data(BRENDA_DIR)
-kcat = brenda.kcat
-print(f"  rows: {len(kcat)},  unique EC: {kcat['ec_code'].nunique()}")
+EXCLUDED_ECS = {"3.4.21.4"}
 
-# ---- Global per-EC stats: how much does median deviate from max? -----
-groups = kcat[kcat["kcat"] > 0].groupby("ec_code")["kcat"]
+print("Loading bundled BRENDA snapshot ...")
+brenda = load_brenda_data(BRENDA_DIR)
+kcat_max = brenda.kcat_max
+kcat_med = brenda.kcat_median
+print(
+    f"  triples (max view):    {len(kcat_max):,}, unique EC: {kcat_max['ec_code'].nunique()}"
+)
+print(
+    f"  triples (median view): {len(kcat_med):,}, unique EC: {kcat_med['ec_code'].nunique()}"
+)
+
+
+def _per_ec(view: pd.DataFrame) -> dict[str, list[float]]:
+    """Group per-EC kcat values, filtering trypsin + nonpositive."""
+    sub = view[(view["kcat"] > 0) & (~view["ec_code"].isin(EXCLUDED_ECS))]
+    return {ec: vals.tolist() for ec, vals in sub.groupby("ec_code")["kcat"]}
+
+
+per_ec_max = _per_ec(kcat_max)
+per_ec_med = _per_ec(kcat_med)
+
 records = []
-for ec, vals in groups:
-    v = vals.values
-    if len(v) < 5:
+for ec in per_ec_max:
+    mx = per_ec_max[ec]
+    md = per_ec_med.get(ec, [])
+    if len(mx) < 5:
         continue
     records.append({
-        "ec": ec, "n": len(v),
-        "max": float(np.max(v)),
-        "median": float(np.median(v)),
-        "p90": float(np.quantile(v, 0.9)),
+        "ec": ec,
+        "n_triples": len(mx),
+        "kcat_maxmax": float(np.max(mx)),
+        "kcat_maxmed": float(np.median(mx)),
+        "kcat_medmed": float(np.median(md)) if md else float("nan"),
     })
+
 df = pd.DataFrame(records)
-df["ratio_med_max"] = df["median"] / df["max"]
-df["log10_max"] = np.log10(df["max"])
-df["log10_med"] = np.log10(df["median"])
-df["log_spread"] = df["log10_max"] - df["log10_med"]
+df["log_maxmax_over_medmed"] = np.log10(df["kcat_maxmax"] / df["kcat_medmed"])
+df["log_maxmed_over_medmed"] = np.log10(df["kcat_maxmed"] / df["kcat_medmed"])
 
-print(f"\nGlobal stats over {len(df)} EC codes with >=5 measurements:")
-print(f"  ratio median/max: quartiles "
-      f"{df['ratio_med_max'].quantile([.25,.5,.75]).round(4).tolist()}")
-print(f"  log10(max/median): mean {df['log_spread'].mean():.2f}, "
-      f"median {df['log_spread'].median():.2f}, "
-      f"p90 {df['log_spread'].quantile(0.9):.2f}")
-print(f"  fraction with max >= 10x median: "
-      f"{(df['log_spread'] >= 1).mean()*100:.1f}%")
-print(f"  fraction with max >= 100x median: "
-      f"{(df['log_spread'] >= 2).mean()*100:.1f}%")
-print(f"  fraction with max >= 1000x median: "
-      f"{(df['log_spread'] >= 3).mean()*100:.1f}%")
-
-# ---- Per-reaction comparison on ecTestGEM -----
-print("\n" + "=" * 70)
-print("Fuzzy matching ecTestGEM (org='testus testus') against bundled BRENDA")
-adapter = ModelAdapter.from_folder(EXAMPLE)
-cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-ec_model = make_ec_model(cobra_model, adapter)
-phyl = load_phyl_dist(adapter.get_phyl_dist_path())
-
-print("  running aggregate='max' ...")
-res_max = fuzzy_kcat_matching(ec_model, brenda, phyl, aggregate="max")
-print("  running aggregate='median' ...")
-res_med = fuzzy_kcat_matching(ec_model, brenda, phyl, aggregate="median")
-
-cmp = res_max.merge(
-    res_med, on="rxn_id", how="outer", suffixes=("_max", "_med"),
+print(
+    f"\nPer-EC stats over {len(df)} EC codes (>=5 triples, excluding "
+    f"{sorted(EXCLUDED_ECS)}):"
 )
-cmp = cmp[["rxn_id", "kcat_max", "kcat_med", "wildcard_level_max"]]
-cmp = cmp[cmp["kcat_max"].notna() | cmp["kcat_med"].notna()]
-cmp["ratio_med_max"] = cmp["kcat_med"] / cmp["kcat_max"]
-print(cmp.to_string(index=False))
 
-# ---- Sample real EC codes for per-reaction-style comparison -----
-print("\n" + "=" * 70)
-print("Sample: real EC codes (sorted by n_measurements desc, top 20)")
-df_sorted = df.sort_values("n", ascending=False).head(20)
-sample = df_sorted[["ec", "n", "max", "median", "p90", "ratio_med_max"]]
-sample = sample.round({"max": 2, "median": 2, "p90": 2, "ratio_med_max": 4})
-print(sample.to_string(index=False))
+def _summary(col: str, label: str) -> None:
+    qs = df[col].quantile([0.25, 0.5, 0.75]).round(3).tolist()
+    print(
+        f"  {label:<40}  quartiles {qs}  mean {df[col].mean():.3f}  "
+        f"p90 {df[col].quantile(0.9):.3f}"
+    )
+
+_summary("log_maxmax_over_medmed", "log10(maxmax / medmed)  -- true gap")
+_summary("log_maxmed_over_medmed", "log10(maxmed / medmed)  -- snap-only swap")
+
+print(
+    f"\n  fraction maxmax / medmed >= 10x median: "
+    f"{(df['log_maxmax_over_medmed'] >= 1).mean() * 100:.1f}%"
+)
+print(
+    f"  fraction maxmax / medmed >= 100x median: "
+    f"{(df['log_maxmax_over_medmed'] >= 2).mean() * 100:.1f}%"
+)
+print(
+    f"  fraction maxmax / medmed >= 1000x median: "
+    f"{(df['log_maxmax_over_medmed'] >= 3).mean() * 100:.1f}%"
+)
+
+print("\nTop 20 best-measured ECs (excluding trypsin):")
+top = df.sort_values("n_triples", ascending=False).head(20).copy()
+out = top[["ec", "n_triples", "kcat_maxmax", "kcat_maxmed", "kcat_medmed"]].round(2)
+out["maxmax/medmed"] = (out["kcat_maxmax"] / out["kcat_medmed"]).round(1)
+print(out.to_string(index=False))

@@ -1,31 +1,30 @@
 # geckopy code review — open items
 
-One decision left.
+The kcat-aggregation thread is fully resolved.
 
-## Default kcat aggregation: flip `max` / `mean` → `median`?
+## kcat aggregation — resolved
 
-The flags are wired (`fuzzy_kcat_matching(aggregate=…)`,
-`fill_kcats_from_isozymes(aggregate=…)`); only the **shipped defaults** are
-open. Empirical comparison on the bundled BRENDA snapshot
-([`docs/kcat_aggregation.md`](kcat_aggregation.md)):
+Decision: keep all shipped defaults at the MATLAB-GECKO values. The
+adapter exposes three dedicated fields for project-wide overrides, and
+the BRENDA snapshot ships both max and median per (ec, substrate,
+organism) triple so flipping the runtime default does not require
+regenerating the snapshot.
 
-- 1 723 EC codes with ≥ 5 BRENDA measurements; median ratio `median/max` =
-  **0.073**, i.e. `max` is **~14×** the median for the typical reaction.
-- **57 %** of EC codes have `max ≥ 10×` the median; **22.5 %** ≥ 100×;
-  **7.9 %** ≥ 1 000×.
-- Heavily-studied hydrolases / kinases / cytochromes are 10⁴–10⁵× spread
-  (trypsin 3.4.21.4: max 910 000, median 5.1; esterase 3.1.1.1: max 431 000,
-  median 29).
+| function | adapter param | shipped default | other allowed values |
+|---|---|---|---|
+| `fuzzy_kcat_matching` | `params.kcat_aggregate_brenda` | `"max"` | `"median"` |
+| `apply_kcat_list` | `params.kcat_aggregate_candidates` | `"max"` | `"min"`, `"median"`, `"mean"` |
+| `fill_kcats_from_isozymes` | `params.kcat_aggregate_isozymes` | `"mean"` | `"max"`, `"median"` |
 
-Choosing `max` picks engineered mutants / non-physiological substrates and
-inflates kcats by ≥ 1 order of magnitude for over half of all reactions.
-Downstream this *deflates* predicted enzyme demand commensurately.
+`fuzzy_kcat_matching` now picks the matching snapshot view
+(`brenda.kcat_for(aggregate)` / `brenda.sa_for(aggregate)`) and applies
+the same aggregation across the rows that survive the EC + organism +
+substrate gates. So both layers — the per-triple snapshot collapse and
+the per-EC runtime collapse — move together when the adapter setting
+flips.
 
-The decision: flip the default to `median` (more defensible scientifically,
-breaks MATLAB-GECKO byte-for-byte reproducibility) or keep `max` (faithful
-port, biased). A middle option: flip the default but document
-`aggregate="max"` for MATLAB-compatible re-runs.
-
-Also still open: extending the flag to (a) `brenda/parse.py`'s range collapse
-(always upper bound today) and (b) the default of `apply_kcat_list`
-(`criteria="max"` today, already supports `"median"`).
+See [docs/kcat_aggregation.md](kcat_aggregation.md) for the empirical
+comparison; `parse.py`'s range collapse (`"0.1-2.5"` → upper bound) is
+the one remaining max-leaning step in the pipeline. Small effect (only
+fires on the subset of measurements reported as ranges) and not
+wired — leave for a future ticket if it surfaces.

@@ -1,5 +1,11 @@
 # BRENDA database refresh plan
 
+> **Historical planning doc.** The implementation diverged in May 2026:
+> the snapshot now ships **both** max and median per (ec, substrate,
+> organism) triple in long-format `kcat.tsv` / `sa.tsv` (not just max
+> in `max_kcat.tsv` etc.). See [kcat_aggregation.md](kcat_aggregation.md)
+> for the current schema and rationale.
+
 ## Goal
 
 Replace the 2018-vintage Python 2 SOAP-scrape pipeline that produced

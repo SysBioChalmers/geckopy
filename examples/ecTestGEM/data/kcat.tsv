@@ -1,0 +1,5 @@
+# BRENDA release test-fixture generated 2026-05-18 - CC BY 4.0 - kcat in 1/s
+ec_code	substrate	organism	kcat_max	kcat_median	n	references
+1.1.1.1	m1	testus testus	1.0	1.0	1	*
+1.1.1.1	m2	testus falsus	10.0	10.0	1	*
+1.1.2.2	m1	testus testus	100.0	100.0	1	*

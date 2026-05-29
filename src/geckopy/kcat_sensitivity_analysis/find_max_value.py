@@ -21,7 +21,7 @@ def find_max_value(
 ) -> tuple[float, str, str]:
     """Find the maximum kinetic value across one or more EC numbers.
 
-    Searches both ``brenda.kcat`` and ``brenda.sa`` for each EC token
+    Searches both ``brenda.kcat_max`` and ``brenda.sa_max`` for each EC token
     in ``ec_string`` and returns the overall maximum together with
     its organism and parameter type. Wildcards in EC tokens (``-``)
     trigger prefix matching: ``"1.1.1.-"`` matches any code starting
@@ -75,11 +75,14 @@ def find_max_value(
         if not token:
             continue
 
+        # find_max_value is by definition asking for the maximum, so we
+        # consult the max-aggregated snapshot view regardless of the
+        # adapter's `kcat_aggregate_brenda` setting.
         kcat_value, kcat_org = _max_in_table(
-            token, brenda.kcat, "kcat", "organism",
+            token, brenda.kcat_max, "kcat", "organism",
         )
         sa_value, sa_org = _max_in_table(
-            token, brenda.sa, "kcat", "organism",
+            token, brenda.sa_max, "kcat", "organism",
         )
 
         if kcat_value >= sa_value and kcat_value > 0:

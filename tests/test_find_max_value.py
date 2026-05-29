@@ -17,13 +17,18 @@ def _brenda(
     sa_rows: (ec_code, organism, kcat (= SA*MW already), mw)."""
     kcat_rows = kcat_rows or []
     sa_rows = sa_rows or []
+    # The same rows fill both the max and median views for these tests;
+    # find_max_value only consults the max view (via the .kcat back-compat
+    # alias) so the median rows are inert.
+    kcat_df = pd.DataFrame(
+        kcat_rows, columns=["ec_code", "substrate", "organism", "kcat"]
+    )
+    sa_df = pd.DataFrame(
+        sa_rows, columns=["ec_code", "organism", "kcat", "mw"]
+    )
     return BrendaData(
-        kcat=pd.DataFrame(
-            kcat_rows, columns=["ec_code", "substrate", "organism", "kcat"]
-        ),
-        sa=pd.DataFrame(
-            sa_rows, columns=["ec_code", "organism", "kcat", "mw"]
-        ),
+        kcat_max=kcat_df, kcat_median=kcat_df,
+        sa_max=sa_df, sa_median=sa_df,
     )
 
 
