@@ -1,7 +1,5 @@
 """Tests for find_max_value."""
-import numpy as np
 import pandas as pd
-import pytest
 
 from geckopy.databases import BrendaData
 from geckopy.kcat_sensitivity_analysis import find_max_value

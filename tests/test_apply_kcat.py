@@ -2,11 +2,9 @@
 from pathlib import Path
 
 import cobra
-import numpy as np
 import pytest
 
 from geckopy import EcModel, ModelAdapter, make_ec_model
-from geckopy.databases import UniprotDB
 from geckopy.ec_model.pipeline import apply_kcat_constraints
 
 EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"

@@ -127,7 +127,7 @@ class ModelAdapter:
                     mapping[parts[0]] = parts[1]
 
         return [mapping.get(g, g) for g in model_genes]
-    
+
     def get_brenda_db_folder(self) -> Path:
         """Return the folder where the BRENDA database files are stored.
 

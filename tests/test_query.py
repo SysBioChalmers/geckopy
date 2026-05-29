@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import cobra
-import numpy as np
 import pandas as pd
 import pytest
 

@@ -7,7 +7,6 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Sequence, Union
 
-import numpy as np
 
 from .apply_kcat import apply_kcat_constraints
 

@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from geckopy.databases import ProtData, load_prot_data
+from geckopy.databases import load_prot_data
 
 
 # --------------------------------------------------------------------------- #

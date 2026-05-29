@@ -1,7 +1,6 @@
 """Tests for copy_ec_to_gem."""
 import cobra
 import numpy as np
-import pytest
 from scipy import sparse
 
 from geckopy.ec_model import EcModel

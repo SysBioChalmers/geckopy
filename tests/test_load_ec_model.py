@@ -1,5 +1,4 @@
 """Tests for load_ec_model."""
-import io
 from pathlib import Path
 
 import numpy as np

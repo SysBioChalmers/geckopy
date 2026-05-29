@@ -357,7 +357,6 @@ def _extend_ec_per_rxn_fields(
     if not rxns_with_gpr:
         return
 
-    n_old_rxns = model.ec.n_rxns
     n_new = len(rxns_with_gpr)
     n_enz = model.ec.n_enzymes
 

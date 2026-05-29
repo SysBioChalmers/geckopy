@@ -2,7 +2,6 @@
 import logging
 from pathlib import Path
 
-import cobra
 import numpy as np
 import pytest
 from scipy import sparse

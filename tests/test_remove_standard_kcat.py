@@ -3,7 +3,6 @@ from pathlib import Path
 
 import cobra
 import numpy as np
-import pytest
 from scipy import sparse
 
 from geckopy import EcModel, ModelAdapter

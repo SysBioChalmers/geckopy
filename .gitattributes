@@ -1,0 +1,15 @@
+# Normalize line endings on commit; check out with LF on every platform.
+# Prevents the LF<->CRLF churn that otherwise shows up whenever a file
+# is touched on Windows.
+* text=auto eol=lf
+
+# Force LF for files where CRLF would break consumers.
+*.py    text eol=lf
+*.sh    text eol=lf
+*.toml  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.tsv   text eol=lf
+*.txt   text eol=lf
+*.xml   text eol=lf
+*.md    text eol=lf

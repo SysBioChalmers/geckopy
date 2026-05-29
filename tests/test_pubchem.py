@@ -1,10 +1,7 @@
 """Tests for find_met_smiles (network mocked)."""
 import logging
-from pathlib import Path
 
 import cobra
-import pytest
-import requests
 
 from geckopy.databases import find_met_smiles
 
