@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+.env
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+.claude/
+
+# Tutorial build outputs (the source yeast-GEM.yml is tracked).
+tutorials/full_ecModel/models/ecYeastGEM*.yml
+tutorials/full_ecModel/output/
+
+# BRENDA bulk download (user drops the tarball here; derived TSVs are tracked).
+src/geckopy/data/brenda/_cache/
