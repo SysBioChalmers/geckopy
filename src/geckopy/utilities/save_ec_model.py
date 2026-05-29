@@ -6,17 +6,18 @@ YAML format documented in ``docs/yaml_format.md`` for
 (via ``geckopy.io.sbml.write_sbml_ec_model``).
 
 The cobra-shaped portion (metabolites, reactions, genes,
-compartments) is written with cobra's own YAML serializer, so the
-file is the cobrapy YAML format. Four GECKO-specific top-level keys
-are added alongside: ``ec-rxns``, ``ec-enzymes``, ``gecko_light``,
-``metaData``. cobra-aware tools ignore those extra keys, so the file
-also loads as a plain cobra model. Empty / NaN fields are omitted to
-keep the file compact; the loader fills them back in.
+compartments) and the GECKO-specific top-level keys (``ec-rxns``,
+``ec-enzymes``, ``gecko_light``, ``metaData``) are serialised by
+``raven_python.io.yaml.write_yaml_model``, which natively
+round-trips arbitrary top-level YAML sections via
+``model.notes['_yaml_sections']``. Empty / NaN fields are omitted
+to keep the file compact; the loader fills them back in.
 
 MATLAB-COMPAT: MATLAB ``saveEcModel`` mutates the input model
 (``ecModel.description = ['Enzyme-constrained model of '
 ecModel.id]``). geckopy writes the description into the output
-document only; the input is untouched.
+document only; the input model's ``.notes`` is mutated transiently
+and restored before returning.
 
 MATLAB-COMPAT: MATLAB ``saveEcModel`` falls back to
 ``ModelAdapterManager.getDefault()`` when no adapter is supplied.
@@ -35,8 +36,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
-from cobra.io.dict import model_to_dict
-from cobra.io.yaml import yaml as _cobra_yaml
+from raven_python.io.yaml import write_yaml_model
 
 from ..ec_model.ec_data import EcData
 from ..ec_model.ec_model import EcModel
@@ -111,18 +111,27 @@ def save_ec_model(
         write_sbml_ec_model(model, path)
         return path
 
-    # cobra-shaped portion, as cobrapy serialises it.
-    doc = model_to_dict(model)
-    # GECKO-specific extras as plain native types so cobra's YAML
-    # serialiser renders them in the same style as the cobra portion.
-    doc["gecko_light"] = bool(model.ec.gecko_light)
-    doc["metaData"] = _to_native(_build_metadata(model))
-    doc["ec-rxns"] = _to_native(_build_ec_rxns_list(model.ec))
-    doc["ec-enzymes"] = _to_native(_build_ec_enzymes_list(model.ec))
+    # Stash GECKO-specific sections on model.notes so raven-python's
+    # writer emits them at top level after the cobra fields. ec-* values
+    # are pre-coerced because raven-python's writer only coerces the
+    # cobra-shaped portion; ruamel scalars or numpy types inside the
+    # _yaml_sections payload would otherwise trip its safe-dumper.
+    yaml_sections = {
+        "gecko_light": bool(model.ec.gecko_light),
+        "ec-rxns": _to_native(_build_ec_rxns_list(model.ec)),
+        "ec-enzymes": _to_native(_build_ec_enzymes_list(model.ec)),
+    }
+    metadata = _to_native(_build_metadata(model))
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        _cobra_yaml.dump(doc, f)
+    saved_notes = dict(model.notes or {})
+    try:
+        model.notes["metaData"] = metadata
+        model.notes["_yaml_sections"] = yaml_sections
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_yaml_model(model, path)
+    finally:
+        model.notes = saved_notes
+
     return path
 
 
@@ -230,13 +239,15 @@ def _to_native(value):
     """Recursively coerce ruamel.yaml scalar wrappers (ScalarInt,
     ScalarFloat, ...) and numpy scalars to native Python types.
 
-    cobra-py's YAML loader stores ruamel scalar types on attributes
-    like ``Metabolite.charge``; passing those through to the YAML
-    safe-dumper raises RepresenterError. numpy scalars (``np.int64``,
-    ``np.float64``, ``np.bool_``) trip the same dumper and are *not*
-    subclasses of the Python builtins, so they need explicit handling.
-    Coerce at the boundary so the on-disk file uses plain Python
-    primitives.
+    Used on the GECKO sections (``ec-rxns`` / ``ec-enzymes`` /
+    ``metaData``) before stashing them on ``model.notes``;
+    raven-python's writer coerces the cobra-shaped portion itself
+    but dumps ``_yaml_sections`` values as-is.
+
+    numpy scalars (``np.int64``, ``np.float64``, ``np.bool_``) trip
+    the same dumper and are *not* subclasses of the Python builtins,
+    so they need explicit handling. Coerce at the boundary so the
+    on-disk file uses plain Python primitives.
     """
     if isinstance(value, dict):
         return {_to_native(k): _to_native(v) for k, v in value.items()}
