@@ -4,8 +4,7 @@ A running list of ideas the port surfaced that are worth doing but
 weren't blocking. Three audiences:
 
 - **geckopy users / contributors** — sections "Conventions / data
-  model", "Third-party library gotchas", "API simplification",
-  "get_enzyme_data subsystem".
+  model", "Third-party library gotchas", and "Deferred migrations".
 - **MATLAB GECKO maintainers** — section "MATLAB GECKO changes".
   Each item is a bug or rough edge in MATLAB GECKO that the port
   spotted while comparing the two implementations side by side.
@@ -63,24 +62,39 @@ fast, and so we have a list of things to retest when we upgrade.
   `geckopy.utilities.save_ec_model._to_native`. This bites any
   YAML-to-YAML round-trip of a cobra-loaded model.
 
-## API simplification
+## Deferred migrations
 
-Two API rough edges that geckopy inherited from MATLAB GECKO.
-Cleaning them up requires a coordinated rename or behaviour change
-in both packages, so deferred for now.
+Pieces of geckopy that have a clear destination (upstream package
+or a different in-tree shape) but whose migration was deferred to
+keep an in-flight release on schedule.
 
-- **Mode B in `apply_custom_kcats`.** The "proteins only, no rxns"
-  mode in `applyCustomKcats.m` is unclear: the docstring and the
-  code disagree about whether the full-match gate should fire.
-  geckopy follows the code (since it's the authoritative
-  behaviour); MATLAB should clean up the docstring or drop the
-  mode entirely.
+- **`ec_fseof` → `raven_python.analysis.fseof`.** raven-python's
+  base FSEOF is a redesign of RAVEN's: regression-based target
+  selection instead of strict monotonicity, pFBA per scan step
+  instead of FBA, correlation threshold instead of top-25 %-by-slope,
+  and a different result dataclass. geckopy's `ec_fseof` mirrors
+  GECKO MATLAB's `ecFSEOF.m` exactly. Migrating means either
+  changing geckopy's documented behaviour or duplicating
+  raven-python's primitives — both bigger than a re-export. See
+  `docs/raven_integration.md`.
 
-- **Function naming.** `get_kcat_across_isozymes` is a literal
-  port of the MATLAB name, but the verb `get` is misleading — the
-  function modifies `ec.kcat` in place. A clearer name would be
-  `fill_kcats_from_isozymes`. Deferred to a coordinated rename
-  across MATLAB and Python.
+- **`brenda/parse.py` range collapse.** A BRENDA value reported as
+  a range (e.g. `"0.1-2.5"`) is collapsed to its upper bound
+  unconditionally in `parse_brenda_json`. After the kcat-aggregation
+  refactor moved the rest of the pipeline to be configurable
+  (`kcat_aggregate_brenda = "max" | "median"`), this is the one
+  residual max-leaning step. Honouring the adapter setting here
+  would make every layer consistent. Small effect (only rows
+  reported as ranges) — deferred.
+
+- **Drop the git URL from `pyproject.toml`'s raven-python
+  dependency once raven-python publishes to PyPI.** Currently
+  pinned to `raven-python @ git+https://github.com/SysBioChalmers/raven-python.git@main`,
+  which forces an internet round-trip on every install and means
+  no install reproducibility per release. Switch to a plain
+  `raven-python>=<min>` pin (and collapse the README install
+  block to `pip install geckopy`) the moment raven-python is on
+  PyPI.
 
 ## MATLAB GECKO changes
 
@@ -99,6 +113,14 @@ Notable items:
 - Make `getReactionsFromEnzyme` case-sensitive.
 - Forbid length-N kcat lists for un-suffixed `rxn_ids` in
   `setKcatForReactions` (strict matching rule).
+- Rename `getKcatAcrossIsozymes` to `fillKcatsFromIsozymes` — the
+  verb `get` is misleading, the function mutates `ec.kcat` in place.
+  geckopy renamed its Python counterpart; the MATLAB side is the
+  remaining half of the coordinated rename.
+- Clean up the `applyCustomKcats` Mode B docstring (proteins only,
+  no rxns) — its docstring and code disagree on whether the
+  full-match gate fires. Either clarify the docstring or drop the
+  mode.
 - Delete `getECstring` from MATLAB GECKO. After the `findECInDB`
   refactor (geckopy works with raw `;`-joined EC tokens throughout)
   the function has no remaining callers. It also has three latent
@@ -166,13 +188,3 @@ Notable items:
   dangling `backup.xml`. Either rely on libSBML's current output
   directly, or fix it via a libSBML option rather than text
   rewriting.
-## get_enzyme_data subsystem
-
-- **KEGG as an alternative protein-sequence source for
-  `make_ec_model`.** Today `populate_enzyme_data` only consults
-  UniProt. KEGG returns similar information (gene id, EC number,
-  MW, sequence) and is often more complete for non-model
-  organisms. The KEGG loader and downloader are already ported
-  (in `geckopy.get_enzyme_data`), but `make_ec_model` does not
-  use them yet. The work needed: add a KEGG fallback to stage 7
-  of `make_ec_model`, controlled via adapter parameters.
