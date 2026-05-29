@@ -79,7 +79,7 @@ def fuzzy_kcat_matching(
     *,
     ec_rxns: Optional[Iterable[str]] = None,
     force_wildcard_level: int = 0,
-    aggregate: str = "max",
+    aggregate: Optional[str] = None,
 ) -> pd.DataFrame:
     """Match each ec reaction to BRENDA kcat data with progressive
     relaxation of EC, substrate, and organism specificity.
@@ -158,8 +158,17 @@ def fuzzy_kcat_matching(
         the iterative escalation begins. Default 0 (no forcing).
     aggregate
         How to collapse the BRENDA rows matched at a search level to one
-        kcat: ``"max"`` (default, matches MATLAB GECKO) or ``"median"``
-        (more robust to assay outliers / engineered mutants).
+        kcat: ``"max"`` (matches MATLAB GECKO) or ``"median"`` (more robust
+        to assay outliers / engineered mutants). ``None`` (default) reads
+        the value from ``model.adapter.params.kcat_aggregate_brenda``,
+        which itself defaults to ``"max"``.
+
+        The choice drives both aggregation layers consistently: it picks
+        the matching snapshot view (``brenda.kcat_for(aggregate)`` /
+        ``brenda.sa_for(aggregate)``) and applies the same reduction
+        across whichever rows survive the EC + organism + substrate
+        gates. See ``docs/kcat_aggregation.md`` for the empirical
+        rationale.
 
     Returns
     -------
@@ -189,6 +198,8 @@ def fuzzy_kcat_matching(
             f"force_wildcard_level must be >= 0, got {force_wildcard_level}"
         )
 
+    if aggregate is None:
+        aggregate = adapter.params.kcat_aggregate_brenda
     organism_name = (adapter.params.org_name or "").strip()
 
     n = model.ec.n_rxns
@@ -212,8 +223,13 @@ def fuzzy_kcat_matching(
     if not positions:
         return _empty_result_df()
 
-    kcat_ec_indices = build_ec_indices(brenda.kcat)
-    sa_ec_indices = build_ec_indices(brenda.sa)
+    # The snapshot stores both max and median aggregations per
+    # (ec, substrate, organism) triple; pick the view that matches the
+    # requested per-query aggregation so both layers are consistent.
+    brenda_kcat = brenda.kcat_for(aggregate)
+    brenda_sa = brenda.sa_for(aggregate)
+    kcat_ec_indices = build_ec_indices(brenda_kcat)
+    sa_ec_indices = build_ec_indices(brenda_sa)
     org_index = resolve_organism_index(organism_name, phyl_dist)
 
     out_rxn_ids: list[str] = []
@@ -254,7 +270,7 @@ def fuzzy_kcat_matching(
         for token in ec_tokens:
             kcat, origin, wc = iterative_match_one_ec(
                 token, substrates, substrate_coeffs,
-                brenda.kcat, brenda.sa,
+                brenda_kcat, brenda_sa,
                 kcat_ec_indices, sa_ec_indices,
                 organism_name, phyl_dist, org_index,
                 aggregate=aggregate,

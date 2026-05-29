@@ -290,3 +290,50 @@ def test_deprecated_alias_still_works():
         for w in recorded
     )
     assert _source(ec_model, "R2_EXP_2") == "isozymes"
+
+
+# --------------------------------------------------------------------------- #
+# Adapter-default aggregate (params.kcat_aggregate_isozymes)
+# --------------------------------------------------------------------------- #
+
+def _adapter_with_isozyme_aggregate(
+    tmp_path: Path, aggregate: str | None = None,
+) -> ModelAdapter:
+    body = ['conv_gem = "dummy.xml"', 'org_name = "yeast"']
+    if aggregate is not None:
+        body.append(f'kcat_aggregate_isozymes = "{aggregate}"')
+    (tmp_path / "model_adapter.toml").write_text("\n".join(body) + "\n")
+    return ModelAdapter.from_folder(tmp_path)
+
+
+def test_aggregate_default_mean_with_adapter_default(tmp_path):
+    """Adapter defaults to ``kcat_aggregate_isozymes='mean'``; omitting
+    ``aggregate`` reproduces MATLAB-GECKO mean averaging."""
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    model.adapter = _adapter_with_isozyme_aggregate(tmp_path)
+    fill_kcats_from_isozymes(model, apply=False)
+    assert model.ec.kcat[3] == pytest.approx((1.0 + 2.0 + 100.0) / 3.0)
+
+
+def test_aggregate_adapter_median_flips_default(tmp_path):
+    """With the adapter at ``kcat_aggregate_isozymes='median'``, an
+    omitted ``aggregate`` falls through to median averaging."""
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    model.adapter = _adapter_with_isozyme_aggregate(tmp_path, "median")
+    fill_kcats_from_isozymes(model, apply=False)
+    assert model.ec.kcat[3] == pytest.approx(2.0)
+
+
+def test_aggregate_default_mean_when_no_adapter():
+    """Without an adapter attached, the historical mean default is used."""
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    fill_kcats_from_isozymes(model, apply=False)
+    assert model.ec.kcat[3] == pytest.approx((1.0 + 2.0 + 100.0) / 3.0)
+
+
+def test_explicit_aggregate_overrides_adapter(tmp_path):
+    """Caller-passed ``aggregate=`` wins over the adapter setting."""
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    model.adapter = _adapter_with_isozyme_aggregate(tmp_path, "median")
+    fill_kcats_from_isozymes(model, apply=False, aggregate="max")
+    assert model.ec.kcat[3] == pytest.approx(100.0)

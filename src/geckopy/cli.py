@@ -91,7 +91,9 @@ def cmd_brenda_refresh(args: argparse.Namespace) -> int:
     paths = aggregate_and_write(rows, out_dir, release=release)
     print(f"BRENDA release {release} aggregated to {out_dir}:")
     for kind, path in paths.items():
-        n = sum(1 for _ in path.open("r", encoding="utf-8")) - 1
+        # Each file has a "#" release comment plus a TSV column-header
+        # row; both are skipped to report just the data row count.
+        n = sum(1 for _ in path.open("r", encoding="utf-8")) - 2
         print(f"  {path.name}: {n} rows")
     return 0
 
@@ -117,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
 
     brenda_parser = sub.add_parser(
         "brenda-refresh",
-        help="Rebuild max_kcat.tsv / max_sa.tsv / max_mw.tsv from the BRENDA bulk JSON",
+        help="Rebuild kcat.tsv / sa.tsv / mw.tsv from the BRENDA bulk JSON",
     )
     brenda_parser.add_argument(
         "--cache-dir", default=str(_DEFAULT_CACHE_DIR),

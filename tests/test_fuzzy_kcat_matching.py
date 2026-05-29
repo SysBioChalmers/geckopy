@@ -88,7 +88,13 @@ def _brenda(
     sa_df = pd.DataFrame(
         sa_rows, columns=["ec_code", "organism", "kcat", "mw"]
     )
-    return BrendaData(kcat=kcat_df, sa=sa_df)
+    # The same rows fill both the max and median views; fuzzy_kcat_matching
+    # picks the view based on the `aggregate` arg / adapter setting, so
+    # tests that don't toggle aggregate behave identically across both.
+    return BrendaData(
+        kcat_max=kcat_df, kcat_median=kcat_df,
+        sa_max=sa_df, sa_median=sa_df,
+    )
 
 
 def _phyl_dist(
@@ -631,3 +637,70 @@ def test_summary_logged_when_no_matches(tmp_path, caplog):
             model, _brenda(), _phyl_dist(["yeast"]),
         )
     assert "no matches" in caplog.text
+
+
+# --------------------------------------------------------------------------- #
+# Aggregation choice
+# --------------------------------------------------------------------------- #
+
+def test_aggregate_kcats_max_or_median():
+    from geckopy.gather_kcats.fuzzy_kcat_matching._brenda_query import (
+        _aggregate_kcats,
+    )
+    arr = np.array([1.0, 2.0, 3.0, 100.0])
+    assert _aggregate_kcats(arr, "max") == 100.0
+    assert _aggregate_kcats(arr, "median") == pytest.approx(2.5)
+
+
+def _adapter_with_aggregate(
+    tmp_path: Path, org_name: str, aggregate: str,
+) -> ModelAdapter:
+    (tmp_path / "model_adapter.toml").write_text(
+        f'conv_gem = "dummy.xml"\n'
+        f'org_name = "{org_name}"\n'
+        f'kcat_aggregate_brenda = "{aggregate}"\n'
+    )
+    return ModelAdapter.from_folder(tmp_path)
+
+
+def test_aggregate_default_max_when_no_explicit_arg(tmp_path):
+    """With the adapter at its default ``kcat_aggregate_brenda='max'``, an
+    omitted ``aggregate`` arg picks the max of the matched BRENDA rows."""
+    adapter = _adapter_with_org(tmp_path, "yeast")  # adapter default = max
+    model = _ec_model(adapter, [("r1", "1.1.1.1", [("alpha", -1.0)])])
+    brenda = _brenda([
+        ("1.1.1.1", "alpha", "yeast", 2.0),
+        ("1.1.1.1", "alpha", "yeast", 8.0),
+        ("1.1.1.1", "alpha", "yeast", 100.0),
+    ])
+    df = fuzzy_kcat_matching(model, brenda, _phyl_dist(["yeast"]))
+    assert df["kcat"].iloc[0] == 100.0
+
+
+def test_aggregate_adapter_median_changes_default(tmp_path):
+    """Adapter ``kcat_aggregate_brenda='median'`` flips the default
+    behaviour to median without the caller passing ``aggregate=``."""
+    adapter = _adapter_with_aggregate(tmp_path, "yeast", "median")
+    model = _ec_model(adapter, [("r1", "1.1.1.1", [("alpha", -1.0)])])
+    brenda = _brenda([
+        ("1.1.1.1", "alpha", "yeast", 2.0),
+        ("1.1.1.1", "alpha", "yeast", 8.0),
+        ("1.1.1.1", "alpha", "yeast", 100.0),
+    ])
+    df = fuzzy_kcat_matching(model, brenda, _phyl_dist(["yeast"]))
+    assert df["kcat"].iloc[0] == 8.0
+
+
+def test_explicit_aggregate_overrides_adapter(tmp_path):
+    """Caller-passed ``aggregate=`` wins over the adapter setting."""
+    adapter = _adapter_with_aggregate(tmp_path, "yeast", "median")
+    model = _ec_model(adapter, [("r1", "1.1.1.1", [("alpha", -1.0)])])
+    brenda = _brenda([
+        ("1.1.1.1", "alpha", "yeast", 2.0),
+        ("1.1.1.1", "alpha", "yeast", 8.0),
+        ("1.1.1.1", "alpha", "yeast", 100.0),
+    ])
+    df = fuzzy_kcat_matching(
+        model, brenda, _phyl_dist(["yeast"]), aggregate="max",
+    )
+    assert df["kcat"].iloc[0] == 100.0

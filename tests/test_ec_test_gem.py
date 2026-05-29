@@ -37,7 +37,7 @@ def test_adapter_finds_brenda_folder_and_phyldist(adapter):
     # not the per-project data dir.
     folder = adapter.get_brenda_db_folder()
     assert folder.is_dir()
-    assert (folder / "max_kcat.tsv").is_file()
+    assert (folder / "kcat.tsv").is_file()
     assert adapter.get_phyl_dist_path().is_file()
 
 

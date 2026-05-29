@@ -130,7 +130,7 @@ def test_cli_brenda_refresh_end_to_end(tmp_path, capsys):
     assert rc == 0
     output = capsys.readouterr().out
     assert "BRENDA release 2026.1" in output
-    for name in ("max_kcat.tsv", "max_sa.tsv", "max_mw.tsv"):
+    for name in ("kcat.tsv", "sa.tsv", "mw.tsv"):
         assert (out / name).exists()
 
 

@@ -1,2 +1,3 @@
 # BRENDA release test-fixture generated 2026-05-18 - CC BY 4.0 - molecular weight in g/mol
-1.1.1.1	*	testus testus	50010	*
+ec_code	substrate	organism	mw	n	references
+1.1.1.1	*	testus testus	50010.0	1	*

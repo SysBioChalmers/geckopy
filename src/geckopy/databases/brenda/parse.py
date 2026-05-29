@@ -28,7 +28,7 @@ _MAX_PHYSICAL_KCAT = 1e7
 
 # Upper bound for a protein molecular weight in Da (~10 MDa, well above any
 # single chain). A parse error yielding e.g. 1e9 would otherwise flow into
-# max_mw.tsv and corrupt the SA-derived kcats that multiply by it.
+# mw.tsv and corrupt the SA-derived kcats that multiply by it.
 _MAX_PHYSICAL_MW = 1e7
 
 # Matches "23.5", "0.1-2.5", "1e-3", optionally followed by " {substrate}".

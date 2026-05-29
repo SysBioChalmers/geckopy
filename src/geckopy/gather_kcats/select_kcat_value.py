@@ -5,7 +5,7 @@ src/geckomat/gather_kcats/selectKcatValue.m.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -51,7 +51,7 @@ def apply_kcat_list(
     model: "EcModel",
     kcat_list: pd.DataFrame,
     *,
-    criteria: Literal["max", "min", "median", "mean"] = "max",
+    criteria: Optional[Literal["max", "min", "median", "mean"]] = None,
     overwrite: _OverwriteMode = True,
 ) -> list[str]:
     """Choose one kcat value per reaction and write it to ``model.ec.kcat``.
@@ -109,7 +109,10 @@ def apply_kcat_list(
         ``criteria``.
     criteria
         How to aggregate multiple candidates per reaction:
-        ``"max"``, ``"min"``, ``"median"``, or ``"mean"``.
+        ``"max"``, ``"min"``, ``"median"``, or ``"mean"``. ``None``
+        (default) reads
+        ``model.adapter.params.kcat_aggregate_candidates`` if an adapter
+        is attached, falling back to ``"max"`` otherwise.
     overwrite
         ``True`` (default) overwrites unconditionally. ``False``
         only fills entries currently 0 or NaN. ``"if_higher"`` only
@@ -130,6 +133,12 @@ def apply_kcat_list(
         If ``kcat_list`` is missing the ``rxn_id``, ``kcat``, or
         ``source`` column.
     """
+    if criteria is None:
+        adapter = getattr(model, "adapter", None)
+        criteria = (
+            adapter.params.kcat_aggregate_candidates
+            if adapter is not None else "max"
+        )
     if criteria not in _CRITERIA:
         raise ValueError(
             f"criteria must be one of {_CRITERIA}; got {criteria!r}"
@@ -220,7 +229,7 @@ def select_kcat_value(
     model: "EcModel",
     kcat_list: pd.DataFrame,
     *,
-    criteria: Literal["max", "min", "median", "mean"] = "max",
+    criteria: Optional[Literal["max", "min", "median", "mean"]] = None,
     overwrite: _OverwriteMode = True,
 ) -> list[str]:
     """Deprecated alias for :func:`apply_kcat_list`.
