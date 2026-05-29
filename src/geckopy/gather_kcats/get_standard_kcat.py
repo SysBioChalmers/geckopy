@@ -182,16 +182,17 @@ def _ec_rxn_to_cobra_id(model: "EcModel", ec_rxn_id: str) -> str:
 def _compute_subsystem_kcats(
     model: "EcModel", threshold: int,
 ) -> dict[str, float]:
-    """Per-subsystem mean kcat for subsystems with >= threshold reactions.
+    """Per-subsystem median kcat for subsystems with >= threshold reactions.
 
-    Subsystems with fewer reactions are simply omitted from the
-    returned dict; the caller falls back to the global standard kcat.
+    Uses the median (like the global standard kcat) rather than the
+    arithmetic mean: kcats span orders of magnitude, so the mean is
+    dominated by the largest member. Subsystems with fewer reactions are
+    omitted; the caller falls back to the global standard kcat.
     """
-    sub_sums: dict[str, float] = defaultdict(float)
-    sub_counts: dict[str, int] = defaultdict(int)
+    sub_kcats: dict[str, list[float]] = defaultdict(list)
 
     for ec_rxn_id, kcat in zip(model.ec.rxns, model.ec.kcat):
-        # Only reactions with a real kcat contribute to the average.
+        # Only reactions with a real kcat contribute.
         if kcat == 0:
             continue
         cobra_rxn_id = _ec_rxn_to_cobra_id(model, ec_rxn_id)
@@ -202,13 +203,12 @@ def _compute_subsystem_kcats(
         sub = _first_subsystem(rxn)
         if not sub:
             continue
-        sub_sums[sub] += float(kcat)
-        sub_counts[sub] += 1
+        sub_kcats[sub].append(float(kcat))
 
     return {
-        sub: sub_sums[sub] / sub_counts[sub]
-        for sub in sub_counts
-        if sub_counts[sub] >= threshold
+        sub: float(np.median(vals))
+        for sub, vals in sub_kcats.items()
+        if len(vals) >= threshold
     }
 
 

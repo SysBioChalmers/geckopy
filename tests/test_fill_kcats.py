@@ -5,12 +5,31 @@ from pathlib import Path
 import cobra
 import numpy as np
 import pytest
+from scipy import sparse
 
 from geckopy import EcModel, ModelAdapter, make_ec_model
+from geckopy.ec_model.ec_data import EcData
 from geckopy.ec_model.pipeline import (
     fill_kcats_from_isozymes,
     set_kcat_for_reactions,
 )
+
+
+def _isozyme_model(kcats: list[float]) -> EcModel:
+    """Minimal EcModel: ``len(kcats)`` isozymes of one base reaction
+    ``R_EXP_<i>``; a 0 entry marks a missing kcat. apply=False keeps it
+    independent of the cobra reactions."""
+    n = len(kcats)
+    model = EcModel("iso")
+    model.ec = EcData(
+        rxns=[f"R_EXP_{i + 1}" for i in range(n)],
+        kcat=np.array(kcats, dtype=float),
+        source=["x" if k else "" for k in kcats],
+        notes=[""] * n,
+        eccodes=[""] * n,
+        rxn_enz_mat=sparse.csr_matrix((n, 0), dtype=float),
+    )
+    return model
 
 EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 
@@ -79,6 +98,27 @@ def test_fills_with_mean_of_multiple_known_siblings():
     # The forward R2 kcats already had values, so they should be unchanged.
     assert _kcat(ec_model, "R2_EXP_1") == 80.0
     assert _kcat(ec_model, "R2_EXP_2") == 120.0
+
+
+def test_aggregate_median_vs_mean():
+    """Known siblings {1, 2, 100}; median fill = 2, mean fill = 34.33."""
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    fill_kcats_from_isozymes(model, apply=False, aggregate="median")
+    assert model.ec.kcat[3] == pytest.approx(2.0)
+
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    fill_kcats_from_isozymes(model, apply=False)  # default "mean"
+    assert model.ec.kcat[3] == pytest.approx((1.0 + 2.0 + 100.0) / 3.0)
+
+    model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
+    fill_kcats_from_isozymes(model, apply=False, aggregate="max")
+    assert model.ec.kcat[3] == pytest.approx(100.0)
+
+
+def test_aggregate_invalid_raises():
+    model = _isozyme_model([1.0, 0.0])
+    with pytest.raises(ValueError, match="aggregate"):
+        fill_kcats_from_isozymes(model, apply=False, aggregate="nope")
 
 
 def test_does_not_overwrite_known_kcats():

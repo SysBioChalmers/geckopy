@@ -34,7 +34,6 @@ import numpy as np
 import pandas as pd
 
 from ..ec_model.constants import canonicalize_rxn_id
-from .map_rxns_to_conv import map_rxns_to_conv
 
 try:
     from tqdm import tqdm
@@ -92,15 +91,16 @@ def ec_fva(
 
     For each canonical reaction (after stripping ``_REV`` and
     ``_EXP_<N>`` suffixes), maximises and minimises the combined
-    (forward minus reverse) flux of all its ec variants, then
-    aggregates the resulting per-ec-rxn min/max across all
-    iterations. Finally translates the (n_ec_rxns, 2) min/max array
-    to conventional-rxn space via ``map_rxns_to_conv``; if any
-    mapped pair has min > max (a direction flip from the ``_REV``
-    handling), they are swapped.
+    (forward minus reverse) flux of all its ec variants, and reports
+    the combined flux at each of those two optima as the reaction's
+    max and min — i.e. the *exact* per-reaction FVA bound (the
+    "diagonal"), not the outer envelope obtained by reducing each ec
+    variant across all reactions' solutions and summing.
 
     Ported from GECKO MATLAB:
-    src/geckomat/utilities/ecFVA.m.
+    src/geckomat/utilities/ecFVA.m. MATLAB GECKO uses the envelope
+    formulation; geckopy reports the exact diagonal — tighter and never
+    too loose.
 
     MATLAB-COMPAT: GECKO MATLAB uses ``parfor`` to parallelise the
     per-conv-rxn LP solves. geckopy now supports parallelism via
@@ -198,7 +198,10 @@ def ec_fva(
                 sol_max_all[:, k] = max_vec
                 sol_min_all[:, k] = min_vec
 
-    return _postprocess(sol_min_all, sol_max_all, ec_model, model)
+    return _postprocess(
+        sol_min_all, sol_max_all,
+        canonical_ids, group_forward, group_reverse, model,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -278,39 +281,60 @@ def _solve_for_conv_rxn(
 def _postprocess(
     sol_min_all: np.ndarray,
     sol_max_all: np.ndarray,
-    ec_model: "EcModel",
+    canonical_ids: list[str],
+    group_forward: list[list[int]],
+    group_reverse: list[list[int]],
     model: "cobra.Model",
 ) -> pd.DataFrame:
-    """Reduce per-ec-rxn min/max across solves, then map to conv space."""
-    min_flux_ec = _safe_nan_reduce(sol_min_all, np.nanmin)
-    max_flux_ec = _safe_nan_reduce(sol_max_all, np.nanmax)
+    """Exact per-conventional-reaction bounds via the diagonal.
 
-    combined = np.column_stack([min_flux_ec, max_flux_ec])
-    mapped = map_rxns_to_conv(ec_model, model, combined).mapped_flux
-    min_flux = mapped[:, 0].copy()
-    max_flux = mapped[:, 1].copy()
+    For each canonical (conventional) reaction ``k``, its max combined
+    flux is read from column ``k`` of ``sol_max_all`` (the optimum that
+    maximised group ``k``) and its min from column ``k`` of
+    ``sol_min_all`` — combined = ``Σ forward − Σ reverse`` over the
+    group's ec variants. This gives the true per-reaction FVA range,
+    not the outer envelope obtained by nan-reducing each variant across
+    every column and summing.
+    """
+    cid_to_max: dict[str, float] = {}
+    cid_to_min: dict[str, float] = {}
+    for k, cid in enumerate(canonical_ids):
+        fwd = group_forward[k]
+        rev = group_reverse[k]
+        max_vec = sol_max_all[:, k]
+        min_vec = sol_min_all[:, k]
+        # np.sum propagates NaN, so an infeasible LP for column k yields
+        # a NaN combined flux for canonical id k (rather than a silent 0).
+        cid_to_max[cid] = float(
+            np.sum(max_vec[fwd]) - np.sum(max_vec[rev])
+        )
+        cid_to_min[cid] = float(
+            np.sum(min_vec[fwd]) - np.sum(min_vec[rev])
+        )
 
+    model_rxn_ids = [r.id for r in model.reactions]
+    missing = [r for r in model_rxn_ids if r not in cid_to_max]
+    if missing:
+        preview = missing[:5]
+        raise ValueError(
+            f"{len(missing)} conventional model reaction(s) not present in "
+            f"the ec_model's canonical groups (examples: {preview})."
+        )
+
+    min_flux = np.array(
+        [cid_to_min[r] for r in model_rxn_ids], dtype=float,
+    )
+    max_flux = np.array(
+        [cid_to_max[r] for r in model_rxn_ids], dtype=float,
+    )
+
+    # Safety net: at most a numerical tie should slip through, but if a
+    # reaction is constrained to run reverse-only, swap to ensure min <= max.
     swap = min_flux > max_flux
     if swap.any():
         min_flux[swap], max_flux[swap] = max_flux[swap], min_flux[swap].copy()
 
     return pd.DataFrame(
         {"min_flux": min_flux, "max_flux": max_flux},
-        index=[r.id for r in model.reactions],
+        index=model_rxn_ids,
     ).rename_axis("rxn_id")
-
-
-def _safe_nan_reduce(arr: np.ndarray, reducer) -> np.ndarray:
-    """Apply ``nanmin`` / ``nanmax`` along axis=1, returning 0 for
-    all-NaN rows instead of NaN with a warning."""
-    if arr.size == 0:
-        return np.empty(arr.shape[0], dtype=float)
-    mask_all_nan = np.all(np.isnan(arr), axis=1)
-    out = np.zeros(arr.shape[0], dtype=float)
-    if (~mask_all_nan).any():
-        with np.errstate(invalid="ignore"):
-            import warnings
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=RuntimeWarning)
-                out[~mask_all_nan] = reducer(arr[~mask_all_nan, :], axis=1)
-    return out

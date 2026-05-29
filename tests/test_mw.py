@@ -1,5 +1,6 @@
 """Tests for calculate_mw."""
 import logging
+import math
 
 import pytest
 
@@ -16,8 +17,12 @@ from geckopy.databases.mw import (
 # Trivial cases
 # --------------------------------------------------------------------------- #
 
-def test_empty_sequence_returns_water_mass():
-    assert calculate_mw("") == _WATER_MASS
+def test_empty_sequence_returns_nan():
+    # An empty / all-skipped sequence has no residues; NaN avoids being
+    # mistaken for an 18 Da "protein".
+    assert math.isnan(calculate_mw(""))
+    assert math.isnan(calculate_mw("   "))
+    assert math.isnan(calculate_mw("123"))
 
 
 def test_single_residue():

@@ -22,13 +22,20 @@ logger = logging.getLogger(__name__)
 _EXP_SUFFIX_REGEX = re.compile(r"_EXP_\d+$")
 _SOURCE_TAG = "isozymes"
 
+_AGGREGATORS = {
+    "mean": np.mean,
+    "median": np.median,
+    "max": np.max,
+}
+
 
 def fill_kcats_from_isozymes(
     model: "EcModel",
     *,
     apply: bool = True,
+    aggregate: str = "mean",
 ) -> None:
-    """Fill in missing kcats by averaging known kcats across sibling isozymes.
+    """Fill in missing kcats by combining known kcats across sibling isozymes.
 
     Ported from GECKO MATLAB:
     src/geckomat/change_model/getKcatAcrossIsozymes.m.
@@ -59,6 +66,10 @@ def fill_kcats_from_isozymes(
     apply
         If True (default), call ``apply_kcat_constraints`` after
         updating ec.kcat so the new values reflect in the S matrix.
+    aggregate
+        How to combine sibling kcats: ``"mean"`` (default, matches
+        MATLAB GECKO), ``"median"`` (more robust for log-distributed
+        rate constants), or ``"max"``.
 
     Raises
     ------
@@ -82,6 +93,13 @@ def fill_kcats_from_isozymes(
         return
 
     # Strip _EXP_<n> suffix to identify isozyme groups. _REV stays.
+    try:
+        combine = _AGGREGATORS[aggregate]
+    except KeyError:
+        raise ValueError(
+            f"aggregate must be one of {sorted(_AGGREGATORS)}, got {aggregate!r}"
+        ) from None
+
     base_ids = [_EXP_SUFFIX_REGEX.sub("", r) for r in model.ec.rxns]
 
     # Group known kcats by base_id.
@@ -98,7 +116,7 @@ def fill_kcats_from_isozymes(
         siblings = known_by_base.get(bid)
         if not siblings:
             continue
-        model.ec.kcat[i] = float(np.mean(siblings))
+        model.ec.kcat[i] = float(combine(siblings))
         model.ec.source[i] = _SOURCE_TAG
         filled_indices.append(i)
 
@@ -110,8 +128,8 @@ def fill_kcats_from_isozymes(
         return
 
     logger.info(
-        "fill_kcats_from_isozymes: filled %d kcat(s) by averaging across "
-        "isozymes.", len(filled_indices),
+        "fill_kcats_from_isozymes: filled %d kcat(s) by %s across "
+        "isozymes.", len(filled_indices), aggregate,
     )
 
     if apply:

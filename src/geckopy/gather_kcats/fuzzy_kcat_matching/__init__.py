@@ -79,6 +79,7 @@ def fuzzy_kcat_matching(
     *,
     ec_rxns: Optional[Iterable[str]] = None,
     force_wildcard_level: int = 0,
+    aggregate: str = "max",
 ) -> pd.DataFrame:
     """Match each ec reaction to BRENDA kcat data with progressive
     relaxation of EC, substrate, and organism specificity.
@@ -155,6 +156,10 @@ def fuzzy_kcat_matching(
     force_wildcard_level
         Force at least this many wildcards on every EC token before
         the iterative escalation begins. Default 0 (no forcing).
+    aggregate
+        How to collapse the BRENDA rows matched at a search level to one
+        kcat: ``"max"`` (default, matches MATLAB GECKO) or ``"median"``
+        (more robust to assay outliers / engineered mutants).
 
     Returns
     -------
@@ -252,6 +257,7 @@ def fuzzy_kcat_matching(
                 brenda.kcat, brenda.sa,
                 kcat_ec_indices, sa_ec_indices,
                 organism_name, phyl_dist, org_index,
+                aggregate=aggregate,
             )
             per_token.append((kcat, origin, wc))
 

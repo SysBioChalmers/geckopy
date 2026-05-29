@@ -17,7 +17,7 @@ src/geckomat/kcat_sensitivity_analysis/sigmaFitter.m.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 
@@ -25,6 +25,10 @@ from ..ec_model.pipeline.protein_pool import set_prot_pool_size
 
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
+
+# Sigma resolution the bisection converges to (fine enough to resolve a steep
+# growth curve; ~20 iterations from the [0, 1] bracket).
+_SIGMA_BISECT_TOL = 1e-6
 
 
 @dataclass
@@ -56,6 +60,22 @@ class SigmaFitterResult:
     )
 
 
+def _growth_at_sigma(
+    model: "EcModel", p_tot: float, f: float, sigma: float,
+) -> float:
+    """Solve the model with the pool sized for ``sigma``; revert after."""
+    with model:
+        set_prot_pool_size(model, p_tot=p_tot, f=f, sigma=float(sigma))
+        sol = model.optimize()
+        return float(sol.objective_value or 0.0)
+
+
+def _sigma_error_pct(growth: float, growth_rate: float) -> float:
+    if growth_rate != 0:
+        return abs((growth_rate - growth) / growth_rate) * 100.0
+    return abs(growth) * 100.0
+
+
 def fit_sigma(
     model: "EcModel",
     *,
@@ -63,13 +83,17 @@ def fit_sigma(
     p_tot: Optional[float] = None,
     f: Optional[float] = None,
     n_sigma_steps: int = 100,
+    method: Literal["grid", "bisect"] = "bisect",
 ) -> SigmaFitterResult:
     """Sweep sigma and pick the one matching ``growth_rate`` best.
 
-    For each sigma in ``[1/n, 2/n, ..., 1.0]``, the protein pool size
-    is set to ``p_tot * f * sigma`` and the LP is solved. The sigma
-    minimising ``|relative_error|`` between predicted and target
-    growth is recorded and re-applied to ``model`` before return.
+    Growth is monotone non-decreasing in sigma, so ``method="bisect"``
+    (default) finds the best sigma in about ``log2(n)`` solves; the
+    returned grids then contain only the sigmas actually evaluated.
+    ``method="grid"`` keeps the legacy ``[1/n, 2/n, ..., 1.0]`` sweep
+    for diagnostic plotting (every grid point evaluated).
+
+    The best sigma is re-applied to ``model`` before return.
 
     Ported from GECKO MATLAB:
     src/geckomat/kcat_sensitivity_analysis/sigmaFitter.m.
@@ -101,8 +125,14 @@ def fit_sigma(
         Mass fraction of model enzymes. Defaults to
         ``model.adapter.params.f``.
     n_sigma_steps
-        Number of sigma values to try in ``(0, 1]`` (``i / n`` for
-        ``i = 1..n``). Default 100.
+        For ``method="grid"``, the number of sigma values tried in
+        ``(0, 1]`` (``i / n`` for ``i = 1..n``). For ``method="bisect"``,
+        it caps the number of bisection iterations (the default 100 is far
+        more than the ~20 needed to converge). Default 100.
+    method
+        ``"grid"`` (default) sweeps the full grid; ``"bisect"`` finds the
+        same best sigma in ~``log2(n)`` solves using the monotonicity of
+        growth in sigma.
 
     Returns
     -------
@@ -112,10 +142,12 @@ def fit_sigma(
     ------
     ValueError
         If ``model.adapter`` is None and any default is needed; if
-        ``n_sigma_steps`` is < 1.
+        ``n_sigma_steps`` is < 1; or if ``method`` is unknown.
     """
     if n_sigma_steps < 1:
         raise ValueError(f"n_sigma_steps must be >= 1, got {n_sigma_steps}")
+    if method not in ("grid", "bisect"):
+        raise ValueError(f"method must be 'grid' or 'bisect', got {method!r}")
 
     if (
         (growth_rate is None or p_tot is None or f is None)
@@ -134,29 +166,51 @@ def fit_sigma(
     if f is None:
         f = float(params.f)
 
-    sigma_grid = np.array(
-        [(i + 1) / n_sigma_steps for i in range(n_sigma_steps)], dtype=float,
-    )
-    growth_grid = np.zeros(n_sigma_steps, dtype=float)
-    error_grid = np.zeros(n_sigma_steps, dtype=float)
+    if method == "grid":
+        sigma_grid = np.array(
+            [(i + 1) / n_sigma_steps for i in range(n_sigma_steps)],
+            dtype=float,
+        )
+        growth_grid = np.array(
+            [_growth_at_sigma(model, p_tot, f, s) for s in sigma_grid],
+            dtype=float,
+        )
+    else:  # "bisect": growth is monotone non-decreasing in sigma.
+        evaluated: dict[float, float] = {}
 
-    for k, sigma in enumerate(sigma_grid):
-        with model:
-            set_prot_pool_size(
-                model, p_tot=p_tot, f=f, sigma=float(sigma),
-            )
-            sol = model.optimize()
-            growth = float(sol.objective_value or 0.0)
-        growth_grid[k] = growth
-        if growth_rate != 0:
-            error_grid[k] = abs(
-                (growth_rate - growth) / growth_rate
-            ) * 100.0
+        def growth_at(sigma: float) -> float:
+            sigma = float(sigma)
+            if sigma not in evaluated:
+                evaluated[sigma] = _growth_at_sigma(model, p_tot, f, sigma)
+            return evaluated[sigma]
+
+        if growth_at(1.0) < growth_rate:
+            # Target unreachable even at the full budget; closest is sigma=1.
+            best_sigma = 1.0
         else:
-            error_grid[k] = abs(growth) * 100.0
+            # Bisect for the smallest sigma reaching the target growth. The
+            # tolerance is fine (not 1/n) so a steep growth curve still
+            # resolves the crossing; n_sigma_steps just caps iterations.
+            lo, hi = 0.0, 1.0
+            for _ in range(n_sigma_steps):
+                if hi - lo <= _SIGMA_BISECT_TOL:
+                    break
+                mid = 0.5 * (lo + hi)
+                if growth_at(mid) >= growth_rate:
+                    hi = mid
+                else:
+                    lo = mid
+            best_sigma = hi
+        growth_at(best_sigma)
+        sigma_grid = np.array(sorted(evaluated), dtype=float)
+        growth_grid = np.array(
+            [evaluated[s] for s in sigma_grid], dtype=float,
+        )
 
-    best_k = int(np.argmin(error_grid))
-    best_sigma = float(sigma_grid[best_k])
+    error_grid = np.array(
+        [_sigma_error_pct(g, growth_rate) for g in growth_grid], dtype=float,
+    )
+    best_sigma = float(sigma_grid[int(np.argmin(error_grid))])
 
     # Apply the best sigma to the model permanently (geckopy divergence).
     set_prot_pool_size(model, p_tot=p_tot, f=f, sigma=best_sigma)
