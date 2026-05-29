@@ -90,7 +90,7 @@ def test_stage6_selects_only_reactions_with_genes():
 
     assert ec_model.ec.rxns == ["r1", "r3"]
     assert ec_model.ec.n_rxns == 2
-    assert np.isnan(ec_model.ec.kcat).all()
+    assert (ec_model.ec.kcat == 0).all()
     assert ec_model.ec.source == ["", ""]
     assert ec_model.ec.notes == ["", ""]
     assert ec_model.ec.eccodes == ["", ""]
@@ -294,7 +294,7 @@ def test_stage7_raises_without_adapter():
     allocate_ec_for_catalyzed_reactions(ec_model)
 
     db = _synthetic_uniprot([("P1", "g1", 10.0, "S")])
-    with pytest.raises(ValueError, match="adapter is None"):
+    with pytest.raises(ValueError, match="No ModelAdapter available"):
         populate_enzyme_data(ec_model, db)
 
 

@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
 
-_USAGE_PREFIX = "usage_prot_"
+from ..ec_model.constants import USAGE_PREFIX
 
 
 @dataclass
@@ -107,7 +107,7 @@ def enzyme_usage(
     ub_list: list[float] = []
 
     for enzyme in model.ec.enzymes:
-        rxn_id = f"{_USAGE_PREFIX}{enzyme}"
+        rxn_id = f"{USAGE_PREFIX}{enzyme}"
         if rxn_id not in cobra_rxn_ids:
             continue
         flux = float(_lookup_flux(fluxes, rxn_id))

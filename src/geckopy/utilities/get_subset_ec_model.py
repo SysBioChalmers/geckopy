@@ -24,8 +24,10 @@ logger = logging.getLogger(__name__)
 _REV_SUFFIX = "_REV"
 _REV_EXP_INFIX = "_REV_EXP_"
 _EXP_RE = re.compile(r"_EXP_\d+")
-_USAGE_PREFIX = "usage_prot_"
-_POOL_EXCHANGE_ID = "prot_pool_exchange"
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
+)
 _STANDARD_GENE = "standard"
 _USAGE_DEFAULT_UB = 1000.0
 
@@ -49,7 +51,7 @@ def get_subset_ec_model(
     1. Copy ``big_ec_model``.
     2. Compute genes to remove (`big.genes` minus `small_gem.genes`,
        preserving the ``standard`` pseudo-gene from
-       ``get_standard_kcat``).
+       ``assign_standard_kcat``).
     3. Remove reactions blocked by that gene removal (cobra's
        ``GPR.eval(knockouts=...)``).
     4. Remove the genes from `model.genes`.
@@ -111,7 +113,7 @@ def get_subset_ec_model(
 
     # --- 2. Warn on context-dependent protein constraints ---
     for rxn in big_ec_model.reactions:
-        if rxn.id.startswith(_USAGE_PREFIX):
+        if rxn.id.startswith(USAGE_PREFIX):
             if rxn.upper_bound != _USAGE_DEFAULT_UB:
                 logger.warning(
                     "get_subset_ec_model: big_ec_model has protein-"
@@ -180,7 +182,7 @@ def get_subset_ec_model(
     small_gem_rxn_ids = {r.id for r in small_gem.reactions}
     rxns_to_remove_for_subset = []
     for rxn in list(small.reactions):
-        if rxn.id.startswith(_USAGE_PREFIX) or rxn.id == _POOL_EXCHANGE_ID:
+        if rxn.id.startswith(USAGE_PREFIX) or rxn.id == POOL_EXCHANGE_ID:
             continue
         if _canonical(rxn.id) not in small_gem_rxn_ids:
             rxns_to_remove_for_subset.append(rxn)
@@ -233,7 +235,7 @@ def _need_rxn_trim(big: "EcModel", small_gem: "cobra.Model") -> bool:
     small_gem and not part of the protein machinery."""
     small_gem_rxn_ids = {r.id for r in small_gem.reactions}
     for rxn in big.reactions:
-        if rxn.id.startswith(_USAGE_PREFIX) or rxn.id == _POOL_EXCHANGE_ID:
+        if rxn.id.startswith(USAGE_PREFIX) or rxn.id == POOL_EXCHANGE_ID:
             continue
         if _canonical(rxn.id) not in small_gem_rxn_ids:
             return True

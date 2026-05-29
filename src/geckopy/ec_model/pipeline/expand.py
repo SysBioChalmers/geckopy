@@ -118,7 +118,7 @@ def expand_model(model: "cobra.Model") -> list[str]:
             new_rxn.subsystem = original_rxn.subsystem
             new_rxn.gene_reaction_rule = " and ".join(clause)
             # Propagate per-reaction metadata (notably ec-code) so that
-            # downstream functions like get_ec_from_gem see the same
+            # downstream functions like fill_eccodes_from_gem see the same
             # annotations on expanded reactions as on the original.
             new_rxn.annotation = copy.deepcopy(original_rxn.annotation)
             new_rxn.notes = copy.deepcopy(original_rxn.notes)

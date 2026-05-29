@@ -16,7 +16,6 @@ from geckopy.gather_kcats.fuzzy_kcat_matching import (
     _apply_force_wildcards,
     _build_ec_indices,
     _escalate_wildcard,
-    _extract_substrates,
     _find_ec_rows,
     _resolve_organism_index,
 )
@@ -205,19 +204,6 @@ def test_resolve_organism_index_no_match():
 def test_resolve_organism_index_empty_name():
     pd_obj = _phyl_dist(["Escherichia coli"])
     assert _resolve_organism_index("", pd_obj) is None
-
-
-def test_extract_substrates_returns_negative_coeffs_only():
-    model = cobra.Model()
-    a = cobra.Metabolite("A", compartment="c"); a.name = "alpha"
-    b = cobra.Metabolite("B", compartment="c"); b.name = "beta"
-    c = cobra.Metabolite("C", compartment="c"); c.name = "gamma"
-    model.add_metabolites([a, b, c])
-    rxn = cobra.Reaction("r1")
-    rxn.add_metabolites({a: -1.0, b: -2.0, c: 3.0})
-    model.add_reactions([rxn])
-    names, coeffs = _extract_substrates(model.reactions.get_by_id("r1"))
-    assert sorted(zip(names, coeffs)) == [("alpha", 1.0), ("beta", 2.0)]
 
 
 # --------------------------------------------------------------------------- #

@@ -24,9 +24,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-_PROT_PREFIX = "prot_"
-_USAGE_PREFIX = "usage_prot_"
-_POOL_ID = "prot_pool"
+from ..ec_model.constants import (
+    POOL_ID,
+    PROT_PREFIX,
+    USAGE_PREFIX,
+)
 
 
 @dataclass
@@ -135,10 +137,11 @@ def add_new_rxns_to_ec(
         raise NotImplementedError(
             "add_new_rxns_to_ec does not support gecko-light models."
         )
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; needed for params.enzyme_comp."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="add_new_rxns_to_ec reads params.enzyme_comp from the adapter",
+    )
 
     new_enzymes = _filter_existing_enzymes(model, new_enzymes)
     enz_added = [e.enzyme for e in new_enzymes]
@@ -147,7 +150,7 @@ def add_new_rxns_to_ec(
 
     if new_enzymes:
         comp_id = _resolve_enzyme_compartment_id(
-            model, model.adapter.params.enzyme_comp,
+            model, adapter.params.enzyme_comp,
         )
         _add_protein_pseudometabolites(model, new_enzymes, comp_id)
 
@@ -223,7 +226,7 @@ def _add_protein_pseudometabolites(
 ) -> None:
     new_mets = []
     for e in new_enzymes:
-        met_id = f"{_PROT_PREFIX}{e.enzyme}"
+        met_id = f"{PROT_PREFIX}{e.enzyme}"
         if met_id in {m.id for m in model.metabolites}:
             continue
         m = cobra.Metabolite(met_id, name=met_id, compartment=comp_id)
@@ -307,13 +310,13 @@ def _clone_reverse(
 def _add_usage_reactions(
     model: "EcModel", new_enzymes: list[NewEnzyme],
 ) -> None:
-    pool = model.metabolites.get_by_id(_POOL_ID)
+    pool = model.metabolites.get_by_id(POOL_ID)
     new_rxns = []
     for e in new_enzymes:
-        rxn_id = f"{_USAGE_PREFIX}{e.enzyme}"
+        rxn_id = f"{USAGE_PREFIX}{e.enzyme}"
         if rxn_id in {r.id for r in model.reactions}:
             continue
-        prot_met = model.metabolites.get_by_id(f"{_PROT_PREFIX}{e.enzyme}")
+        prot_met = model.metabolites.get_by_id(f"{PROT_PREFIX}{e.enzyme}")
         rxn = cobra.Reaction(rxn_id, name=rxn_id)
         rxn.lower_bound = 0.0
         rxn.upper_bound = 1000.0

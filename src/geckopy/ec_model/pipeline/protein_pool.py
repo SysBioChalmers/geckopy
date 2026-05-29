@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 
 
 from ..constants import (
-    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
-    POOL_ID as _POOL_ID,
-    PROT_PREFIX as _PROT_PREFIX,
-    PROTEIN_USAGE_SUBSYSTEM as _PROTEIN_USAGE_SUBSYSTEM,
-    USAGE_PREFIX as _USAGE_PREFIX,
+    POOL_EXCHANGE_ID,
+    POOL_ID,
+    PROT_PREFIX,
+    PROTEIN_USAGE_SUBSYSTEM,
+    USAGE_PREFIX,
 )
 
 
@@ -67,20 +67,24 @@ def add_protein_pseudometabolites(model: "EcModel") -> list[str]:
     """Stage 9: add ``prot_<enzyme>`` pseudometabolites to the model.
     ... (docstring unchanged) ...
     """
-    if model.adapter is None:
-        raise ValueError("EcModel.adapter is None; cannot resolve enzyme_comp.")
+    from ...adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="add_protein_pseudometabolites reads "
+        "params.enzyme_comp from the adapter",
+    )
 
     unique_enzymes = sorted(set(model.ec.enzymes))
     if not unique_enzymes:
         return []
 
     comp_id = _resolve_enzyme_compartment_id(
-        model, model.adapter.params.enzyme_comp
+        model, adapter.params.enzyme_comp
     )
 
     new_mets: list[cobra.Metabolite] = []
     for enzyme in unique_enzymes:
-        met_id = f"{_PROT_PREFIX}{enzyme}"
+        met_id = f"{PROT_PREFIX}{enzyme}"
         if met_id in {m.id for m in model.metabolites}:
             continue
         met = cobra.Metabolite(
@@ -113,19 +117,23 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
     model
         An EcModel with adapter set. Mutated in place.
     """
-    if model.adapter is None:
-        raise ValueError("EcModel.adapter is None; cannot resolve enzyme_comp.")
+    from ...adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="add_protein_pool_pseudometabolite reads "
+        "params.enzyme_comp from the adapter",
+    )
 
-    if _POOL_ID in {m.id for m in model.metabolites}:
+    if POOL_ID in {m.id for m in model.metabolites}:
         return  # idempotent
 
     comp_id = _resolve_enzyme_compartment_id(
-        model, model.adapter.params.enzyme_comp
+        model, adapter.params.enzyme_comp
     )
 
     pool = cobra.Metabolite(
-        id=_POOL_ID,
-        name=_POOL_ID,
+        id=POOL_ID,
+        name=POOL_ID,
         compartment=comp_id,
     )
     pool.notes["enzyme_usage"] = "Enzyme-usage protein pool"
@@ -174,17 +182,17 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
     list of str
         Sorted IDs of added usage reactions.
     """
-    pool_met = model.metabolites.get_by_id(_POOL_ID)
+    pool_met = model.metabolites.get_by_id(POOL_ID)
 
     new_rxns: list[cobra.Reaction] = []
     for enzyme, gene in sorted(
         set(zip(model.ec.enzymes, model.ec.genes))
     ):
-        rxn_id = f"{_USAGE_PREFIX}{enzyme}"
+        rxn_id = f"{USAGE_PREFIX}{enzyme}"
         if rxn_id in {r.id for r in model.reactions}:
             continue  # idempotent
 
-        met_id = f"{_PROT_PREFIX}{enzyme}"
+        met_id = f"{PROT_PREFIX}{enzyme}"
         prot_met = model.metabolites.get_by_id(met_id)
 
         rxn = cobra.Reaction(id=rxn_id, name=rxn_id)
@@ -192,7 +200,7 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
         rxn.upper_bound = 1000.0
         rxn.add_metabolites({pool_met: -1.0, prot_met: 1.0})
         rxn.gene_reaction_rule = gene
-        rxn.subsystem = _PROTEIN_USAGE_SUBSYSTEM
+        rxn.subsystem = PROTEIN_USAGE_SUBSYSTEM
         new_rxns.append(rxn)
 
     if new_rxns:
@@ -231,16 +239,16 @@ def add_protein_pool_exchange_reaction(model: "EcModel") -> None:
     model
         An EcModel with stage 10 already run. Mutated in place.
     """
-    if _POOL_EXCHANGE_ID in {r.id for r in model.reactions}:
+    if POOL_EXCHANGE_ID in {r.id for r in model.reactions}:
         return  # idempotent
 
-    pool_met = model.metabolites.get_by_id(_POOL_ID)
+    pool_met = model.metabolites.get_by_id(POOL_ID)
 
-    rxn = cobra.Reaction(id=_POOL_EXCHANGE_ID, name=_POOL_EXCHANGE_ID)
+    rxn = cobra.Reaction(id=POOL_EXCHANGE_ID, name=POOL_EXCHANGE_ID)
     rxn.lower_bound = 0.0
     rxn.upper_bound = 1000.0
     rxn.add_metabolites({pool_met: 1.0})
-    rxn.subsystem = _PROTEIN_USAGE_SUBSYSTEM
+    rxn.subsystem = PROTEIN_USAGE_SUBSYSTEM
     model.add_reactions([rxn])
 
 
@@ -306,12 +314,13 @@ def set_prot_pool_size(
         ``prot_pool_exchange`` is not in the model.
     """
     if p_tot is None or f is None or sigma is None:
-        if model.adapter is None:
-            raise ValueError(
-                "model.adapter is None; cannot look up p_tot/f/sigma "
-                "defaults. Either attach an adapter or pass explicit values."
-            )
-        params = model.adapter.params
+        from ...adapter import resolve_adapter
+        adapter = resolve_adapter(
+            model,
+            purpose="set_prot_pool_size reads p_tot / f / sigma "
+            "defaults from the adapter (or pass them explicitly)",
+        )
+        params = adapter.params
         if p_tot is None:
             p_tot = params.p_tot
         if f is None:
@@ -319,12 +328,12 @@ def set_prot_pool_size(
         if sigma is None:
             sigma = params.sigma
 
-    if _POOL_EXCHANGE_ID not in {r.id for r in model.reactions}:
+    if POOL_EXCHANGE_ID not in {r.id for r in model.reactions}:
         raise ValueError(
-            f"Reaction '{_POOL_EXCHANGE_ID}' not found. Call make_ec_model "
+            f"Reaction '{POOL_EXCHANGE_ID}' not found. Call make_ec_model "
             f"or add_protein_pool_exchange_reaction first."
         )
 
     bound = p_tot * f * sigma * 1000.0
-    model.reactions.get_by_id(_POOL_EXCHANGE_ID).upper_bound = bound
+    model.reactions.get_by_id(POOL_EXCHANGE_ID).upper_bound = bound
     return bound

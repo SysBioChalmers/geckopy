@@ -346,18 +346,18 @@ def test_fuzzy_prio1_row_blocks_dlkcat_rows_for_same_reaction():
 
 
 # --------------------------------------------------------------------------- #
-# Realistic end-to-end with select_kcat_value
+# Realistic end-to-end with apply_kcat_list
 # --------------------------------------------------------------------------- #
 
-def test_output_can_feed_select_kcat_value(tmp_path):
+def test_output_can_feed_apply_kcat_list(tmp_path):
     """End-to-end: a merged DataFrame should pass through
-    select_kcat_value without column adjustments."""
+    apply_kcat_list without column adjustments."""
     import numpy as np
     from scipy import sparse
 
     from geckopy.ec_model import EcModel
     from geckopy.ec_model.ec_data import EcData
-    from geckopy.gather_kcats import select_kcat_value
+    from geckopy.gather_kcats import apply_kcat_list
 
     merged = merge_dlkcat_and_fuzzy_kcats(
         _dlkcat_df([_dlkcat_row("r2", 100.0)]),
@@ -373,7 +373,7 @@ def test_output_can_feed_select_kcat_value(tmp_path):
         eccodes=["", ""],
         rxn_enz_mat=sparse.csr_matrix((2, 0), dtype=float),
     )
-    updated = select_kcat_value(model, merged)
+    updated = apply_kcat_list(model, merged)
     assert sorted(updated) == ["r1", "r2"]
     assert model.ec.source[0] == "brenda"
     assert model.ec.source[1] == "DLKcat"

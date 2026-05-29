@@ -18,7 +18,7 @@ _CRITERIA = ("max", "min", "median", "mean")
 _OverwriteMode = Union[bool, Literal["if_higher"]]
 
 
-def select_kcat_value(
+def apply_kcat_list(
     model: "EcModel",
     kcat_list: pd.DataFrame,
     *,
@@ -154,10 +154,36 @@ def _should_overwrite(
     current: float, new: float, mode: _OverwriteMode,
 ) -> bool:
     """Decide whether to write `new` over `current` per the overwrite mode."""
-    is_unset = np.isnan(current) or current == 0
+    is_unset = current == 0
     if mode is True:
         return True
     if mode is False:
         return is_unset
     # "if_higher"
     return is_unset or new > current
+
+
+def select_kcat_value(
+    model: "EcModel",
+    kcat_list: pd.DataFrame,
+    *,
+    criteria: Literal["max", "min", "median", "mean"] = "max",
+    overwrite: _OverwriteMode = True,
+) -> list[str]:
+    """Deprecated alias for :func:`apply_kcat_list`.
+
+    Kept for backward compatibility with the original MATLAB name.
+    Will be removed in a future release; switch to
+    ``apply_kcat_list``.
+    """
+    import warnings
+
+    warnings.warn(
+        "select_kcat_value is deprecated; use apply_kcat_list instead. "
+        "The old name will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return apply_kcat_list(
+        model, kcat_list, criteria=criteria, overwrite=overwrite,
+    )

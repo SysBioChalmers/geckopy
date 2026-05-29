@@ -8,11 +8,11 @@ from scipy import sparse
 from geckopy import EcModel, ModelAdapter
 from geckopy.databases import UniprotDB
 from geckopy.ec_model.ec_data import EcData
-from geckopy.gather_kcats import get_standard_kcat, remove_standard_kcat
+from geckopy.gather_kcats import assign_standard_kcat, remove_standard_kcat
 
 
 # --------------------------------------------------------------------------- #
-# Fixture builders (shared with test_get_standard_kcat)
+# Fixture builders (shared with test_assign_standard_kcat)
 # --------------------------------------------------------------------------- #
 
 def _adapter(tmp_path: Path, *, enzyme_comp: str = "c") -> ModelAdapter:
@@ -146,7 +146,7 @@ def test_idempotent_double_call(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     remove_standard_kcat(model)
     snap = {
         "ec_rxns": list(model.ec.rxns),
@@ -172,7 +172,7 @@ def test_standard_enzyme_removed_from_ec(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "standard" in model.ec.enzymes
     remove_standard_kcat(model)
     assert "standard" not in model.ec.enzymes
@@ -186,7 +186,7 @@ def test_standard_pseudoenzyme_rxns_removed_from_ec(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "r1" in model.ec.rxns
     remove_standard_kcat(model)
     assert "r1" not in model.ec.rxns
@@ -199,7 +199,7 @@ def test_topology_removed(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "prot_standard" in {m.id for m in model.metabolites}
     assert "usage_prot_standard" in {r.id for r in model.reactions}
     assert "standard" in {g.id for g in model.genes}
@@ -222,7 +222,7 @@ def test_rxn_enz_mat_shape_after_removal(tmp_path):
         ec_genes=["g1"], ec_enzymes=["g1"], ec_mws=[100.0],
         rxn_to_ec_genes=[[0]],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     # After get: 2 rxns (r1, r2), 2 enzymes (g1, standard).
     assert model.ec.rxn_enz_mat.shape == (2, 2)
 
@@ -249,7 +249,7 @@ def test_filled_zero_kcat_reset_to_zero(tmp_path):
         ec_genes=["g1", "g2"], ec_enzymes=["g1", "g2"], ec_mws=[100.0, 100.0],
         rxn_to_ec_genes=[[0], [1]],
     )
-    get_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
+    assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
     r2_idx = model.ec.rxns.index("r2")
     assert model.ec.source[r2_idx] == "standard"
     assert model.ec.kcat[r2_idx] > 0
@@ -266,7 +266,7 @@ def test_filled_zero_kcat_reset_to_zero(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_round_trip_restores_original_state(tmp_path):
-    """get_standard_kcat -> remove_standard_kcat returns the model
+    """assign_standard_kcat -> remove_standard_kcat returns the model
     to its original state (modulo S-matrix coefficients)."""
     adapter = _adapter(tmp_path)
     model = _build_model_with_pool(
@@ -288,7 +288,7 @@ def test_round_trip_restores_original_state(tmp_path):
         "n_cobra_rxns": len(model.reactions),
         "n_cobra_genes": len(model.genes),
     }
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     remove_standard_kcat(model)
 
     assert list(model.ec.rxns) == snapshot["ec_rxns"]
@@ -316,7 +316,7 @@ def test_round_trip_with_fill_zero_kcat(tmp_path):
     snap_kcat = model.ec.kcat.copy()
     snap_source = list(model.ec.source)
 
-    get_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
+    assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
     remove_standard_kcat(model)
 
     np.testing.assert_array_equal(model.ec.kcat, snap_kcat)
@@ -337,7 +337,7 @@ def test_gecko_light_round_trip(tmp_path):
     snap_n_mets = len(model.metabolites)
     snap_n_rxns = len(model.reactions)
 
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     remove_standard_kcat(model)
 
     # In light mode, no topology was added or removed.

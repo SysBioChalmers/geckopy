@@ -56,10 +56,10 @@ def test_make_ec_model_populates_ec_genes_alphabetically():
     )
 
 
-def test_make_ec_model_kcat_initialized_nan():
+def test_make_ec_model_kcat_initialized_zero():
     model, adapter = _load_fresh_ectestgem()
     ec_model = make_ec_model(model, adapter)
-    assert np.isnan(ec_model.ec.kcat).all()
+    assert (ec_model.ec.kcat == 0).all()
 
 
 def test_make_ec_model_adds_prot_metabolites():

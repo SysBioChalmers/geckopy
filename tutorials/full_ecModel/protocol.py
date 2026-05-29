@@ -23,34 +23,30 @@ from pathlib import Path
 
 import cobra
 
-from geckopy import EcModel, ModelAdapter, make_ec_model
-from geckopy.databases import (
+from geckopy import (
+    ModelAdapter,
+    apply_complex_data,
+    apply_custom_kcats,
+    apply_kcat_constraints,
+    apply_kcat_list,
+    assign_standard_kcat,
+    fill_eccodes_from_database,
+    fill_kcats_from_isozymes,
+    find_met_smiles,
+    fuzzy_kcat_matching,
     load_brenda_data,
+    load_conventional_gem,
     load_dlkcat_ignore_lists,
+    load_ec_model,
     load_phyl_dist,
     load_uniprot_tsv,
-)
-from geckopy.databases import find_met_smiles
-from geckopy.ec_model.pipeline.apply_complex_data import apply_complex_data
-from geckopy.ec_model.pipeline.apply_custom_kcats import apply_custom_kcats
-from geckopy.ec_model.pipeline.apply_kcat import apply_kcat_constraints
-from geckopy.ec_model.pipeline.fill_kcats import get_kcat_across_isozymes
-from geckopy.ec_model.pipeline.protein_pool import set_prot_pool_size
-from geckopy.ec_model.pipeline.set_kcat import set_kcat_for_reactions
-from geckopy.gather_kcats.fuzzy_kcat_matching import fuzzy_kcat_matching
-from geckopy.gather_kcats.get_standard_kcat import get_standard_kcat
-from geckopy.gather_kcats.merge_dlkcat_and_fuzzy_kcats import (
+    make_ec_model,
     merge_dlkcat_and_fuzzy_kcats,
-)
-from geckopy.gather_kcats.read_dlkcat_output import read_dlkcat_output
-from geckopy.gather_kcats.select_kcat_value import select_kcat_value
-from geckopy.gather_kcats.write_dlkcat_input import write_dlkcat_input
-from geckopy.get_enzyme_data.ec_from_database import get_ec_from_database
-from geckopy.get_enzyme_data.ec_from_gem import get_ec_from_gem
-from geckopy.utilities import (
-    load_conventional_gem,
-    load_ec_model,
+    read_dlkcat_output,
     save_ec_model,
+    set_kcat_for_reactions,
+    set_prot_pool_size,
+    write_dlkcat_input,
 )
 
 # %% [markdown]
@@ -123,7 +119,7 @@ save_ec_model(ec_model, "ecYeastGEM_stage1.yml", adapter=adapter)
 # same.
 
 # %%
-get_ec_from_database(ec_model, uniprot_db)
+fill_eccodes_from_database(ec_model, uniprot_db)
 
 # %% [markdown]
 # **STEP 18-19** Gather kcat values from BRENDA via fuzzy matching.
@@ -186,7 +182,7 @@ kcat_list_merged = merge_dlkcat_and_fuzzy_kcats(
 # **STEP 27** Populate `ec_model.ec.kcat` from the merged list.
 
 # %%
-select_kcat_value(ec_model, kcat_list_merged)
+apply_kcat_list(ec_model, kcat_list_merged)
 
 # %% [markdown]
 # **STEP 28** Apply manually-curated kcat values from
@@ -200,7 +196,7 @@ apply_custom_kcats(ec_model, path=params.path / "data" / "customKcats.tsv")
 # enzymes that catalyse the same reaction).
 
 # %%
-get_kcat_across_isozymes(ec_model)
+fill_kcats_from_isozymes(ec_model)
 
 # %% [markdown]
 # **STEP 30** Get standard kcat. Assigns a protein cost to
@@ -209,7 +205,7 @@ get_kcat_across_isozymes(ec_model)
 # `data/pseudoRxns.tsv`.
 
 # %%
-get_standard_kcat(ec_model, uniprot_db)
+assign_standard_kcat(ec_model, uniprot_db)
 
 # %% [markdown]
 # **STEP 31** Apply kcat constraints to the stoichiometric matrix.
@@ -257,7 +253,7 @@ print(f"(Below the 0.41 /hour reference for S. cerevisiae)")
 # Returns a result with the tuned kcats.
 
 # %%
-from geckopy.kcat_sensitivity_analysis import sensitivity_tuning
+from geckopy import sensitivity_tuning
 
 tuning_result = sensitivity_tuning(ec_model)
 final_growth = ec_model.optimize().fluxes[params.bio_rxn]
@@ -312,13 +308,14 @@ save_ec_model(ec_model, "ecYeastGEM.yml", adapter=adapter)
 # condition).
 
 # %%
-from geckopy.databases import load_flux_data, load_prot_data
-from geckopy.limit_proteins import (
+from geckopy import (
+    apply_flux_data_constraints,
     calculate_f_factor,
     constrain_enz_concs,
-    constrain_flux_data,
     fill_enz_concs,
     flexibilize_enz_concs,
+    load_flux_data,
+    load_prot_data,
 )
 
 prot_data = load_prot_data(
@@ -350,7 +347,7 @@ print(f"Recomputed f-factor: {f_pdata:.3f} "
 # **STEP 59-63** Constrain exchange fluxes from the flux data.
 
 # %%
-constrain_flux_data(
+apply_flux_data_constraints(
     ec_model, flux_data,
     condition=0, max_min_growth="max", loose_strict_flux="loose",
 )
@@ -385,10 +382,10 @@ for i in np.argsort(flex_result.ratio_incr)[::-1][:5]:
 
 # %%
 conv_model = load_conventional_gem(adapter)
-# constrain_flux_data reads bio_rxn / c_source from `model.adapter`;
+# apply_flux_data_constraints reads bio_rxn / c_source from `model.adapter`;
 # attach the same adapter so it works on the plain cobra.Model too.
 conv_model.adapter = adapter
-constrain_flux_data(
+apply_flux_data_constraints(
     conv_model, flux_data,
     condition=0, max_min_growth="max", loose_strict_flux="loose",
 )
@@ -489,7 +486,7 @@ print(f"Minimum protein pool usage at 99% of max growth: "
 # **STEP 71** Inspect enzyme usage at a non-trivial growth rate.
 
 # %%
-from geckopy.utilities import enzyme_usage, report_enzyme_usage
+from geckopy import enzyme_usage, report_enzyme_usage
 
 ec_model.objective = "r_1714"  # max glucose uptake
 ec_model.reactions.get_by_id(params.bio_rxn).lower_bound = 0.25
@@ -504,7 +501,7 @@ print(report.top_abs_usage.head(10))
 # mapping ec-rxn fluxes back via `map_rxns_to_conv`.
 
 # %%
-from geckopy.utilities import map_rxns_to_conv
+from geckopy import map_rxns_to_conv
 
 sol = ec_model.optimize()
 mapped = map_rxns_to_conv(ec_model, conv_model, sol.fluxes)
@@ -533,7 +530,7 @@ print(f"Mapped fluxes shape: {mapped.mapped_flux.shape}; "
 # # reach, and apply the same exchange constraints to all three.
 # flux_data.gr_rate[0] = 0.088
 # for m in (model_bare, ec_model_bare, ecModelProt):
-#     constrain_flux_data(
+#     apply_flux_data_constraints(
 #         m, flux_data,
 #         condition=0, max_min_growth="max", loose_strict_flux="loose",
 #     )

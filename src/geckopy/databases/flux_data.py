@@ -32,7 +32,7 @@ class FluxData:
         Exchange flux per (condition, reaction), mmol/gDCW/h. Shape
         ``(n_conds, n_rxns)``. NaN means "no measurement"; ``+/-1000``
         is a sentinel for "unconstrained" (used by
-        ``constrain_flux_data``).
+        ``apply_flux_data_constraints``).
     exch_mets
         Metabolite names matching the columns of ``exch_fluxes``.
     exch_rxn_ids

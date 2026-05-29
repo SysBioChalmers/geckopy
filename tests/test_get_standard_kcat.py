@@ -1,4 +1,4 @@
-"""Tests for get_standard_kcat."""
+"""Tests for assign_standard_kcat."""
 from pathlib import Path
 
 import cobra
@@ -9,7 +9,7 @@ from scipy import sparse
 from geckopy import EcModel, ModelAdapter
 from geckopy.databases import UniprotDB
 from geckopy.ec_model.ec_data import EcData
-from geckopy.gather_kcats import get_standard_kcat
+from geckopy.gather_kcats import assign_standard_kcat
 
 
 # --------------------------------------------------------------------------- #
@@ -121,7 +121,7 @@ def test_no_adapter_raises(tmp_path):
     )
     model.adapter = None
     with pytest.raises(ValueError, match="adapter"):
-        get_standard_kcat(model, _uniprot([100.0]))
+        assign_standard_kcat(model, _uniprot([100.0]))
 
 
 # --------------------------------------------------------------------------- #
@@ -137,7 +137,7 @@ def test_standard_mw_is_median_of_uniprot_mw(tmp_path):
         ec_rxns=[], ec_kcats=[],
     )
     db = _uniprot([10.0, 20.0, 30.0, 100.0, 1000.0])
-    get_standard_kcat(model, db)
+    assign_standard_kcat(model, db)
     # MW for the standard pseudoenzyme is the median of the UniProt MWs.
     std_idx = model.ec.enzymes.index("standard")
     assert model.ec.mw[std_idx] == pytest.approx(30.0)
@@ -151,7 +151,7 @@ def test_standard_mw_handles_nan_in_uniprot(tmp_path):
         ec_rxns=[], ec_kcats=[],
     )
     db = _uniprot([10.0, np.nan, 30.0, np.nan, 50.0])
-    get_standard_kcat(model, db)
+    assign_standard_kcat(model, db)
     std_idx = model.ec.enzymes.index("standard")
     assert model.ec.mw[std_idx] == pytest.approx(30.0)
 
@@ -183,7 +183,7 @@ def test_standard_kcat_is_median_of_nonzero_existing_kcats(tmp_path):
         model.ec.rxn_enz_mat,
         sparse.csr_matrix((3, 1), dtype=float),
     ], format="csr")
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     # standard_kcat = median(5.0, 10.0, 20.0) = 10.0; rxn r1 (no GPR) gets that.
     r1_idx = model.ec.rxns.index("r1")
     assert model.ec.kcat[r1_idx] == pytest.approx(10.0)
@@ -222,7 +222,7 @@ def test_subsystem_mean_used_above_threshold(tmp_path):
         if r.id.startswith("sub_r") or r.id == "missing_r":
             r.subsystem = "S"
 
-    get_standard_kcat(model, _uniprot([100.0]), threshold=10)
+    assign_standard_kcat(model, _uniprot([100.0]), threshold=10)
     # missing_r should get subsystem mean = 2.0, NOT the global median of 2.0.
     # (Same value here, but the path is "subsystem mean".)
     missing_idx = model.ec.rxns.index("missing_r")
@@ -253,7 +253,7 @@ def test_subsystem_below_threshold_falls_back_to_standard(tmp_path):
         model.reactions.get_by_id(rid).subsystem = "S"
     model.reactions.get_by_id("missing_r").subsystem = "S"
 
-    get_standard_kcat(model, _uniprot([100.0]), threshold=10)
+    assign_standard_kcat(model, _uniprot([100.0]), threshold=10)
     # Only 3 reactions in subsystem S, threshold=10 -> standardKcat = median(100, 100, 100) = 100.
     missing_idx = model.ec.rxns.index("missing_r")
     assert model.ec.kcat[missing_idx] == pytest.approx(100.0)
@@ -270,7 +270,7 @@ def test_standard_pseudoenzyme_added_to_topology(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "prot_standard" in {m.id for m in model.metabolites}
     assert "usage_prot_standard" in {r.id for r in model.reactions}
     assert "standard" in model.ec.enzymes
@@ -288,7 +288,7 @@ def test_standard_pseudoenzyme_skipped_for_gecko_light(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[], gecko_light=True, add_prot_pool=False,
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     # No metabolite or usage reaction added in light mode...
     assert "prot_standard" not in {m.id for m in model.metabolites}
     assert "usage_prot_standard" not in {r.id for r in model.reactions}
@@ -303,7 +303,7 @@ def test_gecko_light_uses_4char_prefix_for_added_rxns(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[], gecko_light=True, add_prot_pool=False,
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     # gecko_light adds rxn IDs with "001_" prefix to ec.rxns.
     assert any(rid.startswith("001_") for rid in model.ec.rxns)
 
@@ -324,7 +324,7 @@ def test_reaction_without_gpr_gets_standard(tmp_path):
         ec_genes=["g1"], ec_enzymes=["g1"], ec_mws=[100.0],
         rxn_to_ec_genes=[[0]],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "r1" in model.ec.rxns
     assert "r2" in model.ec.rxns
 
@@ -338,7 +338,7 @@ def test_reaction_with_gpr_but_no_ec_entry_gets_standard(tmp_path):
         ],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "r1" in model.ec.rxns
     r1_idx = model.ec.rxns.index("r1")
     assert model.ec.source[r1_idx] == "standard"
@@ -354,7 +354,7 @@ def test_exchange_reaction_excluded(tmp_path):
         ],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "EX_alpha" not in model.ec.rxns
     assert "r2" in model.ec.rxns
 
@@ -377,7 +377,7 @@ def test_transport_reaction_excluded(tmp_path):
         ],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "transport_r" not in model.ec.rxns
     assert "metabolic_r" in model.ec.rxns
 
@@ -397,7 +397,7 @@ def test_pseudoreaction_excluded_by_name(tmp_path):
         ec_rxns=[], ec_kcats=[],
     )
     model.reactions.get_by_id("biomass_r").name = "growth pseudoreaction"
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "biomass_r" not in model.ec.rxns
     assert "normal_r" in model.ec.rxns
 
@@ -419,7 +419,7 @@ def test_custom_pseudo_rxns_tsv_excluded(tmp_path):
         ],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     assert "ignore_me" not in model.ec.rxns
     assert "keep_me" in model.ec.rxns
 
@@ -435,9 +435,9 @@ def test_idempotent_re_run_does_not_duplicate_standard(tmp_path):
         [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], None)],
         ec_rxns=[], ec_kcats=[],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     n_after_first = len(model.ec.rxns)
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     n_after_second = len(model.ec.rxns)
     assert n_after_first == n_after_second
     # Topology not duplicated either.
@@ -464,7 +464,7 @@ def test_idempotent_resets_source_on_real_enzyme_rxns_when_re_run(tmp_path):
         ec_mws=[100.0, 100.0],
         rxn_to_ec_genes=[[0], [1]],
     )
-    get_standard_kcat(model, _uniprot([100.0]))
+    assign_standard_kcat(model, _uniprot([100.0]))
     # r1 was filled with standard (source='standard') but linked to real g1.
     r1_idx = model.ec.rxns.index("r1")
     assert model.ec.source[r1_idx] == "standard"
@@ -474,8 +474,8 @@ def test_idempotent_resets_source_on_real_enzyme_rxns_when_re_run(tmp_path):
     model.ec.kcat[r1_idx] = 50.0
     model.ec.source[r1_idx] = "manual"
 
-    # Re-run: r1 should keep its real kcat (no longer 0/NaN).
-    get_standard_kcat(model, _uniprot([100.0]))
+    # Re-run: r1 should keep its real kcat (no longer unset).
+    assign_standard_kcat(model, _uniprot([100.0]))
     r1_idx = model.ec.rxns.index("r1")
     assert model.ec.kcat[r1_idx] == 50.0
     assert model.ec.source[r1_idx] == "manual"
@@ -496,7 +496,7 @@ def test_fill_zero_kcat_replaces_zeros_with_standard(tmp_path):
         ec_genes=["g1", "g2"], ec_enzymes=["g1", "g2"], ec_mws=[100.0, 100.0],
         rxn_to_ec_genes=[[0], [1]],
     )
-    get_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
+    assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
     r2_idx = model.ec.rxns.index("r2")
     assert model.ec.kcat[r2_idx] == pytest.approx(10.0)  # standard_kcat
     assert model.ec.source[r2_idx] == "standard"
@@ -513,22 +513,8 @@ def test_fill_zero_kcat_false_leaves_zeros_alone(tmp_path):
         ec_genes=["g1", "g2"], ec_enzymes=["g1", "g2"], ec_mws=[100.0, 100.0],
         rxn_to_ec_genes=[[0], [1]],
     )
-    get_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=False)
+    assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=False)
     r2_idx = model.ec.rxns.index("r2")
     assert model.ec.kcat[r2_idx] == 0.0
 
 
-def test_fill_zero_kcat_replaces_nan_too(tmp_path):
-    adapter = _adapter(tmp_path)
-    model = _build_model_with_pool(
-        adapter,
-        [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], "g1"),
-         ("r2", [("B", -1.0, "beta", "c"), ("C", 1.0, "gamma", "c")], "g2")],
-        ec_rxns=["r1", "r2"],
-        ec_kcats=[10.0, np.nan],
-        ec_genes=["g1", "g2"], ec_enzymes=["g1", "g2"], ec_mws=[100.0, 100.0],
-        rxn_to_ec_genes=[[0], [1]],
-    )
-    get_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
-    r2_idx = model.ec.rxns.index("r2")
-    assert model.ec.kcat[r2_idx] == pytest.approx(10.0)

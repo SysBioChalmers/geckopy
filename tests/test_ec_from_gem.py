@@ -1,4 +1,4 @@
-"""Tests for get_ec_from_gem."""
+"""Tests for fill_eccodes_from_gem."""
 import logging
 
 import cobra
@@ -8,7 +8,7 @@ from scipy import sparse
 
 from geckopy.ec_model import EcModel
 from geckopy.ec_model.ec_data import EcData
-from geckopy.get_enzyme_data import get_ec_from_gem
+from geckopy.get_enzyme_data import fill_eccodes_from_gem
 from geckopy.get_enzyme_data.ec_from_gem import _normalize_annotation
 
 
@@ -66,13 +66,13 @@ def _make_ec_model(
 
 def test_empty_ec_rxns_is_a_noop():
     model = _make_ec_model([])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == []
 
 
 def test_single_valid_ec_populated():
     model = _make_ec_model([("r1", "1.2.3.4")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4"]
 
 
@@ -81,19 +81,19 @@ def test_multiple_reactions_each_populated():
         ("r1", "1.2.3.4"),
         ("r2", "5.6.7.8"),
     ])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4", "5.6.7.8"]
 
 
 def test_missing_annotation_leaves_empty():
     model = _make_ec_model([("r1", None)])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == [""]
 
 
 def test_empty_string_annotation_leaves_empty():
     model = _make_ec_model([("r1", "")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == [""]
 
 
@@ -103,25 +103,25 @@ def test_empty_string_annotation_leaves_empty():
 
 def test_annotation_as_list_is_joined_with_semicolons():
     model = _make_ec_model([("r1", ["1.2.3.4", "5.6.7.8"])])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4;5.6.7.8"]
 
 
 def test_annotation_as_single_element_list():
     model = _make_ec_model([("r1", ["1.2.3.4"])])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4"]
 
 
 def test_annotation_as_list_with_empty_strings_filtered():
     model = _make_ec_model([("r1", ["1.2.3.4", "", "5.6.7.8"])])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4;5.6.7.8"]
 
 
 def test_annotation_string_with_semicolons_preserved():
     model = _make_ec_model([("r1", "1.2.3.4;5.6.7.8")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4;5.6.7.8"]
 
 
@@ -131,25 +131,25 @@ def test_annotation_string_with_semicolons_preserved():
 
 def test_dash_in_last_level_accepted():
     model = _make_ec_model([("r1", "1.2.3.-")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.-"]
 
 
 def test_full_dash_cascade_accepted():
     model = _make_ec_model([("r1", "1.-.-.-")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.-.-.-"]
 
 
 def test_multi_ec_with_dashes():
     model = _make_ec_model([("r1", "1.2.3.-;5.6.-.-")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.-;5.6.-.-"]
 
 
 def test_multi_digit_levels():
     model = _make_ec_model([("r1", "3.4.21.1;2.7.11.1")])
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["3.4.21.1;2.7.11.1"]
 
 
@@ -160,7 +160,7 @@ def test_multi_digit_levels():
 def test_three_level_token_rejected(caplog):
     model = _make_ec_model([("r1", "1.2.3")])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert model.ec.eccodes == [""]
     assert "skipped" in caplog.text
     assert "'1.2.3'" in caplog.text
@@ -169,7 +169,7 @@ def test_three_level_token_rejected(caplog):
 def test_underscore_separator_rejected(caplog):
     model = _make_ec_model([("r1", "1_2_3_4")])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert model.ec.eccodes == [""]
     assert "skipped" in caplog.text
 
@@ -178,7 +178,7 @@ def test_pipe_separator_for_multi_ec_rejected(caplog):
     """Per the MATLAB docstring: only `;` is a valid multi-EC separator."""
     model = _make_ec_model([("r1", "1.2.3.4|5.6.7.8")])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert model.ec.eccodes == [""]
     assert "skipped" in caplog.text
 
@@ -187,7 +187,7 @@ def test_partial_invalid_in_multi_ec_rejects_whole_string(caplog):
     """If any token in the `;`-joined string is malformed, the whole entry is rejected."""
     model = _make_ec_model([("r1", "1.2.3.4;junk")])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert model.ec.eccodes == [""]
     assert "skipped" in caplog.text
 
@@ -199,7 +199,7 @@ def test_mixed_valid_and_invalid_across_reactions(caplog):
         ("r3", "5.6.7.-"),
     ])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4", "", "5.6.7.-"]
     assert "skipped 1" in caplog.text
     assert "'junk'" in caplog.text
@@ -212,7 +212,7 @@ def test_warning_lists_all_invalid_strings(caplog):
         ("r3", "junk2"),
     ])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert "junk1" in caplog.text
     assert "junk2" in caplog.text
 
@@ -223,7 +223,7 @@ def test_no_warning_when_all_valid(caplog):
         ("r2", "5.6.7.-"),
     ])
     with caplog.at_level(logging.WARNING):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
     assert "skipped" not in caplog.text
 
 
@@ -240,7 +240,7 @@ def test_ec_rxns_subset_updates_only_specified():
     # Pre-populate r2's eccode with a sentinel; it should be left alone.
     model.ec.eccodes = ["", "preexisting", ""]
 
-    get_ec_from_gem(model, ec_rxns=["r1", "r3"])
+    fill_eccodes_from_gem(model, ec_rxns=["r1", "r3"])
 
     assert model.ec.eccodes == ["1.2.3.4", "preexisting", "9.9.9.9"]
 
@@ -248,14 +248,14 @@ def test_ec_rxns_subset_updates_only_specified():
 def test_ec_rxns_empty_is_a_noop():
     model = _make_ec_model([("r1", "1.2.3.4")])
     model.ec.eccodes = ["preexisting"]
-    get_ec_from_gem(model, ec_rxns=[])
+    fill_eccodes_from_gem(model, ec_rxns=[])
     assert model.ec.eccodes == ["preexisting"]
 
 
 def test_ec_rxns_unknown_id_raises():
     model = _make_ec_model([("r1", "1.2.3.4")])
     with pytest.raises(ValueError, match="not present in model.ec.rxns"):
-        get_ec_from_gem(model, ec_rxns=["nonexistent"])
+        fill_eccodes_from_gem(model, ec_rxns=["nonexistent"])
 
 
 def test_ec_rxns_accepts_iterables_not_just_lists():
@@ -263,7 +263,7 @@ def test_ec_rxns_accepts_iterables_not_just_lists():
         ("r1", "1.2.3.4"),
         ("r2", "5.6.7.8"),
     ])
-    get_ec_from_gem(model, ec_rxns=(rid for rid in ["r1"]))
+    fill_eccodes_from_gem(model, ec_rxns=(rid for rid in ["r1"]))
     assert model.ec.eccodes == ["1.2.3.4", ""]
 
 
@@ -278,7 +278,7 @@ def test_gecko_light_strips_4char_prefix_to_find_reaction():
         ec_rxn_prefix="001_",
     )
     # ec.rxns now reads ["001_r1", "001_r2"], model.reactions has r1, r2.
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
     assert model.ec.eccodes == ["1.2.3.4", "5.6.7.8"]
 
 
@@ -291,7 +291,7 @@ def test_gecko_light_unknown_underlying_reaction_raises():
     # Corrupt ec.rxns to point at a nonexistent stripped name.
     model.ec.rxns = ["XXXX_does_not_exist"]
     with pytest.raises(KeyError):
-        get_ec_from_gem(model)
+        fill_eccodes_from_gem(model)
 
 
 # --------------------------------------------------------------------------- #
@@ -301,7 +301,7 @@ def test_gecko_light_unknown_underlying_reaction_raises():
 def test_inherits_ec_code_from_expanded_reactions():
     """End-to-end: a reaction with isozymes is expanded by expand_model
     and its ec-code annotation should propagate to the _EXP_N copies,
-    which get_ec_from_gem then picks up."""
+    which fill_eccodes_from_gem then picks up."""
     from geckopy.ec_model.pipeline import expand_model
     from geckopy.ec_model.pipeline.populate_ec import (
         allocate_ec_for_catalyzed_reactions,
@@ -321,7 +321,7 @@ def test_inherits_ec_code_from_expanded_reactions():
 
     expand_model(model)
     allocate_ec_for_catalyzed_reactions(model)
-    get_ec_from_gem(model)
+    fill_eccodes_from_gem(model)
 
     # ec.rxns should be the two expanded reactions, both inheriting the
     # parent's EC code.

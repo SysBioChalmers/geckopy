@@ -311,7 +311,8 @@ def _populate_ec_from_sbml(
             triples.append((rxn_index[rxn.id], j, kcat))
 
     n_r = len(catalysed_rxns)
-    kcat_arr = np.full(n_r, np.nan, dtype=float)
+    # 0 marks "no kcat assigned".
+    kcat_arr = np.zeros(n_r, dtype=float)
     mat = sparse.lil_matrix((n_r, n_e), dtype=float)
     for rxn_idx, enz_idx, kcat in triples:
         # Multiple (rxn, enz) entries collapse to one (kcat per cell).

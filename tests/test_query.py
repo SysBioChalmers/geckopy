@@ -14,10 +14,18 @@ from geckopy.ec_model.pipeline import (
 EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    return make_ec_model(cobra_model, adapter)
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def test_returns_dataframe_with_expected_columns():
@@ -46,10 +54,10 @@ def test_p3_catalyzes_both_r2_isozyme_branches():
     assert sorted(df["rxn_id"].tolist()) == ["R2_EXP_2", "R2_REV_EXP_2"]
 
 
-def test_kcat_initially_nan():
+def test_kcat_initially_zero():
     ec_model = _ectestgem_ec_model()
     df = get_reactions_from_enzyme(ec_model, "P4")
-    assert df["kcat"].isna().all()
+    assert (df["kcat"] == 0).all()
 
 
 def test_kcat_reflects_set_value():

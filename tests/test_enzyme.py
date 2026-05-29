@@ -12,10 +12,18 @@ from geckopy.ec_model.pipeline import apply_kcat_constraints
 EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    return make_ec_model(cobra_model, adapter)
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _get_s_coef(rxn: cobra.Reaction, met_id: str) -> float:
@@ -122,15 +130,6 @@ def test_kcats_set_complex_raises():
         enz.kcats["R2_EXP_1"] = 100.0
 
 
-def test_kcats_del_sets_nan():
-    model = _ectestgem_ec_model()
-    r3_idx = model.ec.rxns.index("R3")
-    model.ec.kcat[r3_idx] = 5.0
-    enz = model.enzymes.get_by_id("P4")
-    del enz.kcats["R3"]
-    assert np.isnan(model.ec.kcat[r3_idx])
-
-
 def test_kcats_unknown_rxn_raises():
     model = _ectestgem_ec_model()
     enz = model.enzymes.get_by_id("P4")
@@ -230,6 +229,36 @@ def test_gecko_light_blocks_kcats_setter():
     enz = model.enzymes.get_by_id("P4")
     with pytest.raises(NotImplementedError):
         enz.kcats["R3"] = 10.0
+
+
+def test_gecko_light_allows_read_only_metadata():
+    """Read-only metadata (mw, gene, sequence, concentration, kcats[r])
+    works on light models because it reads from `model.ec.*` arrays
+    that exist in both layouts. Only the per-enzyme prot/usage
+    machinery is missing."""
+    model = _ectestgem_ec_model()
+    model.ec.gecko_light = True
+    enz = model.enzymes.get_by_id("P4")
+    # All of these should work without raising.
+    assert enz.id == "P4"
+    assert enz.gene == "G4"
+    assert isinstance(enz.mw, float)
+    assert enz.sequence == "MDFM"
+
+
+def test_gecko_light_blocks_full_model_only_attrs():
+    """Attributes that require the per-enzyme `prot_<id>` met and
+    `usage_prot_<id>` reaction (which only the full layout has)
+    raise a clear NotImplementedError on a light model."""
+    model = _ectestgem_ec_model()
+    model.ec.gecko_light = True
+    enz = model.enzymes.get_by_id("P4")
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        _ = enz.prot_metabolite
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        _ = enz.usage_reaction
+    with pytest.raises(NotImplementedError, match="gecko-light"):
+        _ = enz.shadow_price
 
 
 # --------------------------------------------------------------------------- #

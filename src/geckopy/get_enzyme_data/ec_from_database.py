@@ -31,7 +31,7 @@ class _Conflict:
     db_name: str = "uniprot"
 
 
-def get_ec_from_database(
+def fill_eccodes_from_database(
     model: "EcModel",
     uniprot_db: "UniprotDB",
     *,
@@ -118,11 +118,12 @@ def get_ec_from_database(
             f"action must be 'display' or 'ignore', got {action!r}"
         )
 
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; get_ec_from_database needs an "
-            "adapter to transform gene IDs."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="fill_eccodes_from_database transforms gene IDs to "
+        "UniProt-compatible form via the adapter",
+    )
 
     n = model.ec.n_rxns
     if n == 0:
@@ -146,7 +147,7 @@ def get_ec_from_database(
         return
 
     gene_to_protein_indices = _build_gene_to_protein_indices(
-        model.ec.genes, uniprot_db, model.adapter,
+        model.ec.genes, uniprot_db, adapter,
     )
 
     db_eccodes = uniprot_db.eccodes
@@ -231,9 +232,9 @@ def _format_conflict_message(
     """Build the aggregated multi-line message for action='display'."""
     rxn_count = len({c.rxn_idx for c in conflicts})
     lines = [
-        f"get_ec_from_database: {len(conflicts)} gene-protein conflict(s) "
+        f"fill_eccodes_from_database: {len(conflicts)} gene-protein conflict(s) "
         f"found across {rxn_count} reaction(s). Resolve by editing your "
-        f"UniProt data, or call get_ec_from_database with "
+        f"UniProt data, or call fill_eccodes_from_database with "
         f"action='ignore' to silently use the first match per gene:",
     ]
     for c in conflicts:
@@ -244,3 +245,30 @@ def _format_conflict_message(
             f"proteins {', '.join(protein_ids)}"
         )
     return "\n".join(lines)
+
+
+def get_ec_from_database(
+    model: "EcModel",
+    uniprot_db: "UniprotDB",
+    *,
+    ec_rxns: Optional[Iterable[str]] = None,
+    action: Literal["display", "ignore"] = "display",
+) -> None:
+    """Deprecated alias for :func:`fill_eccodes_from_database`.
+
+    Kept for backward compatibility with the original MATLAB name.
+    Will be removed in a future release; switch to
+    ``fill_eccodes_from_database``.
+    """
+    import warnings
+
+    warnings.warn(
+        "get_ec_from_database is deprecated; use "
+        "fill_eccodes_from_database instead. The old name will be "
+        "removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return fill_eccodes_from_database(
+        model, uniprot_db, ec_rxns=ec_rxns, action=action,
+    )

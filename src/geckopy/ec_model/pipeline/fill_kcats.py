@@ -23,7 +23,7 @@ _EXP_SUFFIX_REGEX = re.compile(r"_EXP_\d+$")
 _SOURCE_TAG = "isozymes"
 
 
-def get_kcat_across_isozymes(
+def fill_kcats_from_isozymes(
     model: "EcModel",
     *,
     apply: bool = True,
@@ -38,22 +38,21 @@ def get_kcat_across_isozymes(
     NOT stripped: forward and reverse reactions share chemistry but
     can have different kcats, so they are kept distinct.
 
-    For each reaction with NaN ``ec.kcat`` (missing), find its siblings
-    with non-NaN kcats. If any exist, take their mean and assign it.
-    Set ``ec.source`` to ``"isozymes"`` for the filled entries.
+    For each reaction with no kcat assigned (``ec.kcat == 0``), find
+    its siblings whose kcat is set (``> 0``). If any exist, take their
+    mean and assign it. Set ``ec.source`` to ``"isozymes"`` for the
+    filled entries.
 
-    Reactions whose siblings all also have missing kcats remain NaN.
-    Reactions with a single isozyme (no siblings beyond themselves)
-    also remain NaN.
+    Reactions whose siblings all also lack a kcat stay at 0. Reactions
+    with a single isozyme (no siblings beyond themselves) also stay at 0.
 
-    MATLAB-COMPAT: MATLAB uses ``kcat == 0`` to mark "missing"; geckopy
-    uses ``NaN``. See docs/future_improvements.md for translation
-    discussion.
-
-    MATLAB-COMPAT: The function name "get_kcat_across_isozymes" is a
-    literal port; "fill_kcats_from_isozymes" would be more descriptive
-    since the function modifies ec.kcat in place. A coordinated rename
-    is tracked in docs/future_improvements.md.
+    MATLAB-COMPAT: this function was originally named
+    ``getKcatAcrossIsozymes`` in MATLAB; geckopy renamed it to
+    ``fill_kcats_from_isozymes`` because the verb "get" misled
+    callers into thinking it returns a value (it mutates
+    ``model.ec.kcat`` in place). The old name
+    ``get_kcat_across_isozymes`` is kept as a deprecated alias and
+    will be removed in a future release.
 
     Parameters
     ----------
@@ -73,13 +72,14 @@ def get_kcat_across_isozymes(
     """
     if model.ec.gecko_light:
         raise NotImplementedError(
-            "get_kcat_across_isozymes: not applicable to gecko-light models."
+            "fill_kcats_from_isozymes: not applicable to gecko-light models."
         )
 
     kcat = model.ec.kcat
-    if kcat.size == 0 or np.isnan(kcat).all():
+    known_mask = kcat > 0
+    if kcat.size == 0 or not known_mask.any():
         logger.warning(
-            "get_kcat_across_isozymes: ec.kcat has no known values to "
+            "fill_kcats_from_isozymes: ec.kcat has no known values to "
             "average from; model unchanged."
         )
         return
@@ -89,14 +89,14 @@ def get_kcat_across_isozymes(
 
     # Group known kcats by base_id.
     known_by_base: dict[str, list[float]] = {}
-    for bid, k in zip(base_ids, kcat):
-        if not np.isnan(k):
+    for bid, k, known in zip(base_ids, kcat, known_mask):
+        if known:
             known_by_base.setdefault(bid, []).append(float(k))
 
     # For each missing entry, look up its base group and average if available.
     filled_indices: list[int] = []
-    for i, (bid, k) in enumerate(zip(base_ids, kcat)):
-        if not np.isnan(k):
+    for i, (bid, known) in enumerate(zip(base_ids, known_mask)):
+        if known:
             continue
         siblings = known_by_base.get(bid)
         if not siblings:
@@ -107,16 +107,35 @@ def get_kcat_across_isozymes(
 
     if not filled_indices:
         logger.info(
-            "get_kcat_across_isozymes: no missing kcats had isozymes with "
+            "fill_kcats_from_isozymes: no missing kcats had isozymes with "
             "known kcats; nothing filled."
         )
         return
 
     logger.info(
-        "get_kcat_across_isozymes: filled %d kcat(s) by averaging across "
+        "fill_kcats_from_isozymes: filled %d kcat(s) by averaging across "
         "isozymes.", len(filled_indices),
     )
 
     if apply:
         filled_rxn_ids = [model.ec.rxns[i] for i in filled_indices]
         apply_kcat_constraints(model, update_rxns=filled_rxn_ids)
+
+
+def get_kcat_across_isozymes(model: "EcModel", *, apply: bool = True) -> None:
+    """Deprecated alias for :func:`fill_kcats_from_isozymes`.
+
+    Kept for backward compatibility with the original MATLAB name.
+    Will be removed in a future release; switch to
+    ``fill_kcats_from_isozymes``.
+    """
+    import warnings
+
+    warnings.warn(
+        "get_kcat_across_isozymes is deprecated; use "
+        "fill_kcats_from_isozymes instead. The old name will be "
+        "removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return fill_kcats_from_isozymes(model, apply=apply)

@@ -39,8 +39,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-_USAGE_PREFIX = "usage_prot_"
-_PROT_PREFIX = "prot_"
+from ..ec_model.constants import (
+    PROT_PREFIX,
+    USAGE_PREFIX,
+)
 _TUNING_SOURCE = "sensitivityTuning"
 
 
@@ -140,12 +142,18 @@ def sensitivity_tuning(
         )
 
     if desired_growth_rate is None:
-        if model.adapter is None or model.adapter.params.gr_exp is None:
+        from ..adapter import resolve_adapter
+        adapter = resolve_adapter(
+            model,
+            purpose="sensitivity_tuning needs `desired_growth_rate` "
+            "(pass it explicitly, or rely on params.gr_exp from the adapter)",
+        )
+        if adapter.params.gr_exp is None:
             raise ValueError(
                 "desired_growth_rate not provided and "
-                "model.adapter.params.gr_exp is unavailable."
+                "model.adapter.params.gr_exp is unset."
             )
-        desired_growth_rate = float(model.adapter.params.gr_exp)
+        desired_growth_rate = float(adapter.params.gr_exp)
 
     if prot_to_ignore is None:
         prot_to_ignore = []
@@ -169,9 +177,9 @@ def sensitivity_tuning(
 
     usage_rxn_ids = [
         r.id for r in model.reactions
-        if r.id.startswith(_USAGE_PREFIX)
+        if r.id.startswith(USAGE_PREFIX)
     ]
-    ignore_usage_ids = {f"{_USAGE_PREFIX}{p}" for p in prot_to_ignore}
+    ignore_usage_ids = {f"{USAGE_PREFIX}{p}" for p in prot_to_ignore}
 
     last_growth = float("nan")
     tuned_ec_indices: list[int] = []  # indices into model.ec.rxns
@@ -218,8 +226,8 @@ def sensitivity_tuning(
             break
 
         # The enzyme metabolite the usage rxn produces.
-        enzyme_id = best_usage_id[len(_USAGE_PREFIX):]
-        prot_met_id = f"{_PROT_PREFIX}{enzyme_id}"
+        enzyme_id = best_usage_id[len(USAGE_PREFIX):]
+        prot_met_id = f"{PROT_PREFIX}{enzyme_id}"
         try:
             prot_met = model.metabolites.get_by_id(prot_met_id)
         except KeyError:

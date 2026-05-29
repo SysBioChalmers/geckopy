@@ -13,8 +13,10 @@ if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
 
-_USAGE_PREFIX = "usage_prot_"
-_PROT_POOL_ID = "prot_pool"
+from ..ec_model.constants import (
+    POOL_ID,
+    USAGE_PREFIX,
+)
 
 
 def constrain_enz_concs(
@@ -78,16 +80,16 @@ def constrain_enz_concs(
         ``usage_prot_<enzyme>`` reaction is missing for an enzyme
         in ``model.ec.enzymes``.
     """
-    if _PROT_POOL_ID not in {m.id for m in model.metabolites}:
+    if POOL_ID not in {m.id for m in model.metabolites}:
         raise ValueError(
-            f"Cannot find {_PROT_POOL_ID!r} pseudometabolite. The protein "
+            f"Cannot find {POOL_ID!r} pseudometabolite. The protein "
             f"pool machinery must be set up before constraining enzyme "
             f"concentrations."
         )
 
     cobra_rxn_ids = {r.id for r in model.reactions}
     for enz in model.ec.enzymes:
-        rxn_id = f"{_USAGE_PREFIX}{enz}"
+        rxn_id = f"{USAGE_PREFIX}{enz}"
         if rxn_id not in cobra_rxn_ids:
             raise ValueError(
                 f"Usage reaction {rxn_id!r} not found. Usage reactions "
@@ -106,7 +108,7 @@ def constrain_enz_concs(
         )
 
     for i, enz in index_iter:
-        rxn = model.reactions.get_by_id(f"{_USAGE_PREFIX}{enz}")
+        rxn = model.reactions.get_by_id(f"{USAGE_PREFIX}{enz}")
         rxn.upper_bound = 1000.0
         if remove_constraints:
             continue

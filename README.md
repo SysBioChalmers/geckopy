@@ -47,9 +47,13 @@ A minimal end-to-end build, assuming you have a project folder set up the
 way the tutorial expects (`model_adapter.toml` + `models/` + `data/`):
 
 ```python
-from geckopy import ModelAdapter, make_ec_model
-from geckopy.databases import load_uniprot_tsv
-from geckopy.utilities import load_conventional_gem, save_ec_model
+from geckopy import (
+    ModelAdapter,
+    load_conventional_gem,
+    load_uniprot_tsv,
+    make_ec_model,
+    save_ec_model,
+)
 
 # 1. The adapter holds organism-specific parameters (taxonomy id,
 #    biomass reaction, average enzyme saturation, etc.). They live in
@@ -68,6 +72,11 @@ ec_model = make_ec_model(model, adapter, uniprot_db=uniprot)
 # 4. Save in geckopy's YAML format. SBML (.xml) is also supported.
 save_ec_model(ec_model, "ecModel.yml", adapter=adapter)
 ```
+
+Every public function (loaders, kcat fetchers, FBA/FVA helpers,
+SBML I/O, ...) is reachable as `from geckopy import X` -- the
+subpackages exist for code organisation but you don't have to use
+them. See `geckopy.__all__` for the full list (~85 names).
 
 The full protocol (which adds kcat curation from BRENDA and DLKcat,
 proteomics integration, and Crabtree-effect simulation) is in

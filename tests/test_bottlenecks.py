@@ -11,14 +11,24 @@ from geckopy.utilities import get_enzyme_bottlenecks
 EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 
 
+_ECTESTGEM_CACHE = None
+
+
 def _ectestgem_solvable():
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model = make_ec_model(cobra_model, adapter)
-    ec_model.ec.kcat[:] = 10.0
-    apply_kcat_constraints(ec_model)
-    ec_model.objective = "R3"
-    return ec_model
+    """Cached build of the ecTestGEM ecModel with kcat=10 + R3 objective;
+    deep-copied per call so per-test mutations are isolated."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        from geckopy import EcModel  # local import keeps the type annotation light
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        ec_model: EcModel = make_ec_model(cobra_model, adapter)
+        ec_model.ec.kcat[:] = 10.0
+        apply_kcat_constraints(ec_model)
+        ec_model.objective = "R3"
+        _ECTESTGEM_CACHE = ec_model
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def test_returns_top_n():

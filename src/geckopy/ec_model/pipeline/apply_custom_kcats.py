@@ -99,12 +99,14 @@ def apply_custom_kcats(
         If the file has fewer than 7 tab-delimited columns in the header.
     """
     if path is None:
-        if model.adapter is None:
-            raise ValueError(
-                "model.adapter is None; cannot resolve default path. "
-                "Pass an explicit path."
-            )
-        path = model.adapter.params.path / "data" / "customKcats.tsv"
+        from ...adapter import resolve_adapter
+        adapter = resolve_adapter(
+            model,
+            purpose="apply_custom_kcats needs a customKcats.tsv path "
+            "(pass `path=` explicitly, or rely on the adapter's "
+            "default `<path>/data/customKcats.tsv`)",
+        )
+        path = adapter.params.path / "data" / "customKcats.tsv"
     path = Path(path)
 
     if not path.is_file():

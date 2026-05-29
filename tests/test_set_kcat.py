@@ -18,11 +18,18 @@ EXAMPLE_DIR = Path(__file__).parents[1] / "examples" / "ecTestGEM"
 # Fixtures
 # --------------------------------------------------------------------------- #
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    ec_model = make_ec_model(cobra_model, adapter)
-    return ec_model
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _kcat_at(model: EcModel, rxn_id: str) -> float:
@@ -84,7 +91,7 @@ def test_unsuffixed_rxn_expands_to_all_isozymes():
     assert _kcat_at(ec_model, "R2_EXP_1") == 5.0
     assert _kcat_at(ec_model, "R2_EXP_2") == 5.0
     # R2_REV_EXP_1 should NOT have been updated.
-    assert np.isnan(_kcat_at(ec_model, "R2_REV_EXP_1"))
+    assert _kcat_at(ec_model, "R2_REV_EXP_1") == 0
 
 
 def test_unsuffixed_rxn_with_scalar_kcat_broadcasts():
@@ -110,7 +117,7 @@ def test_set_specific_isozyme_with_suffix():
     )
     assert updated == ["R2_EXP_1"]
     assert _kcat_at(ec_model, "R2_EXP_1") == 99.0
-    assert np.isnan(_kcat_at(ec_model, "R2_EXP_2"))
+    assert _kcat_at(ec_model, "R2_EXP_2") == 0
 
 
 # --------------------------------------------------------------------------- #

@@ -50,7 +50,7 @@ def get_reactions_from_enzyme(
         One row per catalyzed reaction, with columns:
 
         - ``rxn_id``: the reaction ID.
-        - ``kcat``: the kcat value (1/s) from ec.kcat (NaN if unset).
+        - ``kcat``: the kcat value (1/s) from ec.kcat (0 if unset).
         - ``name``: the reaction name from the cobra model.
         - ``gpr``: the gene-protein-reaction rule.
 

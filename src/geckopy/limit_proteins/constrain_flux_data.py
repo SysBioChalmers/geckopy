@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 _LooseStrict = Union[Literal["loose"], float]
 
 
-def constrain_flux_data(
+def apply_flux_data_constraints(
     model: "EcModel",
     flux_data: "FluxData",
     *,
@@ -36,7 +36,7 @@ def constrain_flux_data(
     max_min_growth: Literal["max", "min"] = "max",
     loose_strict_flux: _LooseStrict = "loose",
 ) -> None:
-    """Constrain model exchange fluxes from a ``FluxData`` measurement.
+    """Constrain the model's exchange fluxes from a ``FluxData`` measurement.
 
     Sets the biomass reaction bounds to the measured growth rate and
     each exchange reaction in ``flux_data.exch_rxn_ids`` to its
@@ -98,11 +98,12 @@ def constrain_flux_data(
     IndexError
         If ``condition`` (as int) is out of range.
     """
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; constrain_flux_data needs an "
-            "adapter for params.bio_rxn / params.c_source."
-        )
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="apply_flux_data_constraints reads params.bio_rxn "
+        "and params.c_source from the adapter",
+    )
     if max_min_growth not in ("max", "min"):
         raise ValueError(
             f"max_min_growth must be 'max' or 'min', got {max_min_growth!r}"
@@ -143,7 +144,7 @@ def constrain_flux_data(
             f"present in the model (examples: {preview})"
         )
 
-    params = model.adapter.params
+    params = adapter.params
     if params.c_source:
         try:
             c_source_rxn = model.reactions.get_by_id(params.c_source)
@@ -188,3 +189,34 @@ def constrain_flux_data(
             hi = flux * (1 + pct / 200.0)
             rxn.lower_bound = float(min(lo, hi))
             rxn.upper_bound = float(max(lo, hi))
+
+
+def constrain_flux_data(
+    model: "EcModel",
+    flux_data: "FluxData",
+    *,
+    condition: int | str = 0,
+    max_min_growth: Literal["max", "min"] = "max",
+    loose_strict_flux: _LooseStrict = "loose",
+) -> None:
+    """Deprecated alias for :func:`apply_flux_data_constraints`.
+
+    Kept for backward compatibility with the original MATLAB name.
+    Will be removed in a future release; switch to
+    ``apply_flux_data_constraints``.
+    """
+    import warnings
+
+    warnings.warn(
+        "constrain_flux_data is deprecated; use "
+        "apply_flux_data_constraints instead. The old name will be "
+        "removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return apply_flux_data_constraints(
+        model, flux_data,
+        condition=condition,
+        max_min_growth=max_min_growth,
+        loose_strict_flux=loose_strict_flux,
+    )

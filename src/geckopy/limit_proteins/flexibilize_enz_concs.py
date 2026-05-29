@@ -37,8 +37,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_USAGE_PREFIX = "usage_prot_"
-_POOL_EXCHANGE_ID = "prot_pool_exchange"
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
+)
 _POOL_TARGET_NAME = "prot_pool"
 _GROWTH_DELTA_THRESHOLD = 1e-3
 _CONTROL_COEFF_LIMIT = 0.75
@@ -135,18 +137,24 @@ def flexibilize_enz_concs(
         flexibilize), or if ``model.adapter`` is None and
         ``exp_growth`` is also None.
     """
+    from ..adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="flexibilize_enz_concs reads params.bio_rxn (and "
+        "params.gr_exp when `exp_growth` is not passed) from the adapter",
+    )
     if exp_growth is None:
-        if model.adapter is None or model.adapter.params.gr_exp is None:
+        if adapter.params.gr_exp is None:
             raise ValueError(
                 "exp_growth not provided and model.adapter.params.gr_exp "
-                "is unavailable."
+                "is unset."
             )
-        exp_growth = float(model.adapter.params.gr_exp)
+        exp_growth = float(adapter.params.gr_exp)
 
     if iter_per_enzyme == 0:
         iter_per_enzyme = math.inf
 
-    bio_rxn_id = model.adapter.params.bio_rxn
+    bio_rxn_id = adapter.params.bio_rxn
     bio_rxn = model.reactions.get_by_id(bio_rxn_id)
     if bio_rxn.upper_bound < exp_growth:
         logger.info(
@@ -203,7 +211,7 @@ def flexibilize_enz_concs(
         increase = fold_change * frequence[max_idx]
         ec_idx = measured_idx[max_idx]
         usage_rxn = model.reactions.get_by_id(
-            f"{_USAGE_PREFIX}{proteins[max_idx]}"
+            f"{USAGE_PREFIX}{proteins[max_idx]}"
         )
         usage_rxn.upper_bound = float(model.ec.concs[ec_idx]) * (1.0 + increase)
 
@@ -234,7 +242,7 @@ def _try_relax_pool(
 ) -> tuple[Optional[float], Optional[float], Optional[float]]:
     """Try relaxing prot_pool_exchange. Returns (old_pool, new_pool, growth)
     if a relaxation was applied; (None, None, None) otherwise."""
-    pool_rxn = model.reactions.get_by_id(_POOL_EXCHANGE_ID)
+    pool_rxn = model.reactions.get_by_id(POOL_EXCHANGE_ID)
     old_pool = pool_rxn.upper_bound
 
     with model:
@@ -254,7 +262,7 @@ def _try_relax_pool(
     with model:
         pool_rxn.upper_bound = 1000.0
         bio_rxn.lower_bound = candidate_growth
-        model.objective = _POOL_EXCHANGE_ID
+        model.objective = POOL_EXCHANGE_ID
         model.objective_direction = "min"
         sol = model.optimize()
         new_pool = float(sol.objective_value or 0.0)
@@ -288,7 +296,7 @@ def _build_result(
         return _maybe_add_pool(FlexEnzResult(), pool_old, pool_new)
 
     flex_proteins = [proteins[i] for i in flex_indices]
-    usage_rxn_ids = [f"{_USAGE_PREFIX}{p}" for p in flex_proteins]
+    usage_rxn_ids = [f"{USAGE_PREFIX}{p}" for p in flex_proteins]
     old_concs_arr = np.array(
         [float(model.ec.concs[measured_idx[i]]) for i in flex_indices],
         dtype=float,
@@ -300,7 +308,7 @@ def _build_result(
         bio_rxn_id = model.adapter.params.bio_rxn
         with model:
             model.reactions.get_by_id(bio_rxn_id).lower_bound = exp_growth
-            model.objective = _POOL_EXCHANGE_ID
+            model.objective = POOL_EXCHANGE_ID
             model.objective_direction = "min"
             sol = model.optimize()
             new_concs = np.array(

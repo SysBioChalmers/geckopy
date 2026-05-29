@@ -233,7 +233,7 @@ def test_empty_model_is_unchanged():
 
 
 # --------------------------------------------------------------------------- #
-# Annotation and notes propagation (needed by get_ec_from_gem)
+# Annotation and notes propagation (needed by fill_eccodes_from_gem)
 # --------------------------------------------------------------------------- #
 
 def test_expanded_reactions_inherit_annotation_and_notes():

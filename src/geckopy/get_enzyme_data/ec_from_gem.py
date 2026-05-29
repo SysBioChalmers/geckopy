@@ -38,7 +38,7 @@ def _normalize_annotation(value) -> str:
     return str(value)
 
 
-def get_ec_from_gem(
+def fill_eccodes_from_gem(
     model: "EcModel",
     ec_rxns: Optional[Iterable[str]] = None,
 ) -> None:
@@ -124,7 +124,28 @@ def get_ec_from_gem(
 
     if invalid:
         logger.warning(
-            "get_ec_from_gem: skipped %d invalid EC string(s): %s",
+            "fill_eccodes_from_gem: skipped %d invalid EC string(s): %s",
             len(invalid),
             ", ".join(repr(s) for s in invalid),
         )
+
+
+def get_ec_from_gem(
+    model: "EcModel",
+    ec_rxns: Optional[Iterable[str]] = None,
+) -> None:
+    """Deprecated alias for :func:`fill_eccodes_from_gem`.
+
+    Kept for backward compatibility with the original MATLAB name.
+    Will be removed in a future release; switch to
+    ``fill_eccodes_from_gem``.
+    """
+    import warnings
+
+    warnings.warn(
+        "get_ec_from_gem is deprecated; use fill_eccodes_from_gem instead. "
+        "The old name will be removed in a future release.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return fill_eccodes_from_gem(model, ec_rxns=ec_rxns)

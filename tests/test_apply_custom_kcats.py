@@ -18,10 +18,18 @@ HEADER = "proteins\tgenes\tgene_name\tkcat\trxns\tnotes\tstoicho\n"
 # Helpers
 # --------------------------------------------------------------------------- #
 
+_ECTESTGEM_CACHE: EcModel | None = None
+
+
 def _ectestgem_ec_model() -> EcModel:
-    adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
-    cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
-    return make_ec_model(cobra_model, adapter)
+    """Cached build of the ecTestGEM ecModel; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_CACHE
+    if _ECTESTGEM_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_CACHE = make_ec_model(cobra_model, adapter)
+    return _copy.deepcopy(_ECTESTGEM_CACHE)
 
 
 def _kcat(model: EcModel, rxn_id: str) -> float:
@@ -66,8 +74,8 @@ def test_mode_a_expands_to_all_isozymes(tmp_path):
 
     assert _kcat(ec_model, "R2_EXP_1") == 10.0
     assert _kcat(ec_model, "R2_EXP_2") == 10.0
-    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_1"))
-    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_2"))
+    assert _kcat(ec_model, "R2_REV_EXP_1") == 0
+    assert _kcat(ec_model, "R2_REV_EXP_2") == 0
 
 
 def test_mode_a_rev_direction_is_honored(tmp_path):
@@ -77,7 +85,7 @@ def test_mode_a_rev_direction_is_honored(tmp_path):
 
     apply_custom_kcats(ec_model, path=tsv, apply=False)
 
-    assert np.isnan(_kcat(ec_model, "R2_EXP_1"))
+    assert _kcat(ec_model, "R2_EXP_1") == 0
     assert _kcat(ec_model, "R2_REV_EXP_1") == 20.0
     assert _kcat(ec_model, "R2_REV_EXP_2") == 20.0
 
@@ -133,7 +141,7 @@ def test_mode_b_partial_match_logs_but_does_not_apply(tmp_path, caplog):
     with caplog.at_level(logging.WARNING):
         apply_custom_kcats(ec_model, path=tsv, apply=False)
 
-    assert np.isnan(_kcat(ec_model, "R2_EXP_1"))
+    assert _kcat(ec_model, "R2_EXP_1") == 0
     assert "partial match" in caplog.text
 
 
@@ -164,7 +172,7 @@ def test_mode_c_restricts_to_listed_rxns(tmp_path):
     # R2 (no _REV) expands to R2_EXP_1 and R2_EXP_2. Only R2_EXP_2 is
     # catalyzed by P3 alone (full match).
     assert _kcat(ec_model, "R2_EXP_2") == 300.0
-    assert np.isnan(_kcat(ec_model, "R2_REV_EXP_2"))
+    assert _kcat(ec_model, "R2_REV_EXP_2") == 0
 
 
 # --------------------------------------------------------------------------- #

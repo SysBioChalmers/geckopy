@@ -63,7 +63,8 @@ def allocate_ec_for_catalyzed_reactions(model: "EcModel") -> list[str]:
     n = len(rxn_ids)
 
     model.ec.rxns = rxn_ids
-    model.ec.kcat = np.full(n, np.nan, dtype=float)
+    # 0 marks "no kcat assigned" (matching MATLAB GECKO).
+    model.ec.kcat = np.zeros(n, dtype=float)
     model.ec.source = [""] * n
     model.ec.notes = [""] * n
     model.ec.eccodes = [""] * n
@@ -130,11 +131,12 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
     list of str
         Model gene IDs (pre-transformation) that did not match.
     """
-    if model.adapter is None:
-        raise ValueError(
-            "EcModel.adapter is None; populate_enzyme_data needs an adapter "
-            "to transform gene IDs to UniProt-compatible form."
-        )
+    from ...adapter import resolve_adapter
+    adapter = resolve_adapter(
+        model,
+        purpose="populate_enzyme_data transforms gene IDs to "
+        "UniProt-compatible form via the adapter",
+    )
 
     # Sorted alphabetically so downstream indexing is deterministic.
     model_genes: list[str] = sorted(g.id for g in model.genes)
@@ -147,13 +149,13 @@ def populate_enzyme_data(model: "EcModel", uniprot_db: "UniprotDB") -> list[str]
         return []
 
     # Step 1: try gene-based lookup via adapter.get_uniprot_compatible_genes
-    transformed = model.adapter.get_uniprot_compatible_genes(model_genes)
+    transformed = adapter.get_uniprot_compatible_genes(model_genes)
     matches: list[int | None] = [
         uniprot_db.find_by_gene(g) for g in transformed
     ]
 
     # Step 2: if the adapter has a conversion table, that takes over.
-    mapped_ids = model.adapter.get_uniprot_ids_from_table(transformed)
+    mapped_ids = adapter.get_uniprot_ids_from_table(transformed)
     if mapped_ids != transformed:
         matches = [
             uniprot_db.find_by_id(i) if i else None for i in mapped_ids
