@@ -1,7 +1,25 @@
-"""Flux variability analysis for ecModels, mapped back to conventional rxns.
+"""Flux variability analysis (FVA) on an ecModel.
 
-Ported from GECKO MATLAB:
-src/geckomat/utilities/ecFVA.m.
+Standard FVA asks, for each reaction in a model, what's the
+smallest and largest flux that reaction can carry while keeping
+the model feasible at its current objective? The output is a
+``(min_flux, max_flux)`` pair per reaction, useful for finding
+reactions whose flux is tightly constrained vs reactions with a
+lot of slack.
+
+This function does the same thing on an ecModel, with two twists:
+
+- Reactions that were split per isozyme (``_EXP_<N>`` suffix) or
+  per direction (``_REV`` suffix) by ``make_ec_model`` are
+  collapsed back to their original cobra-reaction id before
+  reporting, so the output table has one row per starting-GEM
+  reaction.
+- The per-reaction LP solves can run in parallel via
+  ``multiprocessing`` (``n_proc`` argument). On real-size
+  ecModels this matters — yeast-GEM has ~4000 conv reactions,
+  each needing two LP solves, so a serial run can be slow.
+
+Ported from GECKO MATLAB: src/geckomat/utilities/ecFVA.m.
 """
 from __future__ import annotations
 

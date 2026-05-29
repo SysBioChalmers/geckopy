@@ -1,4 +1,13 @@
-"""Populate model.ec.concs from a ProtData abundance column.
+"""Fill ``model.ec.concs`` from a proteomics measurement.
+
+Takes a ``ProtData`` (a parsed proteomics table from
+``load_prot_data`` / ``load_pax_db``) and copies the measured
+concentrations into ``model.ec.concs``, matching by uniprot id.
+Enzymes that aren't in the proteomics data keep their default
+``NaN`` (no measurement available).
+
+This only writes the numbers into the data array. To actually
+make the LP respect them, call ``constrain_enz_concs`` next.
 
 Ported from GECKO MATLAB:
 src/geckomat/limit_proteins/fillEnzConcs.m.

@@ -255,33 +255,37 @@ def set_prot_pool_size(
     f: float | None = None,
     sigma: float | None = None,
 ) -> float:
-    """Set the upper bound of ``prot_pool_exchange`` to limit total protein use.
+    """Set the upper bound of ``prot_pool_exchange`` (the protein budget).
 
-    MATLAB-COMPAT: GECKO MATLAB sets the (negative) lower bound,
-    geckopy sets the (positive) upper bound. The numerical value is
-    identical in absolute terms. When MATLAB GECKO switches its pool
-    exchange to the forward direction, this function in MATLAB will
+    The protein pool exchange represents the cell's total enzyme
+    supply. Its upper bound is what limits how much protein the
+    model can deploy at once. The formula is:
+
+        bound = p_tot * f * sigma * 1000
+
+    where:
+
+    - ``p_tot`` is the total cellular protein content (g/gDCW),
+    - ``f`` is the fraction of that protein that's made up of
+      enzymes in the model (g model-enzyme / g total-protein),
+    - ``sigma`` is the average enzyme saturation factor (0-1) —
+      how close enzymes run to their Vmax in vivo,
+    - the ``1000`` converts units (``ec.mw`` is in Da and fluxes
+      are in mmol/gDW/h, so multiplying ``p_tot`` (g/gDW) by 1000
+      brings it to mg/gDW, matching the mg/mmol that Da
+      represents).
+
+    When called with no arguments, the function reads ``p_tot``,
+    ``f``, and ``sigma`` from the adapter. Any of the three can
+    be overridden via keyword.
+
+    MATLAB-COMPAT: GECKO MATLAB sets the (negative) lower bound;
+    geckopy sets the (positive) upper bound. Numerically the same
+    in absolute terms. When MATLAB GECKO switches its pool
+    exchange to the forward direction, that MATLAB function will
     also switch from setting lb to setting ub.
 
-
     Ported from GECKO MATLAB: src/geckomat/change_model/setProtPoolSize.m.
-
-    The bound is ``p_tot * f * sigma * 1000``, where:
-
-    - ``p_tot`` is total cellular protein content (g/gDCW),
-    - ``f`` is the estimated fraction of modeled enzymes out of total
-      protein (g enzyme / g protein),
-    - ``sigma`` is the average enzyme saturation factor (unitless, 0-1).
-
-    The 1000 factor reconciles units: ec.mw is in Da (equivalent to
-    mg/mmol) and fluxes are in mmol/gDW/h, so the protein balance
-    evaluates correctly (p_tot is g/gDW and multiplying by 1000 brings
-    it to mg/gDW, matching the mg/mmol MW units).
-
-    Direction note: in MATLAB, the same quantity is written as the
-    negative lower bound of a reverse-direction pool exchange reaction.
-    geckopy uses the forward direction, so the same numerical value is
-    applied to the upper bound.
 
     Parameters
     ----------

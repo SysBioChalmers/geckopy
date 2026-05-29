@@ -1,5 +1,21 @@
-"""Iteratively relax measured enzyme concentrations until the model
-can reach an experimental growth rate.
+"""Loosen proteomics constraints until the model can grow.
+
+After ``constrain_enz_concs`` pins each measured enzyme to its
+proteomics value, the model often can't reach the experimental
+growth rate any more — the measurements are noisy, and a few
+enzymes end up too tightly capped to feed the network.
+
+``flexibilize_enz_concs`` fixes that automatically. It computes a
+control coefficient per enzyme (how much each enzyme's bound is
+limiting growth), picks the worst one, multiplies its upper bound
+by ``fold_change``, re-solves, and repeats until growth reaches
+the target. The result records which enzymes were loosened and by
+how much, so a curator can review.
+
+A related function is ``relax_proteomics_greedy`` in the same
+package: same goal but a different algorithm (ranks by absolute
+shadow price instead of control coefficient). Pick the one that
+converges faster on your model.
 
 Ported from GECKO MATLAB:
 src/geckomat/limit_proteins/flexibilizeEnzConcs.m.

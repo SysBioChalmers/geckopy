@@ -152,11 +152,12 @@ def test_save_dispatches_sbml(tmp_path):
     assert "Protein" in group_names
 
 
-def test_legacy_geckopy_old_file_reads(tmp_path):
-    """The fixture from geckopy_old must load without error and
-    produce a sensible cobra model. The MW_KCAT encoding may not
-    exactly match (legacy file uses the old conventions), but the
-    cobra portion should always come through."""
+def test_legacy_carrasco_file_reads(tmp_path):
+    """An SBML written by the legacy geckopy (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23) must load without
+    error and produce a sensible cobra model. The MW_KCAT encoding
+    may not exactly match (legacy file uses the old conventions),
+    but the cobra portion should always come through."""
     if not LEGACY_EC_COLI_CORE.is_file():
         pytest.skip("ec_coli_core.xml fixture missing")
     # We don't have a real adapter for E. coli; build a stub.

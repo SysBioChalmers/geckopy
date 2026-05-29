@@ -1,39 +1,35 @@
-"""Save an ecModel to a YAML file.
+"""Save an ecModel to disk.
 
-Ported from GECKO MATLAB:
-src/geckomat/utilities/saveEcModel.m.
+The inverse of ``load_ec_model``. Writes the canonical geckopy
+YAML format documented in ``docs/yaml_format.md`` for
+``.yml`` / ``.yaml`` filenames, and SBML for ``.xml`` / ``.sbml``
+(via ``geckopy.io.sbml.write_sbml_ec_model``).
 
-Inverse of `load_ec_model`. Writes the canonical geckopy ecModel
-YAML format defined in `docs/yaml_format.md`: cobra-py's dict
-schema for the cobra-shaped portion (via
-`cobra.io.dict.model_to_dict`) plus the GECKO-specific top-level
-keys `ec-rxns`, `ec-enzymes`, `gecko_light`, `metaData`.
+The YAML writer uses ``cobra.io.dict.model_to_dict`` for the
+cobra-shaped portion (metabolites, reactions, genes,
+compartments) and adds four GECKO-specific top-level keys:
+``ec-rxns``, ``ec-enzymes``, ``gecko_light``, ``metaData``.
+Empty / NaN fields are omitted to keep the file compact; the
+loader fills them back in.
 
-MATLAB-COMPAT: MATLAB `saveEcModel` defaults `filename` to the
-extension-less `'ecModel'`, then dispatches on
-`filename(end-3:end)` and falls through to `writeYAMLmodel` for
-unknown extensions, producing a YAML file with no `.yml`
-extension. geckopy defaults to `'ecModel.yml'`. Tracked in
-`docs/future_improvements.md`.
+MATLAB-COMPAT: MATLAB ``saveEcModel`` defaults the filename to
+``'ecModel'`` (no extension), which then falls through to YAML
+output without an extension. geckopy defaults to
+``'ecModel.yml'``. The MATLAB-side bug is tracked in
+``docs/future_improvements.md``.
 
-MATLAB-COMPAT: MATLAB `saveEcModel` supports an SBML branch
-(via `exportModel`), with a Windows/Mac stoichiometric-coefficient
-post-processing dance. SBML loses `model.ec`, and cobra-py's
-SBML writer formats coefficients consistently across platforms.
-geckopy drops the SBML branch entirely; users wanting SBML can
-call `cobra.io.write_sbml_model` directly and accept the loss
-of the ec substructure.
+MATLAB-COMPAT: MATLAB ``saveEcModel`` mutates the input model
+(``ecModel.description = ['Enzyme-constrained model of '
+ecModel.id]``). geckopy writes the description into the output
+document only; the input is untouched.
 
-MATLAB-COMPAT: MATLAB `saveEcModel` mutates the input as
-`ecModel.description = ['Enzyme-constrained model of ' ecModel.id]`.
-geckopy writes the description into the output document only; the
-input model is not touched.
+MATLAB-COMPAT: MATLAB ``saveEcModel`` falls back to
+``ModelAdapterManager.getDefault()`` when no adapter is supplied.
+geckopy has no global default adapter — the caller passes one
+explicitly, relies on ``model.adapter``, or uses an absolute
+filename.
 
-MATLAB-COMPAT: MATLAB `saveEcModel` falls back to
-`ModelAdapterManager.getDefault()` when no adapter is supplied.
-geckopy has no global default adapter; the caller must either
-pass an adapter (or have it attached to `model.adapter`), or pass
-an absolute filename.
+Ported from GECKO MATLAB: src/geckomat/utilities/saveEcModel.m.
 """
 from __future__ import annotations
 
@@ -63,34 +59,43 @@ def save_ec_model(
     filename: Optional[Union[str, Path]] = None,
     adapter: Optional["ModelAdapter"] = None,
 ) -> Path:
-    """Save an ecModel to a YAML file in canonical geckopy format.
+    """Save an ecModel to disk in YAML or SBML format.
+
+    Dispatches on the file extension:
+
+    - ``.yml`` / ``.yaml`` -> geckopy canonical YAML (this module).
+    - ``.xml`` / ``.sbml`` -> SBML (via
+      ``geckopy.io.sbml.write_sbml_ec_model``).
 
     Parameters
     ----------
     model
-        The ecModel to save. Must have populated `model.ec` (both
-        `ec.rxns` and `ec.enzymes` non-empty).
+        The ecModel to save. Must have populated ``model.ec``
+        (both ``ec.rxns`` and ``ec.enzymes`` non-empty). Empty
+        ecModels are rejected because they're almost always a bug
+        (you probably forgot to run ``make_ec_model`` first).
     filename
-        Destination path. If `None`, defaults to `ecModel.yml`. If
-        relative, resolved against `<adapter.params.path>/models/
-        <filename>`. If absolute, used as-is and `adapter` may be
-        `None`. Must end in `.yml` or `.yaml`.
+        Destination path. If ``None``, defaults to ``ecModel.yml``.
+        Relative paths are resolved against
+        ``<adapter.params.path>/models/<filename>``. Absolute
+        paths are used as-is.
     adapter
-        ModelAdapter used to resolve a relative `filename`. If not
-        supplied, falls back to `model.adapter`. Required when
-        `filename` is relative AND `model.adapter` is `None`.
+        Used to resolve a relative ``filename``. If not supplied
+        as an argument, falls back to ``model.adapter``. Only
+        required when ``filename`` is relative AND
+        ``model.adapter`` is ``None``.
 
     Returns
     -------
     Path
-        The absolute path of the written file.
+        The absolute path of the file that was written.
 
     Raises
     ------
     ValueError
-        If `model.ec.rxns` or `model.ec.enzymes` is empty, if the
-        file extension is not `.yml`/`.yaml`, or if the filename
-        is relative and no adapter is available.
+        If ``model.ec.rxns`` or ``model.ec.enzymes`` is empty, if
+        the file extension isn't recognised, or if the filename is
+        relative and no adapter is available.
     """
     if model.ec is None or len(model.ec.rxns) == 0 or len(model.ec.enzymes) == 0:
         raise ValueError(

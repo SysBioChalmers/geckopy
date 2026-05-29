@@ -1,4 +1,23 @@
-"""ecModel: cobra.Model extended with enzyme-constraint data."""
+"""``EcModel``: a regular ``cobra.Model`` extended with enzyme data.
+
+An ``EcModel`` *is* a cobra model (it subclasses ``cobra.Model``),
+so everything you know how to do with cobra still works: solve
+FBAs, edit reactions, inspect metabolites, etc.
+
+It carries two extra attributes on top of cobra:
+
+- ``ec``: an ``EcData`` holding the enzyme-related arrays (kcats,
+  enzyme MW, the reaction-enzyme coupling matrix, ...).
+- ``adapter``: the ``ModelAdapter`` used to build it, so downstream
+  helper functions can reach organism-specific parameters
+  (taxonomy id, biomass reaction, ...) without being passed
+  the adapter explicitly every time.
+
+There is also an ``enzymes`` view on every EcModel that lets you
+write ``model.enzymes.get_by_id("P00350").kcats["R_FOO"] = 30.0``
+to update an enzyme-level constraint through a friendly proxy.
+See ``geckopy.ec_model.enzyme.Enzyme`` for the full surface.
+"""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional, Union
@@ -12,19 +31,27 @@ if TYPE_CHECKING:
 
 
 class EcModel(cobra.Model):
-    """A cobra.Model with attached enzyme-constraint data.
+    """A cobra model with enzyme-constraint data attached.
 
-    Stores the GECKO 3 `ec` substructure as `self.ec` and holds a
-    reference to the ModelAdapter that was used to build it, so
-    downstream functions only need the model object.
+    Subclasses ``cobra.Model`` so anything you do with a regular
+    cobra model still works. Adds two attributes:
 
     Attributes
     ----------
     ec : EcData
-        Enzyme-constraint data (kcats, enzymes, coupling matrix).
+        The enzyme-constraint data: kcats, enzyme MW, sequence,
+        proteomics concentrations, and the sparse matrix saying
+        which enzymes catalyse which reactions. See
+        ``geckopy.ec_model.ec_data.EcData``.
     adapter : ModelAdapter or None
-        The adapter used when building the ecModel. May be None for
-        models loaded from disk that do not carry adapter state.
+        The adapter the ecModel was built with (organism
+        parameters, paths, etc.). ``None`` if the model was loaded
+        from disk and no adapter was attached at load time.
+    enzymes : EnzymeView
+        Lazy view that lets you reach individual enzymes via
+        ``model.enzymes.get_by_id("P00350")``. Each call returns a
+        live ``Enzyme`` proxy; reads and writes always go through
+        the underlying ``ec`` data.
     """
 
     def __init__(

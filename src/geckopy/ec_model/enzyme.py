@@ -1,10 +1,34 @@
-"""Stateless ``Enzyme`` proxy over the EcModel's ec arrays + usage rxns.
+"""A friendly accessor for individual enzymes in an EcModel.
 
-Ported from geckopy_old/geckopy/protein.py:43-454 (Protein class),
-re-implemented as a proxy rather than a cobra.Object subclass. The
-new package already represents enzymes as ``prot_<id>`` metabolites
-plus ``usage_prot_<id>`` reactions, so the proxy only needs to
-forward reads/writes to those.
+Direct access to enzyme data through ``model.ec`` works but is
+awkward — you have to look up the right index, edit the right
+array, and remember to re-run ``apply_kcat_constraints`` to push
+your change into the LP.
+
+This module provides a nicer surface. ``model.enzymes`` is an
+``EnzymeView`` over all enzymes in the model. Each enzyme is
+reachable as an ``Enzyme`` proxy:
+
+.. code-block:: python
+
+    enz = model.enzymes.get_by_id("P00350")
+    enz.mw                      # read MW (Da)
+    enz.concentration = 1e-3    # write proteomics conc (mg/gDCW)
+    enz.kcats["R_FOO"] = 30.0   # write a new kcat for one reaction
+    enz.shadow_price            # dual after a solve
+
+The proxy is stateless: it holds no cached data of its own. Every
+read and write goes through ``model.ec`` and the underlying cobra
+model. Don't cache an ``Enzyme`` instance long-term; rebuild it
+via ``model.enzymes.get_by_id(...)`` when you need it.
+
+Ported from the legacy geckopy package described in Carrasco et al.
+(2023, https://doi.org/10.1128/spectrum.01705-23), file
+geckopy/protein.py:43-454 (Protein class). Re-implemented as a
+proxy rather than a ``cobra.Object`` subclass because the new
+package represents enzymes as ``prot_<id>`` metabolites plus
+``usage_prot_<id>`` reactions, so the proxy just forwards to
+those.
 """
 from __future__ import annotations
 
@@ -25,7 +49,9 @@ class Enzyme:
     cobra model. Do not cache instances; rebuild via
     ``model.enzymes.get_by_id(uniprot)``.
 
-    Ported from geckopy_old/geckopy/protein.py:43-454 (Protein class).
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/protein.py:43-454 (Protein class).
     """
 
     __slots__ = ("_model", "_uniprot")
@@ -203,7 +229,9 @@ class Kcats:
     ``model.ec.kcat[idx]`` and call ``apply_kcat_constraints``
     themselves.
 
-    Ported from geckopy_old/geckopy/protein.py:456-558 (Kcats class).
+    Ported from the legacy geckopy package (Carrasco et al., 2023,
+    https://doi.org/10.1128/spectrum.01705-23),
+    geckopy/protein.py:456-558 (Kcats class).
     """
 
     __slots__ = ("_enzyme",)

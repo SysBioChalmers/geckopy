@@ -1,4 +1,15 @@
-"""Constrain model exchange fluxes from external measurements.
+"""Set model exchange-flux bounds from an experimental dataset.
+
+In a typical chemostat experiment you measure exchange fluxes
+(substrate uptake, byproduct secretion, biomass growth rate)
+under one or more growth conditions. This function takes a
+``FluxData`` (parsed from ``fluxData.tsv``), picks one condition,
+and applies those measurements as bounds on the matching
+exchange reactions in the model.
+
+The ``loose_strict_flux`` argument controls how tightly: ``"loose"``
+gives the model room to wiggle around the measurement; a numeric
+percentage clamps it within that band.
 
 Ported from GECKO MATLAB:
 src/geckomat/limit_proteins/constrainFluxData.m.

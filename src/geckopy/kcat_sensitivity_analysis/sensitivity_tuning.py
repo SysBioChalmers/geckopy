@@ -1,5 +1,23 @@
-"""Iteratively raise the most-limiting kcats until a target growth rate
-is reached.
+"""Bump the most-limiting kcats until the model can grow fast enough.
+
+After ``make_ec_model`` + ``apply_kcat_constraints``, the model
+often can't reach the experimental growth rate because one or two
+kcat values are unrealistically low (BRENDA's database has many
+small or wrong entries). The right long-term fix is manual
+curation, but as a quick automated workaround
+``sensitivity_tuning`` does the following loop:
+
+1. Solve the model.
+2. If we reached the target growth rate, stop.
+3. Otherwise, find the enzyme whose usage reaction carries the
+   most flux (the bottleneck), and multiply its kcat by
+   ``fold_change``.
+4. Re-solve and go to 1.
+
+The result is a record of which kcats were bumped and by how
+much, so a curator can review the choices. Default target growth
+rate is ``adapter.params.gr_exp`` (the experimental growth rate
+from the adapter config).
 
 Ported from GECKO MATLAB:
 src/geckomat/kcat_sensitivity_analysis/sensitivityTuning.m.

@@ -1,34 +1,35 @@
 """Load an ecModel from a YAML file.
 
-Ported from GECKO MATLAB:
-src/geckomat/utilities/loadEcModel.m.
+Reads the geckopy canonical YAML format documented in
+``docs/yaml_format.md`` and rebuilds an ``EcModel``. Most of the
+heavy lifting is delegated to cobra-py
+(``cobra.io.dict.model_from_dict`` handles the reactions /
+metabolites / genes); this module adds the GECKO-specific
+top-level keys (``ec-rxns``, ``ec-enzymes``, ``gecko_light``,
+``metaData``) on top.
 
-The on-disk format is documented in `docs/yaml_format.md`. It is
-designed to be a strict superset of cobra-py's canonical YAML schema:
-the cobra-shaped portion (`metabolites`, `reactions`, `genes`,
-`compartments`, ...) is loaded directly via
-`cobra.io.dict.model_from_dict`, while the GECKO-specific top-level
-keys (`ec-rxns`, `ec-enzymes`, `gecko_light`, `metaData`) are handled
-by this module.
+The loader also dispatches SBML files (`.xml` / `.sbml`) to
+``geckopy.io.sbml.read_sbml_ec_model``, so the same call works
+for both formats.
 
-This loader does NOT accept the legacy MATLAB / RAVEN format
-(`!!omap`-tagged, outer sequence wrapper, `metaData`-nested `id`).
-That format will be handled by an external one-off conversion script
-once MATLAB-side `writeYAMLmodel` is updated; see
-`docs/future_improvements.md` and `docs/yaml_format.md` for the
-canonical schema and the migration table.
+The legacy MATLAB / RAVEN YAML format (with ``!!omap`` tags and an
+outer sequence wrapper) is NOT supported. Once MATLAB-side
+``writeYAMLmodel`` is updated to match the canonical schema, the
+two implementations will round-trip. Until then, legacy files need
+a one-off conversion (see ``docs/yaml_format.md`` for the
+migration table).
 
-MATLAB-COMPAT: `loadEcModel.m` validates `endsWith(filename,
-{'yml','yaml'})` and errors otherwise, then has an `elseif
-endsWith(filename, {'xml','sbml'})` branch which is unreachable.
-geckopy keeps the strict YAML check (mirror of MATLAB's documented
-intent) and drops the dead SBML branch.
+MATLAB-COMPAT: the MATLAB ``loadEcModel`` validates
+``endsWith(filename, {'yml','yaml'})`` and then has a dead
+``elseif endsWith(filename,{'xml','sbml'})`` branch. geckopy
+implements both paths properly; SBML is no longer dead code.
 
-MATLAB-COMPAT: MATLAB `loadEcModel` falls back to
-`ModelAdapterManager.getDefault()` when no adapter is supplied.
-geckopy has no global default adapter; the caller must either
-pass an adapter explicitly OR pass an absolute path that does not
-need adapter-relative resolution.
+MATLAB-COMPAT: MATLAB ``loadEcModel`` falls back to
+``ModelAdapterManager.getDefault()`` when no adapter is supplied.
+geckopy has no global default adapter — the caller passes an
+adapter explicitly, or uses an absolute filename.
+
+Ported from GECKO MATLAB: src/geckomat/utilities/loadEcModel.m.
 """
 from __future__ import annotations
 
@@ -56,36 +57,44 @@ def load_ec_model(
     filename: Optional[Union[str, Path]] = None,
     adapter: Optional["ModelAdapter"] = None,
 ) -> EcModel:
-    """Load an ecModel YAML file from disk.
+    """Load an ecModel from a YAML or SBML file.
+
+    Dispatches on the file extension:
+
+    - ``.yml`` / ``.yaml`` -> read as a geckopy canonical YAML
+      ecModel (this module).
+    - ``.xml`` / ``.sbml`` -> delegate to
+      ``geckopy.io.sbml.read_sbml_ec_model``.
 
     Parameters
     ----------
     filename
-        Path to the ecModel YAML. If `None`, defaults to
-        `ecModel.yml`. If relative, resolved against
-        `<adapter.params.path>/models/<filename>`. If absolute,
-        used as-is and `adapter` may be `None`.
+        Path to the ecModel file. If ``None``, defaults to
+        ``ecModel.yml``. If the path is relative, it is resolved
+        against ``<adapter.params.path>/models/<filename>``. If
+        absolute, it is used as-is and ``adapter`` may be
+        ``None``.
     adapter
-        ModelAdapter used to resolve a relative `filename`. The
-        loaded `EcModel` carries this adapter as `model.adapter`.
-        Required when `filename` is relative.
+        A ``ModelAdapter`` used to resolve a relative ``filename``,
+        and attached to the loaded model as ``model.adapter``.
+        Required when ``filename`` is relative.
 
     Returns
     -------
     EcModel
-        The loaded ecModel with `model.ec` populated. The
-        `gecko_light` flag is read from the file (top-level
-        `gecko_light:` key) and propagated to the EcData.
+        The loaded ecModel with ``model.ec`` populated. The
+        ``gecko_light`` flag is read from the top-level
+        ``gecko_light:`` key in the file (defaults to ``False``).
 
     Raises
     ------
     ValueError
-        If the file extension is not `.yml` or `.yaml`, if the
-        filename is relative and no adapter is given, or if the
-        YAML lacks the GECKO-specific `ec-rxns` / `ec-enzymes`
-        keys (i.e. it is not an ecModel).
+        If the file extension isn't recognised, if the filename
+        is relative and no adapter is given, or if the YAML lacks
+        the GECKO-specific ``ec-rxns`` / ``ec-enzymes`` top-level
+        keys (in which case it is not an ecModel).
     FileNotFoundError
-        If the resolved file does not exist.
+        If the resolved file doesn't exist.
     """
     path = _resolve_path(filename, adapter)
     if path.suffix.lower() in _SBML_SUFFIXES:

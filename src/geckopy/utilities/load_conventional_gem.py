@@ -1,11 +1,16 @@
-"""Load the conventional (non-ec) GEM referenced by an adapter.
+"""Load the conventional (non-ec) starting GEM for a project.
+
+Every geckopy project has a "starting GEM" — a plain cobra model
+without any GECKO additions. This is the model that
+``make_ec_model`` extends into an ecModel.
+
+This helper reads that file from the path set in the adapter
+(``adapter.params.conv_gem``). The extension picks the reader:
+YAML files go through ``cobra.io.load_yaml_model``, anything
+else through ``cobra.io.read_sbml_model``.
 
 Ported from GECKO MATLAB:
 src/geckomat/utilities/loadConventionalGEM.m.
-
-Reads the file at ``adapter.params.conv_gem``, dispatching on
-extension: YAML via :func:`cobra.io.load_yaml_model`, anything
-else via :func:`cobra.io.read_sbml_model`.
 """
 from __future__ import annotations
 
@@ -22,24 +27,26 @@ _YAML_SUFFIXES = {".yml", ".yaml"}
 
 
 def load_conventional_gem(adapter: "ModelAdapter") -> cobra.Model:
-    """Load the conventional GEM file pointed to by ``adapter``.
+    """Load the starting GEM file pointed to by ``adapter``.
 
     Parameters
     ----------
     adapter
-        ModelAdapter whose ``params.conv_gem`` points at the GEM
-        file. Resolved as-is (the adapter's loader has already
-        absolutised the path relative to the adapter folder).
+        A ``ModelAdapter`` whose ``params.conv_gem`` field gives
+        the path to the GEM file. The path is used as-is; the
+        adapter's loader has already resolved it relative to the
+        adapter folder.
 
     Returns
     -------
     cobra.Model
-        The loaded model.
+        The loaded model. Use it as the input to
+        ``make_ec_model``.
 
     Raises
     ------
     FileNotFoundError
-        If ``params.conv_gem`` does not point to an existing file.
+        If ``params.conv_gem`` doesn't point to an existing file.
     """
     path = Path(adapter.params.conv_gem)
     if not path.is_file():

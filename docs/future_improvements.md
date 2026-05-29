@@ -1,43 +1,100 @@
 # Future improvements
 
-This file tracks ideas for improvements to geckopy and to MATLAB GECKO
-that are deferred until after the initial port is complete.
+A running list of ideas the port surfaced that are worth doing but
+weren't blocking. Three audiences:
+
+- **geckopy users / contributors** — sections "Conventions / data
+  model", "Third-party library gotchas", "API simplification",
+  "get_enzyme_data subsystem".
+- **MATLAB GECKO maintainers** — section "MATLAB GECKO changes".
+  Each item is a bug or rough edge in MATLAB GECKO that the port
+  spotted while comparing the two implementations side by side.
+  Every item is also flagged with a `MATLAB-COMPAT:` comment in
+  the geckopy source, so `grep -rn "MATLAB-COMPAT:" src/` gives
+  the full list with file references.
+- **anyone hitting a strange dependency bug** — section
+  "Third-party library gotchas".
 
 ## Conventions / data model
 
-- **Missing-kcat sentinel.** geckopy uses `NaN` in `ec.kcat` to mark
-  missing values; MATLAB GECKO uses `0`. The model I/O layer must
-  translate at the boundary (`0` -> `NaN` on read, `NaN` -> `0` on write).
-  A simpler long-term fix would be to switch MATLAB GECKO to `NaN` as
-  well, eliminating the translation layer.
+Two cross-cutting decisions where geckopy and MATLAB GECKO ended
+up different. Not blocking, but worth aligning eventually.
 
-- **Custom subunit stoichiometry file format.** The `stoicho` column in
-  `customKcats.tsv` is currently dead code in MATLAB and ignored in
-  geckopy. Two design options for proper support: a separate
-  `customComplexes.tsv` file, or extending the ComplexPortal JSON
-  format with a "user_overrides" section. Decision deferred until
-  after the basic port is complete.
+- **Missing-kcat sentinel.** geckopy uses `NaN` in `ec.kcat` to
+  mark "no value yet". MATLAB GECKO uses `0`. Any I/O layer that
+  crosses between the two has to translate (`0` -> `NaN` on read,
+  `NaN` -> `0` on write). The cleaner long-term fix is to switch
+  MATLAB GECKO to `NaN` too, after which no translation is needed.
+
+- **Custom subunit stoichiometry file format.** The `stoicho`
+  column in `customKcats.tsv` was meant to let users override
+  subunit counts manually. The MATLAB code never actually reads
+  it; geckopy also ignores it. Two options if we want to support
+  it properly: a separate `customComplexes.tsv` file, or a new
+  "user_overrides" section in the ComplexPortal JSON. Deferred
+  until someone needs it.
+
+## Third-party library gotchas
+
+A scratchpad of brittle behaviours we ran into in geckopy's hard
+dependencies. Each is worked around in source today; the entries
+exist so the next person hitting the same wall can find the fix
+fast, and so we have a list of things to retest when we upgrade.
+
+- **`libsbml.Species.appendNotes` silently fails on cobra-written
+  documents.** Returns status `-5` (`LIBSBML_INVALID_OBJECT`) with
+  no exception, so the MW we tried to write into the species notes
+  was lost. Tried both `<html>` and `<notes>` wrappers; same result.
+  Workaround: set MW via `cobra.Metabolite.notes["mw"]` *before*
+  calling `cobra.io.write_sbml_model`; cobra serialises that dict
+  into SBML `<notes>` reliably. See
+  `geckopy.io.sbml._annotate_mw`. Tested with libsbml 5.21.1.
+
+- **`multiprocessing.Pool(context="spawn")` deadlocks on some WSL
+  kernels.** Even a trivial 2-worker pool with a `lambda x: x*2`
+  task hangs forever — no error, no timeout. The original plan for
+  parallel `ec_fva` called for `spawn` because it's the only context
+  available on Windows. Workaround: pick the context based on the
+  platform — `fork` on POSIX (which is also faster, no module
+  re-import), `spawn` on Windows. See `geckopy.utilities.ec_fva.ec_fva`.
+
+- **`ruamel.yaml`'s `ScalarInt` / `ScalarFloat` leak out of cobra
+  YAML loads.** After loading a YAML model with cobra, attributes
+  like `Metabolite.charge` are ruamel scalar types (subclasses of
+  int/float that carry YAML formatting metadata). The ruamel
+  safe-dumper has no representer for them, so writing the model
+  back out fails with `RepresenterError: cannot represent an
+  object: 0`. Workaround: walk the assembled document and coerce
+  everything to plain Python primitives just before writing. See
+  `geckopy.utilities.save_ec_model._to_native`. This bites any
+  YAML-to-YAML round-trip of a cobra-loaded model.
 
 ## API simplification
 
-- **Mode B in `apply_custom_kcats`.** The "proteins only, no rxns"
-  mode in `applyCustomKcats.m` has unclear semantics (the docstring
-  and code disagree about whether to apply the full-match gate).
-  Geckopy follows the implementation; MATLAB should clean up the
-  docstring or drop the mode.
+Two API rough edges that geckopy inherited from MATLAB GECKO.
+Cleaning them up requires a coordinated rename or behaviour change
+in both packages, so deferred for now.
 
-- **Function naming.** `get_kcat_across_isozymes` is a literal port of
-  the MATLAB name but the verb "get" is misleading; the function
-  modifies `ec.kcat` in place. A cleaner name would be
-  `fill_kcats_from_isozymes`. Deferred to a coordinated rename across
-  both implementations.
+- **Mode B in `apply_custom_kcats`.** The "proteins only, no rxns"
+  mode in `applyCustomKcats.m` is unclear: the docstring and the
+  code disagree about whether the full-match gate should fire.
+  geckopy follows the code (since it's the authoritative
+  behaviour); MATLAB should clean up the docstring or drop the
+  mode entirely.
+
+- **Function naming.** `get_kcat_across_isozymes` is a literal
+  port of the MATLAB name, but the verb `get` is misleading — the
+  function modifies `ec.kcat` in place. A clearer name would be
+  `fill_kcats_from_isozymes`. Deferred to a coordinated rename
+  across MATLAB and Python.
 
 ## MATLAB GECKO changes
 
-A list of all places where MATLAB GECKO behavior should be brought into
-line with geckopy. Each is also tagged with a `MATLAB-COMPAT:` comment
-in the geckopy source code. Run `grep -rn "MATLAB-COMPAT:" src/` for
-the full list.
+Aimed at MATLAB GECKO maintainers. Each item is something the
+geckopy port found while comparing the two implementations: bugs,
+dead code, unit-comment slip-ups, or unclear behaviour. The
+in-source `MATLAB-COMPAT:` comments in geckopy carry the same
+notes alongside the Python implementation.
 
 Notable items:
 
@@ -201,10 +258,11 @@ Notable items:
 
 ## get_enzyme_data subsystem
 
-- **KEGG as an alternative protein-sequence source for `make_ec_model`.**
-  Currently `populate_enzyme_data` consults UniProt only. KEGG returns
-  similar information (gene, EC, MW, sequence) and is sometimes more
-  complete for non-model organisms. The KEGG loader and downloader are
-  ported as part of `get_enzyme_data/`, but `make_ec_model` does not yet
-  use them. Future work: add a KEGG fallback path in stage 7 of
-  `make_ec_model`, controlled via adapter parameters.
+- **KEGG as an alternative protein-sequence source for
+  `make_ec_model`.** Today `populate_enzyme_data` only consults
+  UniProt. KEGG returns similar information (gene id, EC number,
+  MW, sequence) and is often more complete for non-model
+  organisms. The KEGG loader and downloader are already ported
+  (in `geckopy.get_enzyme_data`), but `make_ec_model` does not
+  use them yet. The work needed: add a KEGG fallback to stage 7
+  of `make_ec_model`, controlled via adapter parameters.
