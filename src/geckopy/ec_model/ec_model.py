@@ -74,11 +74,15 @@ class EcModel(cobra.Model):
     def from_cobra(
         cls,
         model: cobra.Model,
-        adapter: "ModelAdapter",
+        adapter: Optional["ModelAdapter"] = None,
         *,
         gecko_light: bool = False,
     ) -> "EcModel":
         """Wrap an existing cobra.Model as an EcModel.
+
+        ``adapter`` is optional: pass ``None`` to wrap a model for
+        inspection without a project (downstream functions that need
+        organism parameters will then require an explicit ``adapter``).
 
         Does not yet run makeEcModel; that is a separate pipeline step
         that mutates the wrapped model and populates `self.ec`.

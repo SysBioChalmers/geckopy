@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 import pandas as pd
@@ -89,6 +89,7 @@ def ec_fseof(
     cs_rxn: str,
     *,
     n_steps: int = 16,
+    bio_rxn: Optional[str] = None,
 ) -> EcFseofResult:
     """Run Flux-Scanning with Enforced Objective Function (FSEOF).
 
@@ -128,20 +129,22 @@ def ec_fseof(
         a sanity-check warning).
     n_steps
         Number of alpha values in the scan.
+    bio_rxn
+        Biomass reaction id. Defaults to ``params.bio_rxn`` from the
+        adapter; pass it explicitly to run without an adapter.
 
     Returns
     -------
     EcFseofResult
     """
-    from ..adapter import resolve_adapter
-    adapter = resolve_adapter(
-        model,
-        purpose="ec_fseof reads params.bio_rxn from the adapter",
-    )
+    from ..adapter import resolve_param
     if n_steps < 2:
         raise ValueError(f"n_steps must be >= 2, got {n_steps}")
 
-    bio_rxn_id = adapter.params.bio_rxn
+    bio_rxn_id = resolve_param(
+        model, bio_rxn, "bio_rxn",
+        purpose="ec_fseof needs the biomass reaction id",
+    )
     bio_rxn = model.reactions.get_by_id(bio_rxn_id)
     prod_rxn = model.reactions.get_by_id(prod_target_rxn)
     cs_rxn_obj = model.reactions.get_by_id(cs_rxn)

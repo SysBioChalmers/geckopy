@@ -147,6 +147,10 @@ def load_uniprot_tsv(
     eccodes: list[str] = []
     mw_da: list[float] = []
     sequences: list[str] = []
+    # One Entry per source row (before gene-cell splitting), so duplicate
+    # detection sees each row exactly once regardless of how many genes it
+    # expands to.
+    source_row_ids: list[str] = []
 
     with open(path, "r", encoding="utf-8") as f:
         header_line = f.readline()
@@ -179,6 +183,7 @@ def load_uniprot_tsv(
             else:
                 gene_names = [gene_cell]
 
+            source_row_ids.append(entry)
             for gene_name in gene_names:
                 ids.append(entry)
                 genes.append(gene_name)
@@ -186,7 +191,7 @@ def load_uniprot_tsv(
                 mw_da.append(mass_da)
                 sequences.append(seq)
 
-    _check_duplicate_ids(ids, path)
+    _check_duplicate_ids(source_row_ids, path)
 
     return UniprotDB(
         ids=ids,
@@ -197,25 +202,19 @@ def load_uniprot_tsv(
     )
 
 
-def _check_duplicate_ids(ids: list[str], path: Path) -> None:
-    """Raise if any Entry value appears more than once.
+def _check_duplicate_ids(source_row_ids: list[str], path: Path) -> None:
+    """Raise if any Entry value appears on more than one source row.
 
-    When split_gene_cells expands a single source row into several,
-    those repetitions are expected and ignored here; only repetitions
-    across distinct source rows should raise. Since we do not track
-    source rows separately, we dedupe each consecutive run of the same
-    ID before checking.
+    ``source_row_ids`` holds one Entry per source row (gene-cell
+    splitting already accounted for), so a plain count flags genuine
+    cross-row duplicates without mistaking a split row for one.
     """
     seen: set[str] = set()
-    last_id: str | None = None
     duplicates: list[str] = []
-    for entry in ids:
-        if entry == last_id:
-            continue  # split_gene_cells repetition
+    for entry in source_row_ids:
         if entry in seen:
             duplicates.append(entry)
         seen.add(entry)
-        last_id = entry
 
     if duplicates:
         preview = sorted(set(duplicates))[:5]

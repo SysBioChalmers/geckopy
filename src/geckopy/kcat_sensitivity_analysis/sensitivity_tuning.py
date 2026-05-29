@@ -73,6 +73,7 @@ def sensitivity_tuning(
     fold_change: float = 10.0,
     prot_to_ignore: Optional[list[str]] = None,
     max_iterations: int = 1000,
+    bio_rxn: Optional[str] = None,
     verbose: bool = True,
 ) -> TunedKcatsResult:
     """Iteratively bump the most-limiting kcat by ``fold_change`` until
@@ -128,6 +129,10 @@ def sensitivity_tuning(
     max_iterations
         Hard cap on tuning iterations. A backstop against a target
         growth rate that is unreachable by raising kcats alone.
+    bio_rxn
+        Biomass reaction id to set as the objective. Defaults to
+        ``params.bio_rxn`` from the adapter when one is attached; if
+        neither is available the model's current objective is used.
     verbose
         Whether per-iteration progress is logged at INFO.
 
@@ -166,9 +171,9 @@ def sensitivity_tuning(
     if prot_to_ignore is None:
         prot_to_ignore = []
 
-    bio_rxn_id = (
-        model.adapter.params.bio_rxn if model.adapter is not None else None
-    )
+    bio_rxn_id = bio_rxn
+    if bio_rxn_id is None and model.adapter is not None:
+        bio_rxn_id = model.adapter.params.bio_rxn
     if bio_rxn_id:
         model.objective = bio_rxn_id
 

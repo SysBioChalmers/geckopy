@@ -50,6 +50,16 @@ def test_write_read_roundtrip_enzymes(tmp_path):
     assert sorted(reloaded.ec.enzymes) == sorted(model.ec.enzymes)
 
 
+def test_read_without_adapter_for_inspection(tmp_path):
+    """A model can be read for inspection without supplying an adapter."""
+    model, _ = _ectestgem_ec_model_with_kcats()
+    out = tmp_path / "rt.xml"
+    write_sbml_ec_model(model, out)
+    reloaded = read_sbml_ec_model(out, adapter=None)
+    assert reloaded.adapter is None
+    assert sorted(reloaded.ec.enzymes) == sorted(model.ec.enzymes)
+
+
 def test_write_read_roundtrip_mw(tmp_path):
     model, adapter = _ectestgem_ec_model_with_kcats()
     out = tmp_path / "rt.xml"

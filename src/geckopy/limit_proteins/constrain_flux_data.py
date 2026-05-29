@@ -16,7 +16,7 @@ src/geckomat/limit_proteins/constrainFluxData.m.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
 
@@ -35,6 +35,8 @@ def apply_flux_data_constraints(
     condition: int | str = 0,
     max_min_growth: Literal["max", "min"] = "max",
     loose_strict_flux: _LooseStrict = "loose",
+    bio_rxn: Optional[str] = None,
+    c_source: Optional[str] = None,
 ) -> None:
     """Constrain the model's exchange fluxes from a ``FluxData`` measurement.
 
@@ -98,12 +100,7 @@ def apply_flux_data_constraints(
     IndexError
         If ``condition`` (as int) is out of range.
     """
-    from ..adapter import resolve_adapter
-    adapter = resolve_adapter(
-        model,
-        purpose="apply_flux_data_constraints reads params.bio_rxn "
-        "and params.c_source from the adapter",
-    )
+    from ..adapter import resolve_param
     if max_min_growth not in ("max", "min"):
         raise ValueError(
             f"max_min_growth must be 'max' or 'min', got {max_min_growth!r}"
@@ -144,16 +141,24 @@ def apply_flux_data_constraints(
             f"present in the model (examples: {preview})"
         )
 
-    params = adapter.params
-    if params.c_source:
+    # c_source is optional: use the explicit value, else the adapter's if one
+    # is attached, else none (no adapter required for a c-source-free run).
+    if c_source is None:
+        _adapter = getattr(model, "adapter", None)
+        c_source = _adapter.params.c_source if _adapter is not None else ""
+    if c_source:
         try:
-            c_source_rxn = model.reactions.get_by_id(params.c_source)
+            c_source_rxn = model.reactions.get_by_id(c_source)
             c_source_rxn.lower_bound = 0.0
             c_source_rxn.upper_bound = 0.0
         except KeyError:
-            pass  # adapter c_source not in model; silent
+            pass  # c_source not in model; silent
 
-    bio_rxn = model.reactions.get_by_id(params.bio_rxn)
+    bio_rxn_id = resolve_param(
+        model, bio_rxn, "bio_rxn",
+        purpose="apply_flux_data_constraints needs the biomass reaction id",
+    )
+    bio_rxn = model.reactions.get_by_id(bio_rxn_id)
     gr = float(flux_data.gr_rate[cond_idx])
     if max_min_growth == "max":
         bio_rxn.lower_bound = 0.0

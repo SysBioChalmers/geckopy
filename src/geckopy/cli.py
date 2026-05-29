@@ -63,12 +63,10 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-_DEFAULT_CACHE_DIR = (
-    Path(__file__).resolve().parent / "data" / "brenda" / "_cache"
-)
-_DEFAULT_OUT_DIR = (
-    Path(__file__).resolve().parent / "data" / "brenda"
-)
+# Default to a project-relative location (resolved against the current
+# working directory) rather than the install tree, which may be read-only.
+_DEFAULT_CACHE_DIR = Path("data") / "brenda" / "_cache"
+_DEFAULT_OUT_DIR = Path("data") / "brenda"
 
 
 def cmd_brenda_refresh(args: argparse.Namespace) -> int:
