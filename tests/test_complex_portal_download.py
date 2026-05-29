@@ -36,7 +36,7 @@ def _install_fake_session(monkeypatch, responses: dict):
     from geckopy.databases import complex_portal_download as mod
 
     class _FakeSession:
-        def get(self, url, timeout=None):
+        def get(self, url, params=None, timeout=None):
             for fragment, (status, payload) in responses.items():
                 if fragment in url:
                     return _FakeResponse(status, payload)
@@ -85,7 +85,7 @@ def test_taxonomic_id_zero_queries_all(monkeypatch):
     captured_urls: list[str] = []
 
     class _CaptureSession:
-        def get(self, url, timeout=None):
+        def get(self, url, params=None, timeout=None):
             captured_urls.append(url)
             if "search/*" in url and "filters" not in url:
                 return _FakeResponse(200, {"size": 0, "elements": []})
@@ -307,3 +307,96 @@ def test_complex_of_complexes_flattens(monkeypatch):
     # SUB-B contributes P2 with stoich 1*5=5.
     assert big.protein_ids == ["P1", "P2"]
     assert big.stoichiometry == [6, 5]
+
+
+def test_subcomplex_with_ligand_ignores_ligand(monkeypatch):
+    """A complex with a sub-complex participant *and* a ligand (no direct
+    protein) flattens to the sub-complex proteins only; the ligand must not
+    be treated as a sub-complex id."""
+    responses = {
+        "search/*": (200, {
+            "size": 2,
+            "elements": [{"complexAC": "SUB-A"}, {"complexAC": "BIG"}],
+        }),
+        "complex/SUB-A": (200, {
+            "complexAc": "SUB-A", "name": "A", "species": "x",
+            "participants": [
+                {"interactorType": "protein", "name": "G1", "identifier": "P1",
+                 "stochiometry": "minValue: 2, maxValue: 2"},
+            ],
+        }),
+        "complex/BIG": (200, {
+            "complexAc": "BIG", "name": "Big", "species": "x",
+            "participants": [
+                {"interactorType": "complex", "name": "SUB-A",
+                 "identifier": "SUB-A",
+                 "stochiometry": "minValue: 3, maxValue: 3"},
+                {"interactorType": "small molecule", "name": "ATP",
+                 "identifier": "CHEBI:15422",
+                 "stochiometry": "minValue: 1, maxValue: 1"},
+            ],
+        }),
+    }
+    _install_fake_session(monkeypatch, responses)
+
+    result = get_complex_data(taxonomic_id=9606)
+    big = next(r for r in result if r.complex_id == "BIG")
+    assert big.protein_ids == ["P1"]
+    assert big.stoichiometry == [6]
+
+
+def test_ligand_only_complex_has_no_proteins(monkeypatch):
+    """A complex whose only participants are non-protein, non-complex must
+    not be flattened as a complex-of-complexes; it yields no proteins."""
+    responses = {
+        "search/*": (200, {"size": 1, "elements": [{"complexAC": "LIG"}]}),
+        "complex/LIG": (200, {
+            "complexAc": "LIG", "name": "ligand only", "species": "x",
+            "participants": [
+                {"interactorType": "small molecule", "name": "ATP",
+                 "identifier": "CHEBI:15422",
+                 "stochiometry": "minValue: 1, maxValue: 1"},
+            ],
+        }),
+    }
+    _install_fake_session(monkeypatch, responses)
+
+    result = get_complex_data(taxonomic_id=9606)
+    lig = next(r for r in result if r.complex_id == "LIG")
+    assert lig.protein_ids == []
+
+
+def test_search_paginates(monkeypatch):
+    """The search is paged: complexes beyond the first page must still be
+    collected (size=3 spread over two pages)."""
+    from geckopy.databases import complex_portal_download as mod
+
+    pages = {
+        0: {"size": 3, "elements": [{"complexAC": "CPX-1"},
+                                    {"complexAC": "CPX-2"}]},
+        1: {"size": 3, "elements": [{"complexAC": "CPX-3"}]},
+    }
+
+    def _detail(cid):
+        return {
+            "complexAc": cid, "name": cid, "species": "x",
+            "participants": [
+                {"interactorType": "protein", "name": f"G_{cid}",
+                 "identifier": f"P_{cid}",
+                 "stochiometry": "minValue: 1, maxValue: 1"},
+            ],
+        }
+
+    class _PagingSession:
+        def get(self, url, params=None, timeout=None):
+            if "search/" in url:
+                page = (params or {}).get("first", 0)
+                return _FakeResponse(200, pages.get(page, {"size": 3,
+                                                           "elements": []}))
+            cid = url.rsplit("/", 1)[-1]
+            return _FakeResponse(200, _detail(cid))
+
+    monkeypatch.setattr(mod, "_make_session", lambda: _PagingSession())
+
+    result = get_complex_data(taxonomic_id=9606)
+    assert {r.complex_id for r in result} == {"CPX-1", "CPX-2", "CPX-3"}

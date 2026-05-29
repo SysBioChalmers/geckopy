@@ -71,10 +71,14 @@ def write_sbml_ec_model(model: "EcModel", filename: str | Path) -> None:
     """
     filename = str(filename)
 
-    # 1. Tag prot_<id> metabolites with their MW (cobra serialises
-    #    metabolite.notes into SBML <notes>; this carries through
-    #    the round-trip cleanly without fighting libsbml.appendNotes).
-    annotated = _annotate_mw(model)
+    # 1. Tag prot_<id> metabolites with MW/sequence/gene and catalysed
+    #    reactions with their kcat source/eccodes/notes/kcat/subunit
+    #    counts (cobra serialises notes dicts into SBML <notes>; this
+    #    carries through the round-trip cleanly without fighting
+    #    libsbml.appendNotes). The FBA coefficient already encodes
+    #    subunits*MW/(kcat*3600), but those three are not separable from
+    #    the coefficient alone, so they are stored explicitly.
+    annotated = _annotate_ec_metadata(model)
 
     # 2. Write via cobra (handles all standard SBML). The in-memory
     #    coefficient on prot_<id> mets is already MW_KCAT-encoded
@@ -121,27 +125,72 @@ def write_sbml_ec_model(model: "EcModel", filename: str | Path) -> None:
     libsbml.writeSBMLToFile(doc, filename)
 
 
-def _annotate_mw(model: "EcModel") -> "EcModel":
-    """Return a deep-copy of ``model`` with each prot_<id>
-    metabolite's MW written into its ``notes`` dict.
+def _annotate_ec_metadata(model: "EcModel") -> "EcModel":
+    """Return a deep-copy of ``model`` with the ec provenance that is
+    not recoverable from the FBA stoichiometry written into notes.
 
-    cobra serialises ``metabolite.notes`` into SBML ``<notes>`` as
+    cobra serialises ``notes`` dicts into SBML ``<notes>`` as
     ``<p>key: value</p>`` entries, which both cobra (on read) and
-    geckopy's reader pick up as ``met.notes["mw"]``. This avoids
-    the libsbml ``appendNotes`` quirk (returns status -5 even for
-    well-formed XHTML).
-    """
-    import copy as _copy
+    geckopy's reader pick up again. This avoids the libsbml
+    ``appendNotes`` quirk (returns status -5 even for well-formed
+    XHTML).
 
+    Written here:
+
+    - Per ``prot_<id>`` metabolite: ``mw``, ``sequence``, ``gene``.
+    - Per catalysed reaction (matched by id to ``ec.rxns``):
+      ``ec_source``, ``ec_eccodes``, ``ec_notes``, ``ec_kcat`` and
+      ``ec_subunits`` (a ``<enzyme>:<count>`` list). The coefficient
+      on ``prot_<id>`` is ``-subunits*MW/(3600*kcat)``; storing kcat
+      and subunit counts lets the reader recover both exactly instead
+      of assuming one subunit and dividing the kcat.
+    """
+    # All values written below are read from the original ``model.ec``;
+    # ``out.ec`` is never touched, so there is no need to deep-copy it.
     out = model.copy()
-    out.ec = _copy.deepcopy(model.ec)
+
+    out_met_ids = {m.id for m in out.metabolites}
+    out_rxn_ids = {r.id for r in out.reactions}
+
+    # Per-enzyme: MW, sequence, gene.
     for i, enz in enumerate(model.ec.enzymes):
-        mw = float(model.ec.mw[i])
-        if not np.isfinite(mw):
-            continue
         met_id = f"{PROT_PREFIX}{enz}"
-        if met_id in {m.id for m in out.metabolites}:
-            out.metabolites.get_by_id(met_id).notes["mw"] = str(mw)
+        if met_id not in out_met_ids:
+            continue
+        met = out.metabolites.get_by_id(met_id)
+        mw = float(model.ec.mw[i])
+        if np.isfinite(mw):
+            met.notes["mw"] = str(mw)
+        if i < len(model.ec.sequence) and model.ec.sequence[i]:
+            met.notes["sequence"] = model.ec.sequence[i]
+        if i < len(model.ec.genes):
+            gene = model.ec.genes[i]
+            # Only worth storing when it differs from the accession;
+            # the reader defaults gene to the accession otherwise.
+            if gene and gene != enz:
+                met.notes["gene"] = gene
+
+    # Per catalysed reaction: source, eccodes, notes, kcat, subunits.
+    mat = model.ec.rxn_enz_mat.tocsr()
+    enzymes = model.ec.enzymes
+    for i, rid in enumerate(model.ec.rxns):
+        if rid not in out_rxn_ids:
+            continue
+        rxn = out.reactions.get_by_id(rid)
+        if i < len(model.ec.source) and model.ec.source[i]:
+            rxn.notes["ec_source"] = model.ec.source[i]
+        if i < len(model.ec.eccodes) and model.ec.eccodes[i]:
+            rxn.notes["ec_eccodes"] = model.ec.eccodes[i]
+        if i < len(model.ec.notes) and model.ec.notes[i]:
+            rxn.notes["ec_notes"] = model.ec.notes[i]
+        kcat = float(model.ec.kcat[i]) if i < len(model.ec.kcat) else 0.0
+        if np.isfinite(kcat) and kcat > 0:
+            rxn.notes["ec_kcat"] = repr(kcat)
+        if i < mat.shape[0]:
+            row = mat.getrow(i)
+            if row.nnz:
+                parts = [f"{enzymes[j]}:{row[0, j]:g}" for j in row.indices]
+                rxn.notes["ec_subunits"] = ";".join(parts)
     return out
 
 
@@ -193,6 +242,8 @@ def read_sbml_ec_model(
     enzyme_ids: list[str] = []
     enzyme_mw: dict[str, float] = {}
     enzyme_conc: dict[str, float] = {}
+    enzyme_seq: dict[str, str] = {}
+    enzyme_gene: dict[str, str] = {}
     cobra_met_ids = {m.id for m in cobra_model.metabolites}
     if groups_plugin is not None:
         for gi in range(groups_plugin.getNumGroups()):
@@ -226,6 +277,10 @@ def read_sbml_ec_model(
                             mw = float(notes["mw"])
                         except (TypeError, ValueError):
                             mw = None
+                    if notes.get("sequence"):
+                        enzyme_seq[uniprot] = notes["sequence"]
+                    if notes.get("gene"):
+                        enzyme_gene[uniprot] = notes["gene"]
                 if mw is None:
                     mw = _parse_mw_from_notes(species.getNotesString())
                 if mw is not None:
@@ -241,6 +296,7 @@ def read_sbml_ec_model(
 
     _populate_ec_from_sbml(
         ec_model, enzyme_ids, enzyme_mw, enzyme_conc,
+        enzyme_seq, enzyme_gene,
     )
     return ec_model
 
@@ -255,25 +311,46 @@ def _parse_mw_from_notes(notes_string: str) -> Optional[float]:
     return float(m.group(1)) if m else None
 
 
+def _parse_subunits(value: str) -> dict[str, float]:
+    """Parse an ``ec_subunits`` note (``<enzyme>:<count>;...``)."""
+    counts: dict[str, float] = {}
+    for part in value.split(";"):
+        if ":" not in part:
+            continue
+        enz, cnt = part.rsplit(":", 1)
+        try:
+            counts[enz] = float(cnt)
+        except ValueError:
+            continue
+    return counts
+
+
 def _populate_ec_from_sbml(
     ec_model: "EcModel",
     enzyme_ids: list[str],
     enzyme_mw: dict[str, float],
     enzyme_conc: dict[str, float],
+    enzyme_seq: Optional[dict[str, str]] = None,
+    enzyme_gene: Optional[dict[str, str]] = None,
 ) -> None:
     """Reconstruct ``model.ec`` from per-enzyme metadata + reaction
     stoichiometry.
 
     For each metabolic reaction that has a ``prot_<id>`` in its
-    stoichiometry, derive kcat from the coefficient using
-    ``kcat = -mw / (coef * 3600)``. Subunits are assumed 1; the
-    coefficient already encodes the per-reaction stoichiometry.
+    stoichiometry, the kcat, subunit count, source, eccodes and notes
+    are taken from the reaction's ``ec_*`` notes when present (written
+    by ``write_sbml_ec_model``). For files that lack those notes
+    (legacy/foreign SBML), kcat falls back to inverting the coefficient
+    ``kcat = -mw / (coef * 3600)`` with one subunit assumed.
 
     Ported in concept from the legacy geckopy package
     (Carrasco et al., 2023, https://doi.org/10.1128/spectrum.01705-23),
     geckopy/io/sbml.py:540-787.
     """
     from ..ec_model.ec_data import EcData
+
+    enzyme_seq = enzyme_seq or {}
+    enzyme_gene = enzyme_gene or {}
 
     # Per-enzyme arrays (order preserved from group iteration).
     n_e = len(enzyme_ids)
@@ -283,16 +360,32 @@ def _populate_ec_from_sbml(
     concs_arr = np.array(
         [enzyme_conc.get(u, np.nan) for u in enzyme_ids], dtype=float,
     )
+    sequence = [enzyme_seq.get(u, "") for u in enzyme_ids]
+    # gene defaults to the accession when not stored separately.
+    genes = [enzyme_gene.get(u, u) for u in enzyme_ids]
     enzyme_index = {u: i for i, u in enumerate(enzyme_ids)}
 
-    # Walk metabolic reactions; collect (rxn_id, enzyme, coef) tuples.
+    # Walk metabolic reactions; collect (rxn_idx, enz_idx, kcat, subunits).
     catalysed_rxns: list[str] = []
     rxn_index: dict[str, int] = {}
-    triples: list[tuple[int, int, float]] = []  # (rxn_idx, enz_idx, kcat)
+    quads: list[tuple[int, int, float, float]] = []
+    src_by_idx: dict[int, str] = {}
+    ecc_by_idx: dict[int, str] = {}
+    notes_by_idx: dict[int, str] = {}
 
     for rxn in ec_model.reactions:
         if rxn.id == POOL_EXCHANGE_ID or rxn.id.startswith(USAGE_PREFIX):
             continue
+        note_kcat: Optional[float] = None
+        if "ec_kcat" in rxn.notes:
+            try:
+                note_kcat = float(rxn.notes["ec_kcat"])
+            except (TypeError, ValueError):
+                note_kcat = None
+        subunit_counts = (
+            _parse_subunits(rxn.notes["ec_subunits"])
+            if "ec_subunits" in rxn.notes else {}
+        )
         for met, coef in rxn.metabolites.items():
             if met.id == POOL_ID or not met.id.startswith(PROT_PREFIX):
                 continue
@@ -303,32 +396,42 @@ def _populate_ec_from_sbml(
             mw = mw_arr[j]
             if not np.isfinite(mw) or coef == 0:
                 continue
-            # coef = -mw / (3600 * kcat)  =>  kcat = -mw / (3600 * coef)
-            kcat = float(-mw / (3600.0 * coef))
+            if note_kcat is not None:
+                kcat = note_kcat
+                subunits = subunit_counts.get(enzyme, 1.0)
+            else:
+                # coef = -mw / (3600 * kcat)  =>  kcat = -mw / (3600 * coef)
+                kcat = float(-mw / (3600.0 * coef))
+                subunits = 1.0
             if rxn.id not in rxn_index:
-                rxn_index[rxn.id] = len(catalysed_rxns)
+                idx = len(catalysed_rxns)
+                rxn_index[rxn.id] = idx
                 catalysed_rxns.append(rxn.id)
-            triples.append((rxn_index[rxn.id], j, kcat))
+                src_by_idx[idx] = rxn.notes.get("ec_source", "")
+                ecc_by_idx[idx] = rxn.notes.get("ec_eccodes", "")
+                notes_by_idx[idx] = rxn.notes.get("ec_notes", "")
+            quads.append((rxn_index[rxn.id], j, kcat, subunits))
 
     n_r = len(catalysed_rxns)
     # 0 marks "no kcat assigned".
     kcat_arr = np.zeros(n_r, dtype=float)
     mat = sparse.lil_matrix((n_r, n_e), dtype=float)
-    for rxn_idx, enz_idx, kcat in triples:
-        # Multiple (rxn, enz) entries collapse to one (kcat per cell).
+    for rxn_idx, enz_idx, kcat, subunits in quads:
+        # kcat is per reaction (one value per ec.rxns row); subunits are
+        # per (reaction, enzyme).
         kcat_arr[rxn_idx] = kcat
-        mat[rxn_idx, enz_idx] = 1.0
+        mat[rxn_idx, enz_idx] = subunits
 
     ec_model.ec = EcData(
         rxns=catalysed_rxns,
         kcat=kcat_arr,
-        source=[""] * n_r,
-        notes=[""] * n_r,
-        eccodes=[""] * n_r,
-        genes=list(enzyme_ids),  # gene == uniprot when unknown
+        source=[src_by_idx.get(i, "") for i in range(n_r)],
+        notes=[notes_by_idx.get(i, "") for i in range(n_r)],
+        eccodes=[ecc_by_idx.get(i, "") for i in range(n_r)],
+        genes=genes,
         enzymes=list(enzyme_ids),
         mw=mw_arr,
-        sequence=[""] * n_e,
+        sequence=sequence,
         concs=concs_arr,
         rxn_enz_mat=mat.tocsr(),
     )

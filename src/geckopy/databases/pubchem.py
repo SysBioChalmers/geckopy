@@ -28,9 +28,12 @@ logger = logging.getLogger(__name__)
 
 # TODO: progress reporting (tqdm) deferred per design discussion.
 
+# PubChem deprecated the `CanonicalSMILES` property in 2025 in favour of
+# `SMILES` (its canonical/absolute SMILES); `ConnectivitySMILES` replaces
+# the old `IsomericSMILES`.
 _PUBCHEM_URL = (
     "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/"
-    "{name}/property/CanonicalSMILES/TXT"
+    "{name}/property/SMILES/TXT"
 )
 _TIMEOUT_SECONDS = 30
 _NUM_RETRIES = 10

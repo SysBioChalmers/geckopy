@@ -82,10 +82,11 @@ def add_protein_pseudometabolites(model: "EcModel") -> list[str]:
         model, adapter.params.enzyme_comp
     )
 
+    existing_met_ids = {m.id for m in model.metabolites}
     new_mets: list[cobra.Metabolite] = []
     for enzyme in unique_enzymes:
         met_id = f"{PROT_PREFIX}{enzyme}"
-        if met_id in {m.id for m in model.metabolites}:
+        if met_id in existing_met_ids:
             continue
         met = cobra.Metabolite(
             id=met_id,
@@ -184,14 +185,19 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
     """
     pool_met = model.metabolites.get_by_id(POOL_ID)
 
+    existing_rxn_ids = {r.id for r in model.reactions}
     new_rxns: list[cobra.Reaction] = []
     for enzyme, gene in sorted(
         set(zip(model.ec.enzymes, model.ec.genes))
     ):
         rxn_id = f"{USAGE_PREFIX}{enzyme}"
-        if rxn_id in {r.id for r in model.reactions}:
+        # `existing_rxn_ids` also absorbs ids queued this call, so an enzyme
+        # shared by two genes (duplicate accession) yields a single usage
+        # reaction rather than a duplicate-id crash in add_reactions.
+        if rxn_id in existing_rxn_ids:
             continue  # idempotent
 
+        existing_rxn_ids.add(rxn_id)
         met_id = f"{PROT_PREFIX}{enzyme}"
         prot_met = model.metabolites.get_by_id(met_id)
 

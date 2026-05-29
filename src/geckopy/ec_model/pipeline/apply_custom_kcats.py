@@ -5,6 +5,8 @@ Ported from GECKO MATLAB: src/geckomat/change_model/applyCustomKcats.m.
 from __future__ import annotations
 
 import logging
+import math
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -16,7 +18,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_EXP_SUFFIX_REGEX = __import__("re").compile(r"_EXP_\d+$")
+_EXP_SUFFIX_REGEX = re.compile(r"_EXP_\d+$")
 _SOURCE_TAG = "custom"
 _NOTES_SEPARATOR = ", "
 
@@ -125,6 +127,22 @@ def apply_custom_kcats(
             row["proteins"], row["rxns"], row["kcat"], row["notes"],
             row["stoicho"],
         )
+
+        # A blank kcat cell parses to NaN. Writing it would mark the
+        # reaction "unassigned" and silently clear an existing kcat in
+        # apply_kcat_constraints, so skip the row instead.
+        if math.isnan(kcat):
+            logger.warning(
+                "Row %d: kcat is blank; row skipped (existing kcat kept).",
+                row["index"],
+            )
+            continue
+        if kcat < 0:
+            logger.warning(
+                "Row %d: kcat %g is negative; row skipped.",
+                row["index"], kcat,
+            )
+            continue
 
         if stoicho and any(s.strip() not in ("", "1") for s in stoicho.split("+")):
             logger.warning(

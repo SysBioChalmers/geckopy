@@ -29,6 +29,7 @@ Ported from GECKO MATLAB: src/geckomat/utilities/saveEcModel.m.
 from __future__ import annotations
 
 import math
+import numpy as np
 from datetime import date
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -231,18 +232,25 @@ def _to_native(value):
 
     cobra-py's YAML loader stores ruamel scalar types on attributes
     like ``Metabolite.charge``; passing those through to the YAML
-    safe-dumper raises RepresenterError. Coerce at the boundary so
-    the on-disk file uses plain Python primitives.
+    safe-dumper raises RepresenterError. numpy scalars (``np.int64``,
+    ``np.float64``, ``np.bool_``) trip the same dumper and are *not*
+    subclasses of the Python builtins, so they need explicit handling.
+    Coerce at the boundary so the on-disk file uses plain Python
+    primitives.
     """
     if isinstance(value, dict):
         return {_to_native(k): _to_native(v) for k, v in value.items()}
+    if isinstance(value, np.ndarray):
+        return [_to_native(v) for v in value.tolist()]
     if isinstance(value, (list, tuple)):
         return [_to_native(v) for v in value]
-    if isinstance(value, bool):
+    # numpy bool is not a subclass of Python bool; check it before the
+    # integer branch (np.bool_ is not an np.integer either).
+    if isinstance(value, (bool, np.bool_)):
         return bool(value)
-    if isinstance(value, int):
+    if isinstance(value, (int, np.integer)):
         return int(value)
-    if isinstance(value, float):
+    if isinstance(value, (float, np.floating)):
         return float(value)
     return value
 

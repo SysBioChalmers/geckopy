@@ -31,6 +31,9 @@ _SEARCH_URL = "https://www.ebi.ac.uk/intact/complex-ws/search/*"
 _DETAIL_URL = "https://www.ebi.ac.uk/intact/complex-ws/complex/"
 _TIMEOUT_SECONDS = 30
 _NUM_RETRIES = 10
+_SEARCH_PAGE_SIZE = 100
+# Safety bound: 100 pages * 100 = 10k complexes, well above any organism.
+_MAX_SEARCH_PAGES = 100
 
 
 def get_complex_data(
@@ -87,7 +90,10 @@ def get_complex_data(
 
     session = _make_session()
 
-    # Step 1: search to enumerate complex IDs.
+    # Step 1: search to enumerate complex IDs. The search endpoint paginates
+    # (``elements`` is one page; ``size`` is the total), so a single request
+    # silently truncates organisms with more than one page of complexes.
+    # Page through with ``first``/``number`` until all are collected.
     search_url = _SEARCH_URL
     if taxonomic_id != 0:
         search_url = (
@@ -96,18 +102,31 @@ def get_complex_data(
     logger.info(
         "Querying Complex Portal for taxonomic_id=%s ...", taxonomic_id
     )
-    response = session.get(search_url, timeout=_TIMEOUT_SECONDS)
-    response.raise_for_status()
-    search_data = response.json()
 
-    if search_data.get("size", 0) == 0:
-        raise ValueError(
-            f"No complexes returned for taxonomic_id={taxonomic_id}."
+    complex_ids: list[str] = []
+    total: Optional[int] = None
+    for page in range(_MAX_SEARCH_PAGES):
+        response = session.get(
+            search_url,
+            params={"first": page, "number": _SEARCH_PAGE_SIZE},
+            timeout=_TIMEOUT_SECONDS,
         )
+        response.raise_for_status()
+        search_data = response.json()
 
-    complex_ids = [
-        elem["complexAC"] for elem in search_data["elements"]
-    ]
+        if total is None:
+            total = int(search_data.get("size", 0))
+            if total == 0:
+                raise ValueError(
+                    f"No complexes returned for taxonomic_id={taxonomic_id}."
+                )
+
+        elements = search_data.get("elements") or []
+        if not elements:
+            break
+        complex_ids.extend(elem["complexAC"] for elem in elements)
+        if len(complex_ids) >= total:
+            break
     logger.info(
         "Found %d complexes; fetching details ...", len(complex_ids)
     )
@@ -190,13 +209,26 @@ def _parse_complex_detail(payload: dict) -> dict:
         p for p in participants
         if str(p.get("interactorType", "")).lower() == "protein"
     ]
+    # A sub-complex participant has an interactorType naming a complex
+    # ("complex", "stable complex", ...). Classifying by this rather than
+    # by "no proteins present" stops complexes whose only non-protein
+    # participants are ligands/RNA from being mistaken for complexes-of-
+    # complexes and silently reduced to zero proteins in _post_process.
+    complex_participants = [
+        p for p in participants
+        if "complex" in str(p.get("interactorType", "")).lower()
+    ]
 
     if protein_participants:
         eligible = protein_participants
         defined = 1
-    else:
-        eligible = participants
+    elif complex_participants:
+        eligible = complex_participants
         defined = 2
+    else:
+        # Only ligands / nucleic acids / etc. -- nothing usable as an enzyme.
+        eligible = []
+        defined = 0
 
     gene_names: list[str] = []
     protein_ids: list[str] = []

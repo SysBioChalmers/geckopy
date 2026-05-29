@@ -29,6 +29,10 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from ..ec_model.constants import (
+    POOL_EXCHANGE_ID,
+    USAGE_PREFIX,
+)
 from .get_conc_control_coeffs import get_conc_control_coeffs
 
 if TYPE_CHECKING:
@@ -37,12 +41,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-from ..ec_model.constants import (
-    POOL_EXCHANGE_ID,
-    USAGE_PREFIX,
-)
 _POOL_TARGET_NAME = "prot_pool"
 _GROWTH_DELTA_THRESHOLD = 1e-3
+# Backstop on total iterations when iter_per_enzyme is infinite (the
+# MATLAB-compat default for iter_per_enzyme=0). Prevents an unreachable
+# exp_growth from spinning forever when control coefficients keep
+# flagging different enzymes.
+_ABSOLUTE_ITER_CAP_PER_ENZYME = 1000
 _CONTROL_COEFF_LIMIT = 0.75
 
 
@@ -175,13 +180,39 @@ def flexibilize_enz_concs(
     frequence = np.zeros(n_proteins, dtype=int)
 
     initial_sol = model.optimize()
-    pred_growth = float(initial_sol.objective_value or 0.0)
+    if (
+        initial_sol.objective_value is None
+        or np.isnan(initial_sol.objective_value)
+    ):
+        raise ValueError(
+            "FBA of the input model is infeasible, so there is no growth to "
+            "flexibilize towards. Check the enzyme-concentration and exchange "
+            "constraints before calling flexibilize_enz_concs."
+        )
+    pred_growth = float(initial_sol.objective_value)
 
     flex_break = False
     pool_old: Optional[float] = None
     pool_new: Optional[float] = None
 
+    cap_per_enzyme = (
+        iter_per_enzyme if math.isfinite(iter_per_enzyme)
+        else _ABSOLUTE_ITER_CAP_PER_ENZYME
+    )
+    max_total_iter = n_proteins * cap_per_enzyme + n_proteins
+    iter_count = 0
+
     while pred_growth < exp_growth:
+        iter_count += 1
+        if iter_count > max_total_iter:
+            logger.warning(
+                "flexibilize_enz_concs: hit the global iteration cap (%d) "
+                "without reaching exp_growth (%g); stopping. The target may "
+                "be unreachable even with relaxed enzyme bounds.",
+                int(max_total_iter), exp_growth,
+            )
+            flex_break = True
+            break
         _, control_coeffs = get_conc_control_coeffs(
             model,
             proteins=proteins,

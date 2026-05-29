@@ -13,6 +13,11 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 
+from ..ec_model.constants import (
+    PROT_PREFIX,
+    USAGE_PREFIX,
+)
+
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
 
@@ -20,15 +25,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-from ..ec_model.constants import (
-    PROT_PREFIX,
-    USAGE_PREFIX,
-)
-
 _STANDARD_GPR = "standard"
 _BIOMASS_INFEASIBLE_THRESHOLD = 1e-8
 _TOP_QUANTILE = 0.75
 _MAX_TARGET_FRACTION = 0.9
+# Solver fluxes are never bit-exact, so monotonicity and "is zero" tests use
+# tolerances rather than strict comparisons.
+_MONOTONE_REL_TOL = 1e-6
+_ZERO_FLUX_TOL = 1e-9
 
 
 _RXN_TARGET_COLUMNS = [
@@ -148,7 +152,7 @@ def ec_fseof(
         model.objective = bio_rxn_id
         model.objective_direction = "max"
         sol = model.optimize()
-        if sol.fluxes is None:
+        if sol.status != "optimal":
             raise ValueError("Initial biomass-max LP is infeasible.")
         ini_target = float(sol.fluxes[prod_target_rxn])
         cs_flux = float(sol.fluxes[cs_rxn])
@@ -164,7 +168,7 @@ def ec_fseof(
         model.objective = prod_target_rxn
         model.objective_direction = "max"
         sol = model.optimize()
-        if sol.fluxes is None:
+        if sol.status != "optimal":
             raise ValueError("Production-target-max LP is infeasible.")
         max_target = float(sol.fluxes[prod_target_rxn]) * _MAX_TARGET_FRACTION
 
@@ -189,7 +193,7 @@ def ec_fseof(
             model.objective = bio_rxn_id
             model.objective_direction = "max"
             sol = model.optimize()
-            if sol.fluxes is None:
+            if sol.status != "optimal":
                 v_matrix[:, k] = np.nan
             else:
                 for i, rid in enumerate(rxn_ids):
@@ -219,12 +223,18 @@ def ec_fseof(
     denom = abs(alpha[-1] - alpha[0])
     for i, rid in enumerate(kept_rxn_ids):
         diffs = np.diff(kept_abs[i])
-        if np.all(diffs > 0):  # strictly ascending |flux|
+        # Tolerance scaled to the trace magnitude: a flat step is not a
+        # violation of monotonicity, and a net change is required.
+        tol = _MONOTONE_REL_TOL * max(float(kept_abs[i].max()), 1.0)
+        net = float(kept_abs[i, -1] - kept_abs[i, 0])
+        if np.all(diffs >= -tol) and net > tol:  # non-decreasing |flux|
             selected.append(True)
             actions.append("OE")
-        elif np.all(diffs < 0):  # strictly descending |flux|
+        elif np.all(diffs <= tol) and net < -tol:  # non-increasing |flux|
             selected.append(True)
-            actions.append("KO" if kept_v[i, -1] == 0 else "KD")
+            actions.append(
+                "KO" if abs(float(kept_v[i, -1])) <= _ZERO_FLUX_TOL else "KD"
+            )
         else:
             selected.append(False)
             actions.append("")
@@ -381,7 +391,7 @@ def _check_essentiality(
             r.upper_bound = 0.0
         model.objective = bio_rxn_id
         sol = model.optimize()
-        if sol.fluxes is None:
+        if sol.status != "optimal":
             return "essential"
         bio_flux = float(sol.fluxes.get(bio_rxn_id, 0.0))
         if bio_flux < _BIOMASS_INFEASIBLE_THRESHOLD:

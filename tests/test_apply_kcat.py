@@ -77,6 +77,29 @@ def test_writes_expected_coefficients_multi_subunit_reaction():
     assert coef_p2 == pytest.approx(-(20000.0 / (100.0 * 3600.0)))
 
 
+def test_duplicate_accession_coeffs_sum():
+    """When two enzyme rows share one prot_<accession> metabolite (two genes
+    mapping to the same UniProt entry), their coupling on a reaction must sum
+    rather than the second silently overwriting the first."""
+    ec_model = _ectestgem_ec_model()
+    r_idx = ec_model.ec.rxns.index("R2_EXP_1")  # couples P1 and P2
+    ec_model.ec.kcat[r_idx] = 100.0
+
+    i_p1 = ec_model.ec.enzymes.index("P1")
+    i_p2 = ec_model.ec.enzymes.index("P2")
+    mw_p1 = float(ec_model.ec.mw[i_p1])
+    mw_p2 = float(ec_model.ec.mw[i_p2])
+    # Relabel P2's enzyme row to the P1 accession: now both rows point at
+    # prot_P1, exactly the duplicate-accession situation.
+    ec_model.ec.enzymes[i_p2] = "P1"
+
+    apply_kcat_constraints(ec_model)
+
+    r = ec_model.reactions.get_by_id("R2_EXP_1")
+    coef_p1 = _get_s_coef(r, "prot_P1")
+    assert coef_p1 == pytest.approx(-((mw_p1 + mw_p2) / (100.0 * 3600.0)))
+
+
 def test_unset_kcat_produces_zero_coefficient():
     """A freshly built ecModel has all kcats unset (=0). Applying with
     no real kcats writes no coefficient and emits the documented warning."""

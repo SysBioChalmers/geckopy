@@ -10,6 +10,8 @@ import logging
 from typing import Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,27 @@ _RESULT_TIMEOUT = 120
 
 class OKPError(RuntimeError):
     """Raised when the OpenKineticsPredictor API returns an error."""
+
+
+def _make_retrying_session() -> requests.Session:
+    """Session that retries idempotent GETs on transient network errors.
+
+    The job is polled (GET /status) over up to an hour, so a single
+    dropped connection or transient 5xx should not abort the run. Only
+    GET is retried; the /submit POST is left alone to avoid double
+    submission.
+    """
+    session = requests.Session()
+    retry = Retry(
+        total=5,
+        backoff_factor=0.5,
+        status_forcelist=(500, 502, 503, 504),
+        allowed_methods=("GET",),
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 def _bool_str(value: bool) -> str:
@@ -42,7 +65,7 @@ class OKPClient:
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
-        self.session = session or requests.Session()
+        self.session = session or _make_retrying_session()
 
     @property
     def _auth(self) -> dict[str, str]:

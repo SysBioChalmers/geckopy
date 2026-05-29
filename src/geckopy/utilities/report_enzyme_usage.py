@@ -263,11 +263,14 @@ def _per_rxn_details(
     for _, row in rxns_df.iterrows():
         rxn_id = str(row["rxn_id"])
         flux = float(_lookup_flux(fluxes, rxn_id))
-        if flux <= _FLUX_THRESHOLD:
+        # Use |flux| so reverse-running reactions are not dropped and the
+        # per-reaction draws sum to the enzyme-level abs_usage header
+        # (enzyme_usage aggregates with abs() too).
+        if abs(flux) <= _FLUX_THRESHOLD:
             continue
         rxn = model.reactions.get_by_id(rxn_id)
         coeff = rxn.metabolites.get(prot_met, 0.0)
-        per_rxn_abs = -float(coeff) * flux
+        per_rxn_abs = abs(float(coeff) * flux)
         ec_idx = model.ec.rxns.index(rxn_id)
         details.append({
             "rxn_id": rxn_id,

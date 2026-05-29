@@ -14,6 +14,11 @@ import numpy as np
 from cobra.core.gene import GPR
 from scipy import sparse
 
+from ..ec_model.constants import (
+    POOL_ID,
+    PROT_PREFIX,
+    USAGE_PREFIX,
+)
 from ..ec_model.pipeline.expand import _gpr_to_dnf
 from ..ec_model.pipeline.protein_pool import _resolve_enzyme_compartment_id
 
@@ -22,13 +27,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-from ..ec_model.constants import (
-    POOL_ID,
-    PROT_PREFIX,
-    USAGE_PREFIX,
-)
 
 
 @dataclass

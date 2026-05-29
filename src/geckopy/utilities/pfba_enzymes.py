@@ -81,6 +81,13 @@ def pfba_enzymes(
             Zero, direction="min", sloppy=True, name=_PFBA_OBJ_NAME,
         )
         m.objective.set_linear_coefficients({v: 1.0 for v in variables})
-        m.slim_optimize(error_value=None)
+        # Usage fluxes are already mass-scaled (the catalysed-reaction
+        # coupling carries MW/(kcat*3600) and prot_pool is in mg/gDW), so a
+        # unit-weighted sum minimises total enzyme mass.
+        if m.slim_optimize(error_value=None) is None:
+            raise cobra.exceptions.OptimizationError(
+                "pfba_enzymes: minimising enzyme usage was infeasible at the "
+                f"requested fraction_of_optimum ({fraction_of_optimum})."
+            )
         solution = cobra.core.solution.get_solution(m)
     return solution

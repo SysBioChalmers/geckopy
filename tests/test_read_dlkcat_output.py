@@ -176,26 +176,31 @@ def test_substrate_match_is_case_insensitive(tmp_path):
     assert df.iloc[0]["substrates"] == ["ALPHA"]
 
 
-def test_unknown_substrate_raises(tmp_path):
+def test_unknown_substrate_dropped_with_warning(tmp_path, caplog):
+    import logging
     model = _ec_model(["r1"], ["alpha"])
     p = _write_dlkcat_output(tmp_path, [
         ("r1", "g1", "completely_unknown", "CC", "M", "5.0"),
     ])
-    with pytest.raises(ValueError, match="substrate name"):
-        read_dlkcat_output(model, p)
+    with caplog.at_level(logging.WARNING):
+        df = read_dlkcat_output(model, p)
+    # The single row's substrate is unknown, so it is skipped, not aborted.
+    assert len(df) == 0
+    assert "substrate name" in caplog.text
 
 
-def test_unknown_substrate_listed_in_error(tmp_path):
+def test_unknown_substrates_listed_in_warning(tmp_path, caplog):
+    import logging
     model = _ec_model(["r1"], ["alpha"])
     p = _write_dlkcat_output(tmp_path, [
         ("r1", "g1", "ghost", "CC", "M", "5.0"),
         ("r1", "g1", "phantom", "CC", "M", "5.0"),
     ])
-    with pytest.raises(ValueError) as exc_info:
-        read_dlkcat_output(model, p)
-    msg = str(exc_info.value)
-    assert "ghost" in msg
-    assert "phantom" in msg
+    with caplog.at_level(logging.WARNING):
+        df = read_dlkcat_output(model, p)
+    assert len(df) == 0
+    assert "ghost" in caplog.text
+    assert "phantom" in caplog.text
 
 
 # --------------------------------------------------------------------------- #
@@ -222,19 +227,21 @@ def test_reaction_match_is_case_sensitive(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Validation runs on the full file, not just the kept-rows subset
+# Unknown substrates are dropped, not fatal; good rows survive
 # --------------------------------------------------------------------------- #
 
-def test_unknown_substrate_in_na_row_still_raises(tmp_path):
-    """A bad substrate in a row that would be filtered out anyway still
-    raises, because the validation runs against the full file."""
+def test_unknown_substrate_does_not_drop_good_rows(tmp_path):
+    """An unknown substrate on one row must not discard the other valid
+    rows of the file."""
     model = _ec_model(["r1"], ["alpha"])
     p = _write_dlkcat_output(tmp_path, [
         ("r1", "g1", "alpha", "CC", "M", "5.0"),
-        ("r1", "g1", "unknown_thing", "CN", "M", "NA"),
+        ("r1", "g1", "unknown_thing", "CN", "M", "7.0"),
     ])
-    with pytest.raises(ValueError, match="substrate name"):
-        read_dlkcat_output(model, p)
+    df = read_dlkcat_output(model, p)
+    assert len(df) == 1
+    assert list(df["rxn_id"]) == ["r1"]
+    assert df.iloc[0]["kcat"] == 5.0
 
 
 # --------------------------------------------------------------------------- #

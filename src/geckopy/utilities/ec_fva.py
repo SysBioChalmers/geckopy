@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import pickle
-import re
 import sys
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
@@ -34,6 +33,7 @@ import cobra
 import numpy as np
 import pandas as pd
 
+from ..ec_model.constants import canonicalize_rxn_id
 from .map_rxns_to_conv import map_rxns_to_conv
 
 try:
@@ -44,11 +44,6 @@ except ImportError:  # pragma: no cover - tqdm is a soft dep
 
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
-
-
-_REV_SUFFIX = "_REV"
-_REV_EXP_INFIX = "_REV_EXP_"
-_EXP_RE = re.compile(r"_EXP_\d+")
 
 
 # --------------------------------------------------------------------------- #
@@ -227,11 +222,8 @@ def _list_conv_rxn_groups(
     canonical_groups: dict[str, list[int]] = defaultdict(list)
     is_reverse: list[bool] = [False] * len(ec_model.reactions)
     for i, rxn in enumerate(ec_model.reactions):
-        rid = rxn.id
-        if rid.endswith(_REV_SUFFIX) or _REV_EXP_INFIX in rid:
-            is_reverse[i] = True
-            rid = rid.replace(_REV_SUFFIX, "")
-        rid = _EXP_RE.sub("", rid)
+        rid, rev = canonicalize_rxn_id(rxn.id)
+        is_reverse[i] = rev
         canonical_groups[rid].append(i)
 
     canonical_ids = list(canonical_groups.keys())
@@ -265,12 +257,12 @@ def _solve_for_conv_rxn(
 
     rxns = list(ec_model.reactions)
     with ec_model:
-        for rxn in rxns:
-            rxn.objective_coefficient = 0.0
-        for i in forward_pos:
-            rxns[i].objective_coefficient = 1.0
-        for i in reverse_neg:
-            rxns[i].objective_coefficient = -1.0
+        # Assigning an objective dict zeroes every other reaction's
+        # coefficient in one step (reverted on context exit), instead of
+        # looping over all reactions to reset them.
+        objective = {rxns[i]: 1.0 for i in forward_pos}
+        objective.update({rxns[i]: -1.0 for i in reverse_neg})
+        ec_model.objective = objective
         ec_model.objective_direction = sense
         sol = ec_model.optimize()
         if sol.objective_value is None or np.isnan(sol.objective_value):
