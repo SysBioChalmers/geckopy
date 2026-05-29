@@ -1,0 +1,88 @@
+"""Compute the f-factor: mass fraction of model enzymes vs total proteome.
+
+Ported from GECKO MATLAB:
+src/geckomat/limit_proteins/calculateFfactor.m.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from ..databases.pax_db_loader import ProtData
+    from ..ec_model.ec_model import EcModel
+
+
+def calculate_f_factor(
+    model: "EcModel",
+    prot_data: "ProtData",
+    *,
+    enzymes: Optional[list[str]] = None,
+) -> float:
+    """Compute the f-factor for an ec model.
+
+    The f-factor is the mass fraction of total cellular protein that
+    is accounted for by enzymes in the model. It is computed as
+
+        f = sum(abundances of in-model enzymes) / sum(all abundances)
+
+    where abundances are read from a pre-loaded ``ProtData`` (typically
+    populated via ``load_pax_db``).
+
+    For 2-D ``abundances`` (multiple proteomics samples), the
+    per-protein average is taken first via ``np.nanmean(axis=1)``.
+
+    Ported from GECKO MATLAB:
+    src/geckomat/limit_proteins/calculateFfactor.m.
+
+    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and a
+    ``protData`` that may be a struct OR a path. geckopy splits the
+    file-loading concern out into ``load_pax_db`` and takes a
+    pre-loaded ``ProtData`` here.
+
+    MATLAB-COMPAT: GECKO MATLAB silently returns 0.5 when no
+    proteome data is provided. geckopy requires the caller to handle
+    the missing-data case explicitly. Tracked in
+    ``docs/future_improvements.md``.
+
+    Parameters
+    ----------
+    model
+        EcModel; only used to default ``enzymes`` to
+        ``model.ec.enzymes``.
+    prot_data
+        Pre-loaded proteomics data.
+    enzymes
+        UniProt IDs counted as "in the model". Defaults to
+        ``model.ec.enzymes``.
+
+    Returns
+    -------
+    float
+        The f-factor in [0, 1]. Returns 0.0 if the total proteome
+        abundance is zero.
+    """
+    if enzymes is None:
+        enzymes = model.ec.enzymes
+
+    abundances = prot_data.abundances
+    if abundances.ndim == 2:
+        avg = np.nanmean(abundances, axis=1)
+    else:
+        avg = abundances
+
+    total_prot = float(np.nansum(avg))
+    if total_prot == 0.0:
+        return 0.0
+
+    enzyme_set = set(enzymes)
+    in_model = np.array(
+        [uid in enzyme_set for uid in prot_data.uniprot_ids],
+        dtype=bool,
+    )
+    if not in_model.any():
+        return 0.0
+
+    total_enz = float(np.nansum(avg[in_model]))
+    return total_enz / total_prot

@@ -1,0 +1,179 @@
+"""Constrain model exchange fluxes from external measurements.
+
+Ported from GECKO MATLAB:
+src/geckomat/limit_proteins/constrainFluxData.m.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Literal, Union
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from ..databases.flux_data import FluxData
+    from ..ec_model.ec_model import EcModel
+
+
+_LooseStrict = Union[Literal["loose"], float]
+
+
+def constrain_flux_data(
+    model: "EcModel",
+    flux_data: "FluxData",
+    *,
+    condition: int | str = 0,
+    max_min_growth: Literal["max", "min"] = "max",
+    loose_strict_flux: _LooseStrict = "loose",
+) -> None:
+    """Constrain model exchange fluxes from a ``FluxData`` measurement.
+
+    Sets the biomass reaction bounds to the measured growth rate and
+    each exchange reaction in ``flux_data.exch_rxn_ids`` to its
+    measured flux for the chosen condition. Also zeros out the
+    adapter's preferred carbon source so the data drives the choice.
+
+    Ported from GECKO MATLAB:
+    src/geckomat/limit_proteins/constrainFluxData.m.
+
+    MATLAB-COMPAT: MATLAB's `condition` is 1-indexed; geckopy is
+    0-indexed (Python convention).
+
+    MATLAB-COMPAT: MATLAB uses RAVEN's ``setParam('var', ...)`` (a
+    soft slack-variable formulation) when ``looseStrictFlux`` is a
+    percentage. geckopy applies hard ``lb``/``ub`` matching the
+    docstring-stated effect (e.g. ``pct=10`` -> ``lb = val*0.95``,
+    ``ub = val*1.05``); for negative ``val``, ``lb`` and ``ub`` are
+    swapped to keep ``lb <= ub``.
+
+    MATLAB-COMPAT: MATLAB takes a ``modelAdapter`` and an optional
+    ``fluxData`` that defaults to a TSV-loader call. geckopy reads
+    the adapter from ``model.adapter`` and requires pre-loaded
+    ``flux_data``.
+
+    A ``+/-1000`` measured flux is treated as a sentinel for
+    "unconstrained", regardless of ``loose_strict_flux``:
+    ``-1000`` -> ``lb=-1000, ub=0`` (free uptake), ``+1000`` ->
+    ``lb=0, ub=1000`` (free excretion).
+
+    Parameters
+    ----------
+    model
+        EcModel with the exchange reactions referenced by
+        ``flux_data`` already in place. Mutated in place.
+    flux_data
+        Pre-loaded FluxData (typically from a future
+        ``load_flux_data`` utility).
+    condition
+        Either the 0-indexed condition number, or the condition name
+        (matched against ``flux_data.conds``).
+    max_min_growth
+        ``"max"`` sets ``bio_rxn`` upper bound to the measured
+        growth rate (and lower bound to 0); ``"min"`` sets the lower
+        bound (suitable when minimising ``prot_pool_exchange``).
+    loose_strict_flux
+        ``"loose"`` keeps one bound at 0 and the other at the
+        measured value (allows zero flux). A numeric percentage
+        ``p`` brackets the measured value: ``lb = val * (1 - p/200)``,
+        ``ub = val * (1 + p/200)``. ``p=10`` allows 10% total
+        variance (i.e. +/-5%).
+
+    Raises
+    ------
+    ValueError
+        If ``model.adapter`` is None, ``max_min_growth`` /
+        ``loose_strict_flux`` is invalid, ``condition`` (as string)
+        is not in ``flux_data.conds``, or any
+        ``flux_data.exch_rxn_ids`` is missing from the model.
+    IndexError
+        If ``condition`` (as int) is out of range.
+    """
+    if model.adapter is None:
+        raise ValueError(
+            "EcModel.adapter is None; constrain_flux_data needs an "
+            "adapter for params.bio_rxn / params.c_source."
+        )
+    if max_min_growth not in ("max", "min"):
+        raise ValueError(
+            f"max_min_growth must be 'max' or 'min', got {max_min_growth!r}"
+        )
+    if not (
+        loose_strict_flux == "loose"
+        or (isinstance(loose_strict_flux, (int, float))
+            and not isinstance(loose_strict_flux, bool)
+            and 0 <= loose_strict_flux <= 100)
+    ):
+        raise ValueError(
+            f"loose_strict_flux must be 'loose' or a number in [0, 100]; "
+            f"got {loose_strict_flux!r}"
+        )
+
+    if isinstance(condition, str):
+        if condition not in flux_data.conds:
+            raise ValueError(
+                f"Condition {condition!r} not found in flux_data.conds "
+                f"({flux_data.conds})"
+            )
+        cond_idx = flux_data.conds.index(condition)
+    else:
+        if not 0 <= condition < len(flux_data.conds):
+            raise IndexError(
+                f"condition index {condition} out of range "
+                f"(have {len(flux_data.conds)} condition(s))"
+            )
+        cond_idx = condition
+
+    fluxes = flux_data.exch_fluxes[cond_idx, :]
+    cobra_rxn_ids = {r.id for r in model.reactions}
+    missing = [r for r in flux_data.exch_rxn_ids if r not in cobra_rxn_ids]
+    if missing:
+        preview = missing[:5]
+        raise ValueError(
+            f"{len(missing)} exchange reaction ID(s) from flux_data are not "
+            f"present in the model (examples: {preview})"
+        )
+
+    params = model.adapter.params
+    if params.c_source:
+        try:
+            c_source_rxn = model.reactions.get_by_id(params.c_source)
+            c_source_rxn.lower_bound = 0.0
+            c_source_rxn.upper_bound = 0.0
+        except KeyError:
+            pass  # adapter c_source not in model; silent
+
+    bio_rxn = model.reactions.get_by_id(params.bio_rxn)
+    gr = float(flux_data.gr_rate[cond_idx])
+    if max_min_growth == "max":
+        bio_rxn.lower_bound = 0.0
+        bio_rxn.upper_bound = gr
+    else:
+        bio_rxn.lower_bound = gr
+        bio_rxn.upper_bound = 1000.0
+
+    for rxn_id, flux in zip(flux_data.exch_rxn_ids, fluxes):
+        if np.isnan(flux):
+            continue
+        rxn = model.reactions.get_by_id(rxn_id)
+
+        if abs(flux) == 1000.0:
+            if flux == -1000.0:
+                rxn.lower_bound = -1000.0
+                rxn.upper_bound = 0.0
+            else:
+                rxn.lower_bound = 0.0
+                rxn.upper_bound = 1000.0
+            continue
+
+        if loose_strict_flux == "loose":
+            if flux < 0:
+                rxn.lower_bound = float(flux)
+                rxn.upper_bound = 0.0
+            else:
+                rxn.lower_bound = 0.0
+                rxn.upper_bound = float(flux)
+        else:
+            pct = float(loose_strict_flux)
+            lo = flux * (1 - pct / 200.0)
+            hi = flux * (1 + pct / 200.0)
+            rxn.lower_bound = float(min(lo, hi))
+            rxn.upper_bound = float(max(lo, hi))

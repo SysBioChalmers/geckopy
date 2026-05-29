@@ -117,6 +117,33 @@ Notable items:
   loop and check that.
 - Drop the unused `ids` field from the loaded `phylDistStruct` in
   `KEGG_struct`. It is parsed but never read.
+- Fix `sigmaFitter` to actually apply the optimal sigma to the
+  returned model. The current implementation tries 100 sigma values
+  in a loop, picks the best, then returns the model with the LAST
+  trial (sigma=1.0) applied, not the best. The docstring claims the
+  model is adapted to the optimal sigma. Add a final
+  `model = setProtPoolSize(model, Ptot, f, sigma, modelAdapter);`
+  after the loop.
+- Fix the wildcard branch of `findMaxValue`. The current code does
+  `EC_cell{i} = EC_cell{i}(strfind(EC_cell{i},'-')-1:end);` which
+  keeps the suffix from before the first `-` to the end (yielding
+  e.g. `".-"` for `"EC1.1.1.-"`), then re-prepends `"EC"` to produce
+  `"EC.-"` and uses that as a substring-search key. No real EC code
+  starts with `"EC.-"`, so the wildcard branch matches nothing in
+  practice. Replace with a prefix match on everything before the
+  first `-` (e.g. `"EC1.1.1."` for `"EC1.1.1.-"`).
+- Delete `updateProtPool` from MATLAB GECKO. The function has been
+  obsolete since GECKO 3.2.0 (all enzymes, measured and unmeasured,
+  draw from the protein pool); its sole runtime behaviour on a
+  3.2.0+ model is to raise an error pointing users to
+  `setProtPoolSize`. geckopy does not port it; the recommended
+  replacement is `set_prot_pool_size` in `protein_pool.py`.
+- Make `calculateFfactor` raise (or return NaN with a warning)
+  when no proteome data is provided. Silently returning 0.5 hides
+  the absence of real data; downstream calculations using this f
+  factor look fine until they don't. geckopy's split design
+  (`load_pax_db` raises FileNotFoundError, `calculate_f_factor`
+  requires pre-loaded data) makes the missing-data case explicit.
 - Fix the `all(kcatSubSystemIdx)` check in `getStandardKcat`. The
   intent is "does the reaction's subsystem appear in our subsystem
   list?", but `all` of a length-N boolean vector is true only when
