@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 # above this are clipped, matching MATLAB.
 DIFFUSION_LIMIT = 1e7
 
-# Sentinel "no match" wildcard count; large so it never wins
+# "No match" wildcard count; a large value that never wins
 # min-comparisons against real wildcard counts.
 NO_MATCH_WC = 1000
 

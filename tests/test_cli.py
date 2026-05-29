@@ -1,5 +1,6 @@
 """Tests for the template generator and the CLI scaffold."""
 import tomllib
+from pathlib import Path
 
 from geckopy import ModelAdapter
 from geckopy.adapter.template import generate_template_toml
@@ -98,3 +99,94 @@ def test_cli_init_stub_adapter_py_is_commented_out(tmp_path):
         if not k.startswith("_") and isinstance(v, type)
     ]
     assert user_classes == []
+
+
+def test_cli_brenda_refresh_empty_cache_errors(tmp_path, capsys):
+    rc = main([
+        "brenda-refresh",
+        "--cache-dir", str(tmp_path / "cache"),
+        "--out-dir", str(tmp_path / "out"),
+    ])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "download.php" in err
+
+
+def test_cli_brenda_refresh_end_to_end(tmp_path, capsys):
+    """Drop the test fixture JSON in the cache dir and run the command."""
+    cache = tmp_path / "cache"
+    out = tmp_path / "out"
+    cache.mkdir()
+    fixture = (
+        Path(__file__).parent / "data" / "brenda_minimal.json"
+    ).read_text()
+    (cache / "brenda_minimal.json").write_text(fixture)
+
+    rc = main([
+        "brenda-refresh",
+        "--cache-dir", str(cache),
+        "--out-dir", str(out),
+    ])
+    assert rc == 0
+    output = capsys.readouterr().out
+    assert "BRENDA release 2026.1" in output
+    for name in ("max_kcat.tsv", "max_sa.tsv", "max_mw.tsv"):
+        assert (out / name).exists()
+
+
+def test_cli_uniprot_download_invokes_function(tmp_path, monkeypatch, capsys):
+    calls = {}
+
+    def fake_download(uid, path, *, id_type, gene_id_field, reviewed):
+        calls["args"] = (uid, str(path), id_type, gene_id_field, reviewed)
+        Path(path).write_text("Entry\tGene\tEC\tMass\tSequence\n")
+        return path
+
+    monkeypatch.setattr(
+        "geckopy.cli.download_uniprot", fake_download,
+    )
+    out = tmp_path / "u.tsv"
+    rc = main(["uniprot-download", "559292", str(out)])
+    assert rc == 0
+    assert calls["args"][0] == "559292"
+    assert calls["args"][2] == "taxonomy_id"
+    assert calls["args"][3] == "gene_oln"
+    assert calls["args"][4] is True
+    assert out.exists()
+
+
+def test_cli_uniprot_download_include_unreviewed(tmp_path, monkeypatch):
+    calls = {}
+
+    def fake_download(uid, path, *, id_type, gene_id_field, reviewed):
+        calls["reviewed"] = reviewed
+        Path(path).write_text("")
+        return path
+
+    monkeypatch.setattr(
+        "geckopy.cli.download_uniprot", fake_download,
+    )
+    main([
+        "uniprot-download", "559292", str(tmp_path / "u.tsv"),
+        "--include-unreviewed",
+    ])
+    assert calls["reviewed"] is False
+
+
+def test_cli_kegg_download_invokes_function(tmp_path, monkeypatch, capsys):
+    calls = {}
+
+    def fake_download(kid, path, *, gene_id_field):
+        calls["args"] = (kid, str(path), gene_id_field)
+        Path(path).write_text("P1,G1,K1,1.1.1.1,10000,p,SEQ\n")
+        return path
+
+    monkeypatch.setattr(
+        "geckopy.cli.download_kegg", fake_download,
+    )
+    out = tmp_path / "k.tsv"
+    rc = main(["kegg-download", "sce", str(out)])
+    assert rc == 0
+    assert calls["args"][0] == "sce"
+    assert calls["args"][2] == "kegg"
+    assert out.exists()

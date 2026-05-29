@@ -115,8 +115,8 @@ class EcData:
         """Create an EcData with empty strings and zero/NaN arrays of given size.
 
         Used by makeEcModel step 6 to preallocate the structure before
-        populating it. ``kcat`` starts at 0 (the "no kcat assigned"
-        sentinel, matching MATLAB GECKO). ``mw`` and ``concs`` start at
+        populating it. ``kcat`` starts at 0 (0 marks "no kcat assigned",
+        matching MATLAB GECKO). ``mw`` and ``concs`` start at
         NaN since their physical default really is "unknown".
         """
         return EcData(

@@ -1,0 +1,186 @@
+{
+  "release": "2026.1",
+  "version": "2.0.0",
+  "data": {
+    "1.1.1.1": {
+      "id": "1.1.1.1",
+      "recommended_name": "alcohol dehydrogenase",
+      "turnover_number": [
+        {
+          "value": "23.5 {ethanol}",
+          "comment": "wild-type",
+          "proteins": ["1", "2"],
+          "references": ["1", "2"]
+        },
+        {
+          "value": "0.1-2.5 {NADH}",
+          "comment": "",
+          "proteins": ["1"],
+          "references": ["1"]
+        },
+        {
+          "value": "5.0e7 {ethanol}",
+          "comment": "above physical limit",
+          "proteins": ["1"],
+          "references": ["1"]
+        },
+        {
+          "value": "-999 {ethanol}",
+          "comment": "not measured",
+          "proteins": ["1"],
+          "references": ["1"]
+        },
+        {
+          "value": "99.0 {ethanol}",
+          "comment": "site-directed mutant V123A",
+          "proteins": ["1"],
+          "references": ["1"]
+        },
+        {
+          "value": "88.0 {ethanol}",
+          "comment": "mutated to enhance activity",
+          "proteins": ["1"],
+          "references": ["1"]
+        },
+        {
+          "value": "11.0 {ethanol}",
+          "comment": "",
+          "proteins": ["99"],
+          "references": ["1"]
+        },
+        {
+          "value": "7.0 {ethanol}",
+          "comment": "",
+          "proteins": ["3"],
+          "references": ["1"]
+        }
+      ],
+      "specific_activity": [
+        {
+          "value": "598.0",
+          "comment": "",
+          "proteins": ["1"],
+          "references": ["2"]
+        }
+      ],
+      "molecular_weight": [
+        {
+          "value": "130000",
+          "comment": "",
+          "proteins": ["1"],
+          "references": ["2"]
+        }
+      ],
+      "protein": {
+        "1": {
+          "id": "1",
+          "organism": "Saccharomyces cerevisiae",
+          "accessions": ["P00330"],
+          "references": ["1"],
+          "source": "uniprot"
+        },
+        "2": {
+          "id": "2",
+          "organism": "Escherichia coli",
+          "accessions": ["P0A6Y8"],
+          "references": ["2"]
+        },
+        "3": {
+          "id": "3",
+          "organism": "",
+          "references": ["1"]
+        }
+      },
+      "reference": {
+        "1": {
+          "id": "1",
+          "title": "An ADH paper",
+          "authors": ["Smith, J"],
+          "journal": "J. Biol. Chem.",
+          "year": 2024,
+          "pmid": 11111
+        },
+        "2": {
+          "id": "2",
+          "title": "Another ADH paper",
+          "authors": ["Jones, A"],
+          "journal": "Biochemistry",
+          "year": 2025,
+          "pmid": 22222
+        },
+        "3": {
+          "id": "3",
+          "title": "No-PMID paper",
+          "authors": ["Old, P"],
+          "journal": "Old J.",
+          "year": 1970
+        }
+      }
+    },
+    "1.2.3.4": {
+      "id": "1.2.3.4",
+      "recommended_name": "test enzyme",
+      "turnover_number": [
+        {
+          "value": "12.0 {methanol}",
+          "comment": "",
+          "proteins": [],
+          "references": ["1"]
+        },
+        {
+          "value": "garbage value",
+          "comment": "",
+          "proteins": ["1"],
+          "references": ["1"]
+        },
+        {
+          "value": "50.0 {ethanol}",
+          "comment": "no refs at all",
+          "proteins": ["1"],
+          "references": []
+        },
+        {
+          "value": "60.0 {ethanol}",
+          "comment": "references only point to no-PMID entries",
+          "proteins": ["1"],
+          "references": ["3"]
+        }
+      ],
+      "protein": {
+        "1": {
+          "id": "1",
+          "organism": "Escherichia coli",
+          "references": ["1"]
+        }
+      },
+      "reference": {
+        "1": {
+          "id": "1",
+          "title": "T",
+          "authors": ["A"],
+          "journal": "J",
+          "year": 2024,
+          "pmid": 33333
+        },
+        "3": {
+          "id": "3",
+          "title": "No PMID",
+          "authors": ["A"],
+          "journal": "J",
+          "year": 2024
+        }
+      }
+    },
+    "spontaneous": {
+      "id": "spontaneous",
+      "recommended_name": "spontaneous",
+      "turnover_number": [
+        {
+          "value": "999.0 {anything}",
+          "proteins": [],
+          "references": []
+        }
+      ]
+    }
+  }
+}

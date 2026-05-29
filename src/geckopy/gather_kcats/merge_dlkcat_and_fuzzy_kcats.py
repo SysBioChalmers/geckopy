@@ -47,8 +47,8 @@ def merge_dlkcat_and_fuzzy_kcats(
     fuzzy"`` field is dropped; the per-row ``source`` column already
     distinguishes ``"brenda"`` (fuzzy) from ``"DLKcat"``.
 
-    MATLAB-COMPAT: MATLAB uses ``1000`` as a sentinel for NaN
-    wildcard/origin so unmatched rows fail every priority
+    MATLAB-COMPAT: MATLAB fills NaN wildcard/origin with ``1000``, a
+    large value that never wins, so unmatched rows fail every priority
     comparison. geckopy uses ``fillna(1000)`` to the same effect.
 
     Parameters

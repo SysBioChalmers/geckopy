@@ -158,14 +158,23 @@ class ModelAdapter:
 
         return [mapping.get(g, g) for g in model_genes]
 
+    def get_kegg_compatible_genes(self, in_genes: list[str]) -> list[str]:
+        """Map model gene IDs to IDs usable in KEGG ``genes`` column lookups.
+
+        The default returns the input unchanged. Override when the model
+        uses gene identifiers that need transformation before KEGG
+        lookup. Parallels ``get_uniprot_compatible_genes``.
+        """
+        return list(in_genes)
+
     def get_brenda_db_folder(self) -> Path:
         """Return the folder where the BRENDA database files are stored.
 
-        Default: `<project_path>/data`. Override to place it elsewhere
-        (useful when sharing a BRENDA snapshot across multiple ecModel
-        projects).
+        Default: the BRENDA snapshot bundled with geckopy
+        (`<geckopy>/data/brenda/`), refreshed via `geckopy brenda-refresh`.
+        Override to point at a project-local copy.
         """
-        return self.params.path / "data"
+        return Path(__file__).resolve().parent.parent / "data" / "brenda"
 
     def get_phyl_dist_path(self) -> Path:
         """Return the path to the phylogenetic distance structure file.

@@ -3,10 +3,7 @@
 Ported from GECKO MATLAB:
 src/geckomat/gather_kcats/fuzzyKcatMatching.m.
 
-This subpackage was previously one large module (601 lines doing
-data lookup, organism resolution, EC-wildcard escalation, and
-substrate matching all in one file). It's now split into four
-files by concern:
+This subpackage is split into four files by concern:
 
 - ``_escalation.py``   -- EC-token wildcard escalation
 - ``_organism.py``     -- organism resolution and per-row filtering
@@ -125,8 +122,7 @@ def fuzzy_kcat_matching(
     consequence is that when both would match, org-SA wins (with
     output origin 5) even though any-no-subs-kcat (output origin 4)
     would have been ranked better by the docstring. geckopy
-    replicates this behavior; tracked as a MATLAB-side bug in
-    ``docs/future_improvements.md``.
+    replicates this behavior.
 
     MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and reads
     the organism via ``adapter.params.org_name``. geckopy reads from
@@ -140,18 +136,6 @@ def fuzzy_kcat_matching(
     MATLAB-COMPAT: GECKO MATLAB tracks per-(origin, wildcard) match
     counts in an internal ``stats.matrix`` that is never returned.
     geckopy emits an aggregated ``logger.info`` summary instead.
-
-    MATLAB-COMPAT: GECKO MATLAB's iterative EC escalation can produce
-    invalid EC strings ("1.-.-.-.-") and crash with an index error if
-    a token never matches at any wildcard level. geckopy caps escalation
-    at 4 wildcards (full ``-.-.-.-``) and returns "no match" cleanly.
-
-    MATLAB-COMPAT: GECKO MATLAB has dead code at
-    ``if forceWClvl == 1`` (it is checked AFTER ``forceWClvl`` was
-    decremented to 0 by the preceding ``while`` loop). geckopy
-    interprets ``force_wildcard_level=N`` as "escalate every EC token
-    by N wildcards from the right", which is the consistent extension
-    of the loop's intent.
 
     Parameters
     ----------

@@ -33,7 +33,11 @@ def test_adapter_resolves_conv_gem_path(adapter):
 
 
 def test_adapter_finds_brenda_folder_and_phyldist(adapter):
-    assert adapter.get_brenda_db_folder() == EXAMPLE_DIR.resolve() / "data"
+    # BRENDA defaults to the bundled snapshot inside the geckopy package,
+    # not the per-project data dir.
+    folder = adapter.get_brenda_db_folder()
+    assert folder.is_dir()
+    assert (folder / "max_kcat.tsv").is_file()
     assert adapter.get_phyl_dist_path().is_file()
 
 

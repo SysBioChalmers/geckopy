@@ -1,4 +1,4 @@
-# geckopy
+# geckopy - under active development
 
 [![tests](https://github.com/edkerk/geckopy/actions/workflows/test.yml/badge.svg)](https://github.com/edkerk/geckopy/actions/workflows/test.yml)
 

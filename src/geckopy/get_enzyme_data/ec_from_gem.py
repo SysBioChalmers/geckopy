@@ -69,7 +69,6 @@ def fill_eccodes_from_gem(
     ``$3`` on a valid ``"1.2.3.4"`` yields ``"3"``, which is non-empty
     and therefore flagged as invalid. As written, every non-empty EC
     string is discarded. geckopy implements the docstring intent.
-    Tracked in ``docs/future_improvements.md``.
 
     MATLAB-COMPAT: ``ecRxns`` in MATLAB is a logical mask of length
     ``model.ec.rxns``. geckopy follows the cobrapy idiom of an

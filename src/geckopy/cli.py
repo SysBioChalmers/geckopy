@@ -6,6 +6,14 @@ import sys
 from pathlib import Path
 
 from geckopy.adapter.template import generate_template_toml
+from geckopy.databases.brenda import parse_brenda_json
+from geckopy.databases.brenda.aggregate import aggregate_and_write
+from geckopy.databases.brenda.download import (
+    BrendaDownloadError,
+    ensure_brenda_json,
+)
+from geckopy.databases.kegg_download import download_kegg
+from geckopy.databases.uniprot_download import download_uniprot
 
 
 ADAPTER_PY_STUB = '''\
@@ -55,6 +63,41 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+_DEFAULT_CACHE_DIR = (
+    Path(__file__).resolve().parent / "data" / "brenda" / "_cache"
+)
+_DEFAULT_OUT_DIR = (
+    Path(__file__).resolve().parent / "data" / "brenda"
+)
+
+
+def cmd_brenda_refresh(args: argparse.Namespace) -> int:
+    cache_dir = Path(args.cache_dir).resolve()
+    out_dir = Path(args.out_dir).resolve()
+    try:
+        json_path = ensure_brenda_json(cache_dir)
+    except BrendaDownloadError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"Parsing {json_path} ...")
+    rows = list(parse_brenda_json(json_path))
+    if not rows:
+        print("Error: parser yielded no rows.", file=sys.stderr)
+        return 1
+
+    import json
+    with json_path.open("r", encoding="utf-8") as fh:
+        release = json.load(fh).get("release", "unknown")
+
+    paths = aggregate_and_write(rows, out_dir, release=release)
+    print(f"BRENDA release {release} aggregated to {out_dir}:")
+    for kind, path in paths.items():
+        n = sum(1 for _ in path.open("r", encoding="utf-8")) - 1
+        print(f"  {path.name}: {n} rows")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="geckopy", description="Command-line interface for geckopy."
@@ -74,8 +117,87 @@ def main(argv: list[str] | None = None) -> int:
     )
     init_parser.set_defaults(func=cmd_init)
 
+    brenda_parser = sub.add_parser(
+        "brenda-refresh",
+        help="Rebuild max_kcat.tsv / max_sa.tsv / max_mw.tsv from the BRENDA bulk JSON",
+    )
+    brenda_parser.add_argument(
+        "--cache-dir", default=str(_DEFAULT_CACHE_DIR),
+        help=(
+            "Directory holding the BRENDA bulk-JSON tarball or unpacked .json "
+            f"(default: {_DEFAULT_CACHE_DIR})"
+        ),
+    )
+    brenda_parser.add_argument(
+        "--out-dir", default=str(_DEFAULT_OUT_DIR),
+        help=f"Output directory for the three TSVs (default: {_DEFAULT_OUT_DIR})",
+    )
+    brenda_parser.set_defaults(func=cmd_brenda_refresh)
+
+    uniprot_parser = sub.add_parser(
+        "uniprot-download",
+        help="Download an organism-specific UniProt TSV via the REST API",
+    )
+    uniprot_parser.add_argument(
+        "uniprot_id",
+        help="UniProt query identifier (e.g. NCBI taxonomy id 559292)",
+    )
+    uniprot_parser.add_argument(
+        "out_path", help="Destination TSV path",
+    )
+    uniprot_parser.add_argument(
+        "--id-type", default="taxonomy_id",
+        help="UniProt query field for uniprot_id (default: taxonomy_id)",
+    )
+    uniprot_parser.add_argument(
+        "--gene-id-field", default="gene_oln",
+        help="UniProt field for the Gene Names column (default: gene_oln)",
+    )
+    uniprot_parser.add_argument(
+        "--include-unreviewed", action="store_true",
+        help="Include unreviewed (TrEMBL) entries (default: reviewed only)",
+    )
+    uniprot_parser.set_defaults(func=cmd_uniprot_download)
+
+    kegg_parser = sub.add_parser(
+        "kegg-download",
+        help="Download organism-specific protein info via the KEGG REST API",
+    )
+    kegg_parser.add_argument(
+        "kegg_id", help="KEGG organism code (e.g. sce)",
+    )
+    kegg_parser.add_argument(
+        "out_path", help="Destination CSV path",
+    )
+    kegg_parser.add_argument(
+        "--gene-id-field", default="kegg",
+        help="KEGG entry field to use as the gene matching key (default: kegg)",
+    )
+    kegg_parser.set_defaults(func=cmd_kegg_download)
+
     args = parser.parse_args(argv)
     return args.func(args)
+
+
+def cmd_uniprot_download(args: argparse.Namespace) -> int:
+    out = Path(args.out_path).resolve()
+    download_uniprot(
+        args.uniprot_id, out,
+        id_type=args.id_type,
+        gene_id_field=args.gene_id_field,
+        reviewed=not args.include_unreviewed,
+    )
+    print(f"Wrote {out}")
+    return 0
+
+
+def cmd_kegg_download(args: argparse.Namespace) -> int:
+    out = Path(args.out_path).resolve()
+    download_kegg(
+        args.kegg_id, out, gene_id_field=args.gene_id_field,
+    )
+    print(f"Wrote {out}")
+    return 0
 
 
 if __name__ == "__main__":

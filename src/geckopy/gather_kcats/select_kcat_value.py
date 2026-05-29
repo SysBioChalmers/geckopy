@@ -37,8 +37,8 @@ def apply_kcat_list(
     The contributing entry's ``source`` is recorded in
     ``model.ec.source``.
 
-    Rows with ``kcat == 0`` are treated as no-match sentinels and
-    dropped before aggregation, matching MATLAB.
+    Rows with ``kcat == 0`` mark "no match" and are dropped before
+    aggregation, matching MATLAB.
 
     MATLAB-COMPAT: GECKO MATLAB takes the source via
     ``[v, j] = median(...)`` / ``mean(...)``, which doesn't actually

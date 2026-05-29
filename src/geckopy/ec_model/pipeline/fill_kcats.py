@@ -46,13 +46,10 @@ def fill_kcats_from_isozymes(
     Reactions whose siblings all also lack a kcat stay at 0. Reactions
     with a single isozyme (no siblings beyond themselves) also stay at 0.
 
-    MATLAB-COMPAT: this function was originally named
-    ``getKcatAcrossIsozymes`` in MATLAB; geckopy renamed it to
-    ``fill_kcats_from_isozymes`` because the verb "get" misled
-    callers into thinking it returns a value (it mutates
-    ``model.ec.kcat`` in place). The old name
-    ``get_kcat_across_isozymes`` is kept as a deprecated alias and
-    will be removed in a future release.
+    MATLAB-COMPAT: MATLAB names this ``getKcatAcrossIsozymes``;
+    geckopy names it ``fill_kcats_from_isozymes`` since it mutates
+    ``model.ec.kcat`` in place rather than returning a value. The name
+    ``get_kcat_across_isozymes`` is a deprecated alias.
 
     Parameters
     ----------

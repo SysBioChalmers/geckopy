@@ -476,3 +476,112 @@ def test_ectestgem_validate_ec_passes():
     """The constructed ecModel must pass the internal consistency check."""
     ec_model = _run_all_stages_on_ectestgem()
     ec_model.validate_ec()  # should not raise
+
+
+# --------------------------------------------------------------------------- #
+# Stage 7: KEGG fallback
+# --------------------------------------------------------------------------- #
+
+def _synthetic_kegg(
+    rows: list[tuple[str, str, str, float, str]],
+):
+    """Build a KeggDB from (uniprot_id, gene, kegg_gene, mw, seq) tuples."""
+    from geckopy.databases.kegg_loader import KeggDB
+    return KeggDB(
+        uniprot_ids=[r[0] for r in rows],
+        genes=[r[1] for r in rows],
+        kegg_genes=[r[2] for r in rows],
+        eccodes=[""] * len(rows),
+        mw=np.array([r[3] for r in rows], dtype=float),
+        pathways=[""] * len(rows),
+        sequences=[r[4] for r in rows],
+    )
+
+
+def test_kegg_fills_missing_genes_with_uniprot_accession(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1 and g2"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([("P1", "g1", 50.0, "MAEK")])
+    kegg = _synthetic_kegg([("Q2", "g2", "K2", 60.0, "MVQR")])
+    unmatched = populate_enzyme_data(ec, uniprot, kegg_db=kegg)
+    assert unmatched == []
+    assert set(ec.ec.genes) == {"g1", "g2"}
+    # Map gene -> enzyme id for ordering-independent assertions.
+    enz_by_gene = dict(zip(ec.ec.genes, ec.ec.enzymes))
+    assert enz_by_gene["g1"] == "P1"
+    assert enz_by_gene["g2"] == "Q2"
+
+
+def test_kegg_fills_with_kegg_gene_id_when_uniprot_accession_empty(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([])
+    # KEGG row has empty uniprot accession; gene id (without orgcode prefix) wins.
+    kegg = _synthetic_kegg([("", "g1", "YBR196C", 60.0, "MVQR")])
+    unmatched = populate_enzyme_data(ec, uniprot, kegg_db=kegg)
+    assert unmatched == []
+    enz_by_gene = dict(zip(ec.ec.genes, ec.ec.enzymes))
+    assert enz_by_gene["g1"] == "YBR196C"
+
+
+def test_kegg_bare_id_fallback_emits_warning(tmp_path, caplog):
+    import logging
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([])
+    kegg = _synthetic_kegg([("", "g1", "YBR196C", 60.0, "MVQR")])
+    with caplog.at_level(logging.WARNING):
+        populate_enzyme_data(ec, uniprot, kegg_db=kegg)
+    assert "no UniProt accession" in caplog.text
+    assert "g1->YBR196C" in caplog.text
+
+
+def test_uniprot_match_preferred_over_kegg(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([("P1", "g1", 50.0, "MAEK")])
+    kegg = _synthetic_kegg([("Q_other", "g1", "K1", 99.0, "WRONG")])
+    populate_enzyme_data(ec, uniprot, kegg_db=kegg)
+    enz_by_gene = dict(zip(ec.ec.genes, ec.ec.enzymes))
+    assert enz_by_gene["g1"] == "P1"
+
+
+def test_gene_unmatched_in_both_sources_still_reported(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1 and g_missing"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([("P1", "g1", 50.0, "MAEK")])
+    kegg = _synthetic_kegg([("Q2", "g_other_again", "K2", 60.0, "MVQR")])
+    unmatched = populate_enzyme_data(ec, uniprot, kegg_db=kegg)
+    assert unmatched == ["g_missing"]
+
+
+def test_kegg_arg_omitted_keeps_original_behaviour(tmp_path):
+    adapter = _minimal_adapter(tmp_path)
+    cmodel = _build_model([
+        ("r1", {"m1": -1, "m2": 1}, 0.0, 1000.0, "g1 and g2"),
+    ])
+    ec = EcModel.from_cobra(cmodel, adapter=adapter)
+    allocate_ec_for_catalyzed_reactions(ec)
+    uniprot = _synthetic_uniprot([("P1", "g1", 50.0, "MAEK")])
+    unmatched = populate_enzyme_data(ec, uniprot)  # no kegg_db
+    assert unmatched == ["g2"]

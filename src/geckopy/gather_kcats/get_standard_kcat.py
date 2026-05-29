@@ -72,14 +72,6 @@ def assign_standard_kcat(
     via ``logger.info``. Per the user, no downstream function consumes
     the return values.
 
-    MATLAB-COMPAT: GECKO MATLAB's subsystem-kcat lookup uses
-    ``all(kcatSubSystemIdx)`` instead of ``any(...)``: for any model
-    with more than one unique subsystem the check is always false, so
-    the subsystem-mean kcat is effectively dead code in MATLAB.
-    geckopy uses the intended ``any`` semantics ("does the
-    reaction's subsystem appear in our subsystem-kcat map"). Tracked
-    in ``docs/future_improvements.md``.
-
     MATLAB-COMPAT: GECKO MATLAB's ``modelAdapter`` arg is dropped;
     geckopy reads from ``model.adapter``.
 

@@ -131,7 +131,7 @@ fill_eccodes_from_database(ec_model, uniprot_db)
 # `get_phyl_dist` function is on the porting roadmap).
 
 # %%
-brenda = load_brenda_data(params.path / "data")
+brenda = load_brenda_data(adapter.get_brenda_db_folder())
 phyl_dist = load_phyl_dist(params.path / "data" / "PhylDist.mat")
 kcat_list_fuzzy = fuzzy_kcat_matching(ec_model, brenda, phyl_dist)
 print(f"Fuzzy BRENDA matches: {len(kcat_list_fuzzy)} rows")

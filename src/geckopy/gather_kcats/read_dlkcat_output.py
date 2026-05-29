@@ -59,8 +59,7 @@ def read_dlkcat_output(
     ``model.metNames`` is case-sensitive (``ismember`` default).
     geckopy uses case-insensitive matching, which is more lenient
     and avoids false-positive failures when SBML loaders differ in
-    capitalization. Tracked as a MATLAB-side improvement in
-    ``docs/future_improvements.md``.
+    capitalization.
 
     Parameters
     ----------

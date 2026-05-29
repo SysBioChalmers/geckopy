@@ -134,12 +134,23 @@ def test_missing_file_raises(tmp_path):
         load_ec_model("missing.yml", adapter=adapter)
 
 
-def test_non_mapping_top_level_raises(tmp_path):
+def test_scalar_top_level_raises(tmp_path):
     adapter = _adapter(tmp_path)
     path = tmp_path / "models" / "ecModel.yml"
-    # Legacy RAVEN top-level: a sequence, not a mapping.
-    path.write_text("- foo: bar\n- baz: qux\n")
+    # A genuinely non-mapping document (not a sequence of single-key maps).
+    path.write_text("just a scalar\n")
     with pytest.raises(ValueError, match="must be a mapping"):
+        load_ec_model("ecModel.yml", adapter=adapter)
+
+
+def test_legacy_sequence_top_level_is_merged(tmp_path):
+    """A legacy RAVEN `- key: val` sequence-of-single-key-maps is merged
+    into one mapping; it then fails the ec-rxns check (not the
+    must-be-a-mapping check), confirming the merge happened."""
+    adapter = _adapter(tmp_path)
+    path = tmp_path / "models" / "ecModel.yml"
+    path.write_text("- id: m1\n- metabolites: []\n")
+    with pytest.raises(ValueError, match="ec-rxns"):
         load_ec_model("ecModel.yml", adapter=adapter)
 
 
@@ -426,3 +437,33 @@ def test_autoflip_no_warning_when_already_forward(tmp_path):
     assert not any("forward convention" in m for m in msgs), (
         f"unexpected flip warning on already-forward model: {msgs}"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Legacy MATLAB / RAVEN layout normalization
+# --------------------------------------------------------------------------- #
+
+def test_legacy_metadata_and_smiles_normalized(tmp_path):
+    """A legacy-shaped doc (id/name/version nested under metaData,
+    per-metabolite smiles as a top-level key) loads correctly: id/name
+    are lifted, and smiles ends up under annotation."""
+    doc = _canonical_yaml()
+    # Move id/name/version into metaData (legacy nesting).
+    doc["metaData"] = {
+        "id": doc.pop("id"),
+        "name": doc.pop("name"),
+        "version": "1",
+    }
+    # Put smiles as a top-level metabolite key (legacy placement).
+    doc["metabolites"][0]["smiles"] = "C(C)O"
+
+    adapter = _adapter(tmp_path)
+    path = tmp_path / "models" / "ecModel.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+
+    assert model.id == "demo"
+    assert model.name == "demo ecModel"
+    met = model.metabolites.get_by_id("A_c")
+    assert met.annotation.get("smiles") in ("C(C)O", ["C(C)O"])
