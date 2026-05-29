@@ -1,0 +1,365 @@
+"""Tests for load_ec_model."""
+import io
+from pathlib import Path
+
+import numpy as np
+import pytest
+from ruamel.yaml import YAML
+
+from geckopy import EcModel, ModelAdapter
+from geckopy.utilities import load_ec_model
+
+
+# --------------------------------------------------------------------------- #
+# Fixtures
+# --------------------------------------------------------------------------- #
+
+def _adapter(tmp_path: Path) -> ModelAdapter:
+    (tmp_path / "model_adapter.toml").write_text(
+        'conv_gem = "dummy.xml"\n'
+        'org_name = "test"\n'
+    )
+    (tmp_path / "models").mkdir(exist_ok=True)
+    return ModelAdapter.from_folder(tmp_path)
+
+
+def _canonical_yaml() -> dict:
+    """A minimal but complete canonical-format ecModel doc.
+
+    Topology:
+        R1 catalysed by E1 (gene g1)
+        R2 catalysed by E2 (gene g2)
+        usage_prot_E1, usage_prot_E2, prot_pool_exchange.
+    """
+    return {
+        "id": "demo",
+        "name": "demo ecModel",
+        "compartments": {"c": "cytosol"},
+        "metabolites": [
+            {"id": "A_c", "compartment": "c"},
+            {"id": "B_c", "compartment": "c"},
+            {"id": "C_c", "compartment": "c"},
+            {"id": "prot_pool", "compartment": "c"},
+            {"id": "prot_E1", "compartment": "c"},
+            {"id": "prot_E2", "compartment": "c"},
+        ],
+        "reactions": [
+            {
+                "id": "R1",
+                "metabolites": {"A_c": -1.0, "prot_E1": -0.01, "B_c": 1.0},
+                "lower_bound": 0, "upper_bound": 1000,
+                "gene_reaction_rule": "g1",
+            },
+            {
+                "id": "R2",
+                "metabolites": {"B_c": -1.0, "prot_E2": -0.01, "C_c": 1.0},
+                "lower_bound": 0, "upper_bound": 1000,
+                "gene_reaction_rule": "g2",
+            },
+            {
+                "id": "usage_prot_E1",
+                "metabolites": {"prot_pool": -1.0, "prot_E1": 1.0},
+                "lower_bound": 0, "upper_bound": 1000,
+            },
+            {
+                "id": "usage_prot_E2",
+                "metabolites": {"prot_pool": -1.0, "prot_E2": 1.0},
+                "lower_bound": 0, "upper_bound": 1000,
+            },
+            {
+                "id": "prot_pool_exchange",
+                "metabolites": {"prot_pool": 1.0},
+                "lower_bound": 0, "upper_bound": 1000,
+            },
+        ],
+        "genes": [
+            {"id": "g1", "name": ""},
+            {"id": "g2", "name": ""},
+        ],
+        "ec-rxns": [
+            {
+                "id": "R1", "kcat": 1.5, "source": "brenda",
+                "eccodes": "1.1.1.1",
+                "enzymes": {"E1": 1},
+            },
+            {
+                "id": "R2", "kcat": 2.5, "source": "dlkcat",
+                "eccodes": ["2.2.2.2", "2.2.99.99"],
+                "enzymes": {"E2": 1},
+            },
+        ],
+        "ec-enzymes": [
+            {"genes": "g1", "enzymes": "E1", "mw": 100.0,
+             "sequence": "MAA"},
+            {"genes": "g2", "enzymes": "E2", "mw": 200.0,
+             "sequence": "MBB"},
+        ],
+        "metaData": {"version": "1", "date": "2026-05-15"},
+    }
+
+
+def _write_yaml(path: Path, doc: dict) -> None:
+    yaml = YAML(typ="safe")
+    yaml.default_flow_style = False
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.dump(doc, f)
+
+
+def _write_canonical(path: Path) -> None:
+    _write_yaml(path, _canonical_yaml())
+
+
+# --------------------------------------------------------------------------- #
+# Pre-flight
+# --------------------------------------------------------------------------- #
+
+def test_relative_filename_without_adapter_raises(tmp_path):
+    with pytest.raises(ValueError, match="adapter"):
+        load_ec_model("ecModel.yml", adapter=None)
+
+
+def test_default_filename_without_adapter_raises(tmp_path):
+    with pytest.raises(ValueError, match="adapter"):
+        load_ec_model(adapter=None)
+
+
+def test_non_yaml_extension_raises(tmp_path):
+    with pytest.raises(ValueError, match="YAML"):
+        load_ec_model("ecModel.xml", adapter=None)
+
+
+def test_missing_file_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    with pytest.raises(FileNotFoundError, match="not found"):
+        load_ec_model("missing.yml", adapter=adapter)
+
+
+def test_non_mapping_top_level_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    path = tmp_path / "models" / "ecModel.yml"
+    # Legacy RAVEN top-level: a sequence, not a mapping.
+    path.write_text("- foo: bar\n- baz: qux\n")
+    with pytest.raises(ValueError, match="must be a mapping"):
+        load_ec_model("ecModel.yml", adapter=adapter)
+
+
+def test_missing_ec_rxns_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    del doc["ec-rxns"]
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    with pytest.raises(ValueError, match="ec-rxns"):
+        load_ec_model("ecModel.yml", adapter=adapter)
+
+
+def test_missing_ec_enzymes_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    del doc["ec-enzymes"]
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    with pytest.raises(ValueError, match="ec-enzymes"):
+        load_ec_model("ecModel.yml", adapter=adapter)
+
+
+def test_unknown_enzyme_in_ec_rxn_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    doc["ec-rxns"][0]["enzymes"] = {"E_ghost": 1}
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    with pytest.raises(ValueError, match="E_ghost"):
+        load_ec_model("ecModel.yml", adapter=adapter)
+
+
+# --------------------------------------------------------------------------- #
+# Path resolution
+# --------------------------------------------------------------------------- #
+
+def test_default_filename_resolved_under_adapter_models(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert model.id == "demo"
+
+
+def test_relative_filename_resolved_under_adapter_models(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "myModel.yml")
+    model = load_ec_model("myModel.yml", adapter=adapter)
+    assert model.id == "demo"
+
+
+def test_absolute_path_does_not_require_adapter(tmp_path):
+    path = tmp_path / "models" / "freestanding.yml"
+    path.parent.mkdir()
+    _write_canonical(path)
+    model = load_ec_model(path, adapter=None)
+    assert model.id == "demo"
+
+
+# --------------------------------------------------------------------------- #
+# Returned EcModel structure
+# --------------------------------------------------------------------------- #
+
+def test_returns_ec_model_with_adapter_attached(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert isinstance(model, EcModel)
+    assert model.adapter is adapter
+
+
+def test_cobra_section_loaded(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert {r.id for r in model.reactions} >= {
+        "R1", "R2", "usage_prot_E1", "usage_prot_E2", "prot_pool_exchange",
+    }
+    assert {m.id for m in model.metabolites} >= {
+        "A_c", "B_c", "C_c", "prot_pool", "prot_E1", "prot_E2",
+    }
+    assert {g.id for g in model.genes} == {"g1", "g2"}
+
+
+def test_ec_rxns_fields(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert model.ec.rxns == ["R1", "R2"]
+    np.testing.assert_array_equal(model.ec.kcat, [1.5, 2.5])
+    assert model.ec.source == ["brenda", "dlkcat"]
+    assert model.ec.notes == ["", ""]
+
+
+def test_eccodes_scalar_and_list_canonicalized(tmp_path):
+    """Scalar and list eccodes both end up as `;`-joined strings."""
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert model.ec.eccodes == ["1.1.1.1", "2.2.2.2;2.2.99.99"]
+
+
+def test_ec_enzymes_fields(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert model.ec.genes == ["g1", "g2"]
+    assert model.ec.enzymes == ["E1", "E2"]
+    np.testing.assert_array_equal(model.ec.mw, [100.0, 200.0])
+    assert model.ec.sequence == ["MAA", "MBB"]
+    assert model.ec.concs.shape == (2,)
+    assert np.all(np.isnan(model.ec.concs))
+
+
+def test_rxn_enz_mat_built_from_enzymes_map(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert model.ec.rxn_enz_mat.shape == (2, 2)
+    np.testing.assert_array_equal(
+        model.ec.rxn_enz_mat.toarray(), np.eye(2),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Optional fields default correctly
+# --------------------------------------------------------------------------- #
+
+def test_missing_kcat_defaults_to_nan(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    del doc["ec-rxns"][0]["kcat"]
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    assert np.isnan(model.ec.kcat[0])
+
+
+def test_missing_mw_defaults_to_nan(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    del doc["ec-enzymes"][0]["mw"]
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    assert np.isnan(model.ec.mw[0])
+
+
+def test_missing_source_defaults_to_empty(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    del doc["ec-rxns"][0]["source"]
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    assert model.ec.source[0] == ""
+
+
+def test_missing_concs_defaults_to_nan(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert np.all(np.isnan(model.ec.concs))
+
+
+def test_explicit_concs_loaded(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    doc["ec-enzymes"][0]["concs"] = 0.005
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    assert model.ec.concs[0] == pytest.approx(0.005)
+    assert np.isnan(model.ec.concs[1])
+
+
+# --------------------------------------------------------------------------- #
+# gecko_light flag
+# --------------------------------------------------------------------------- #
+
+def test_gecko_light_flag_default_false(tmp_path):
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    model = load_ec_model(adapter=adapter)
+    assert model.ec.gecko_light is False
+
+
+def test_gecko_light_flag_true(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    doc["gecko_light"] = True
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    assert model.ec.gecko_light is True
+
+
+# --------------------------------------------------------------------------- #
+# Annotations and metaData
+# --------------------------------------------------------------------------- #
+
+def test_metadata_silently_ignored(tmp_path):
+    """metaData provenance fields don't cause errors and don't leak
+    into model.ec or model.annotation in surprising ways."""
+    adapter = _adapter(tmp_path)
+    _write_canonical(tmp_path / "models" / "ecModel.yml")
+    # Just verify loading succeeds; metaData was set in the fixture.
+    load_ec_model(adapter=adapter)
+
+
+def test_metabolite_annotation_loaded(tmp_path):
+    adapter = _adapter(tmp_path)
+    doc = _canonical_yaml()
+    doc["metabolites"][0]["annotation"] = {
+        "kegg.compound": ["C00001"],
+        "smiles": ["O"],
+    }
+    path = tmp_path / "models" / "ecModel.yml"
+    _write_yaml(path, doc)
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    a_c = model.metabolites.get_by_id("A_c")
+    assert a_c.annotation.get("kegg.compound") == ["C00001"]
+    assert a_c.annotation.get("smiles") == ["O"]

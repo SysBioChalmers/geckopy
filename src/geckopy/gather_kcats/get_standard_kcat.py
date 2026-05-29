@@ -167,10 +167,18 @@ def _compute_standard_kcat(kcat: np.ndarray) -> float:
 
 
 def _first_subsystem(rxn: cobra.Reaction) -> str:
-    """Return the first subsystem token (split on `;`) or empty string."""
-    sub = rxn.subsystem or ""
+    """Return the first subsystem token (split on `;`) or empty string.
+
+    Tolerates both string (MATLAB-style ``;``-joined) and list
+    (cobra-py YAML round-trip) representations of ``rxn.subsystem``.
+    """
+    sub = rxn.subsystem
     if not sub:
         return ""
+    if isinstance(sub, (list, tuple)):
+        sub = sub[0] if sub else ""
+    if not isinstance(sub, str):
+        sub = str(sub)
     return sub.split(";")[0].strip()
 
 

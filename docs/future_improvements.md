@@ -153,6 +153,37 @@ Notable items:
   always falls back to the global standard kcat. Use `any(...)` (or
   the equivalent membership check) instead. geckopy uses the
   intended semantics.
+- Fix `saveEcModel`'s default filename. The MATLAB default is
+  `'ecModel'` (no extension); combined with the dispatch on
+  `filename(end-3:end)` falling through to `writeYAMLmodel` for
+  unknown extensions, the file is written as
+  `<path>/models/ecModel` (no extension). Either default to
+  `'ecModel.yml'` or auto-append `.yml` when no extension is
+  given. geckopy defaults to `'ecModel.yml'`.
+- Drop the `e-005` -> `e-05 ` post-processing in `saveEcModel`'s
+  SBML branch. The Windows/Mac stoichiometric-coefficient
+  formatting workaround predates current libSBML, which formats
+  consistently across platforms. The backup-file dance is also a
+  footgun: if the function errors mid-way the user is left with a
+  dangling `backup.xml`. Either rely on libSBML's current output
+  directly, or fix it via a libSBML option rather than text
+  rewriting.
+- Update `writeYAMLmodel` / `readYAMLmodel` (RAVEN) to emit and
+  accept the canonical geckopy YAML schema specified in
+  [yaml_format.md](yaml_format.md). The conversion is purely
+  cosmetic (drop the outer sequence wrapper; drop all `!!omap`
+  tags; flatten `compartments`, per-met / per-rxn / per-gene
+  entries, `reactions[].metabolites`, and `ec-rxns[].enzymes`;
+  lift `id` and `name` out of `metaData` to top-level; move
+  `geckoLight` out of `metaData` into a top-level boolean
+  `gecko_light`; move per-met `smiles` into `annotation:
+  {smiles: [...]}`; coerce annotation values to single-element
+  lists). Once both implementations agree on the canonical
+  format, ecModels become directly exchangeable between MATLAB
+  GECKO and geckopy with no translator. As an interim measure,
+  ship a one-off conversion script (`legacy_to_canonical.py` or
+  similar in `docs/` or `scripts/`) for rewriting existing
+  RAVEN-format YAMLs (e.g. the published `ecYeastGEM.yml`).
 - Make `readDLKcatOutput`'s substrate-name match against
   `model.metNames` case-insensitive. `ismember` is case-sensitive by
   default, which can fail spuriously when an SBML loader normalizes
