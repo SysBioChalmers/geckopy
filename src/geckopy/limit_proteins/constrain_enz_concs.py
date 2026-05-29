@@ -21,6 +21,7 @@ def constrain_enz_concs(
     model: "EcModel",
     *,
     remove_constraints: bool = False,
+    restrict_to: list[str] | None = None,
 ) -> None:
     """Constrain ``usage_prot_<enzyme>`` reactions by ``model.ec.concs``.
 
@@ -63,6 +64,12 @@ def constrain_enz_concs(
         When True, all usage reactions are reset to their default
         ``upper_bound = 1000``, regardless of ``ec.concs``.
         ``ec.concs`` itself is left unchanged.
+    restrict_to
+        If supplied, only the listed enzyme uniprot IDs are
+        processed (others are left untouched). Useful for incremental
+        updates from ``Enzyme.concentration`` setters. Unknown IDs
+        in the list are silently ignored. Default ``None`` =
+        process every enzyme in ``model.ec.enzymes``.
 
     Raises
     ------
@@ -88,7 +95,17 @@ def constrain_enz_concs(
                 f"models do not have them."
             )
 
-    for i, enz in enumerate(model.ec.enzymes):
+    if restrict_to is None:
+        index_iter = enumerate(model.ec.enzymes)
+    else:
+        restrict_set = set(restrict_to)
+        index_iter = (
+            (i, enz)
+            for i, enz in enumerate(model.ec.enzymes)
+            if enz in restrict_set
+        )
+
+    for i, enz in index_iter:
         rxn = model.reactions.get_by_id(f"{_USAGE_PREFIX}{enz}")
         rxn.upper_bound = 1000.0
         if remove_constraints:

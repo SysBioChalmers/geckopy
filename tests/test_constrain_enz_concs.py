@@ -168,6 +168,26 @@ def test_remove_constraints_does_not_modify_concs():
     assert model.ec.concs[0] == 5.0
 
 
+def test_restrict_to_only_updates_listed_enzymes():
+    """With ``restrict_to``, only the listed enzymes' usage reactions
+    are touched; others keep whatever bounds they had."""
+    model = _ec_model_with_pool(["P1", "P2"], concs=[5.0, 7.0])
+    # Pre-set P2's bound to a sentinel; constrain only P1.
+    model.reactions.get_by_id("usage_prot_P2").upper_bound = 42.0
+    constrain_enz_concs(model, restrict_to=["P1"])
+    assert model.reactions.get_by_id("usage_prot_P1").upper_bound == 5.0
+    assert model.reactions.get_by_id("usage_prot_P2").upper_bound == 42.0
+
+
+def test_restrict_to_unknown_ids_ignored():
+    """Unknown uniprot IDs in ``restrict_to`` are silently skipped."""
+    model = _ec_model_with_pool(["P1"], concs=[5.0])
+    # Nothing in restrict_to matches the model -> no-op.
+    model.reactions.get_by_id("usage_prot_P1").upper_bound = 99.0
+    constrain_enz_concs(model, restrict_to=["P_ghost"])
+    assert model.reactions.get_by_id("usage_prot_P1").upper_bound == 99.0
+
+
 # --------------------------------------------------------------------------- #
 # Empty model
 # --------------------------------------------------------------------------- #

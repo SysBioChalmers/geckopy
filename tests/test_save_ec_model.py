@@ -114,11 +114,12 @@ def test_relative_filename_without_adapter_raises(tmp_path):
         save_ec_model(model, "ecModel.yml", adapter=None)
 
 
-def test_non_yaml_extension_raises(tmp_path):
+def test_unknown_extension_raises(tmp_path):
+    """Anything outside YAML/SBML is rejected."""
     adapter = _adapter(tmp_path)
     model = _build_full_ec_model(adapter)
-    with pytest.raises(ValueError, match="YAML"):
-        save_ec_model(model, "ecModel.xml")
+    with pytest.raises(ValueError, match="YAML or SBML"):
+        save_ec_model(model, "ecModel.txt")
 
 
 # --------------------------------------------------------------------------- #

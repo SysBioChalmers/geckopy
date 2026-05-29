@@ -18,11 +18,13 @@ if TYPE_CHECKING:
     from ..ec_model import EcModel
 
 
-_PROT_PREFIX = "prot_"
-_USAGE_PREFIX = "usage_prot_"
-_POOL_ID = "prot_pool"
-_POOL_EXCHANGE_ID = "prot_pool_exchange"
-_PROTEIN_USAGE_SUBSYSTEM = "Protein usage"
+from ..constants import (
+    POOL_EXCHANGE_ID as _POOL_EXCHANGE_ID,
+    POOL_ID as _POOL_ID,
+    PROT_PREFIX as _PROT_PREFIX,
+    PROTEIN_USAGE_SUBSYSTEM as _PROTEIN_USAGE_SUBSYSTEM,
+    USAGE_PREFIX as _USAGE_PREFIX,
+)
 
 
 # --------------------------------------------------------------------------- #
