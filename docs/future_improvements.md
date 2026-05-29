@@ -51,6 +51,95 @@ Notable items:
 - Make `getReactionsFromEnzyme` case-sensitive.
 - Forbid length-N kcat lists for un-suffixed `rxn_ids` in
   `setKcatForReactions` (strict matching rule).
+- Delete `getECstring` from MATLAB GECKO. After the `findECInDB`
+  refactor (geckopy works with raw `;`-joined EC tokens throughout)
+  the function has no remaining callers. It also has three latent
+  bugs not worth fixing in place: an accumulator footgun (callers
+  must add a trailing space to `EC_set` before calling, otherwise
+  tokens collide), an empty-input quirk (returns `"EC"` instead of
+  `""` because `strsplit("", " ")` returns `{''}`), and no
+  validation (would happily emit `ECEC1.1.1.1` for already-prefixed
+  input or `ECnotanec` for junk).
+- Fix the validation regex in `getECfromGEM`. The current pattern
+  `(\d\.(\w|-)+\.(\w|-)+\.(\w|-)+)(;\w+\.(\w|-)+\.(\w|-)+\.(\w|-)+)*(.*)`
+  substituted with `$3` returns the level-3 character of the first EC
+  for any valid input (e.g. `"1.2.3.4"` -> `"3"`), and the subsequent
+  `~cellfun(@isempty, ...)` then flags every non-empty result as
+  invalid. As written, every non-empty EC string is silently
+  discarded. Replace with a straightforward
+  `^TOKEN(;TOKEN)*$` validation where `TOKEN` is the canonical
+  four-level dotted EC pattern with `-` allowed in any level.
+- Dedupe the `intersection` helper output in `findECInDB`. The
+  helper currently produces duplicates when multiple subunits share
+  the same EC (e.g. `"1.1.1.1;1.1.1.1"` for a two-subunit complex
+  whose subunits both map to EC 1.1.1.1). Apply a final
+  `compare_wild` pass on the intersection result, mirroring what
+  geckopy does.
+- Simplify `loadBRENDAdata` signature: drop the `modelAdapter` arg
+  and `ModelAdapterManager.getDefault()` fallback; take the folder
+  path directly. The adapter resolution belongs at the call site.
+- Drop the unused 5th column from the BRENDA dump file format.
+  `loadBRENDAdata` parses it as `%q` and never reads it; observed
+  dumps consistently set it to `*`.
+- Fix the stale `[1/hr]` comment on `SAcell{3}` in `loadBRENDAdata`.
+  With the post-refactor scaling factors (SA * 1/60, MW * 1/1000)
+  the unit is `[1/s]`, not `[1/hr]`.
+- Resolve the `'add'` action in `getECfromDatabase`: either implement
+  the commented-out `addMultipleMatches` branch (and drop the
+  apologetic `% I don't understand the purpose of this, let's skip
+  it for now` comment) or remove the option from the documented API.
+  geckopy currently only supports `'display'` and `'ignore'`.
+- Subset by `ecRxns` upfront in `getECfromDatabase` rather than
+  iterating every reaction and discarding the unwanted results at
+  the end. The function's own inline comment already calls this out
+  ("Probably faster to subset with ecRxns in the beginning of the
+  script, but this was at the moment simpler to implement").
+  geckopy already does this.
+- Fix the search-order/output-ranking inconsistency in
+  `fuzzyKcatMatching`. The search order inside `mainMatch` tries
+  org-SA (output rank 5) BEFORE any-organism-no-substrate-kcat
+  (output rank 4). When both are available for a reaction, MATLAB
+  returns the org-SA result and reports its origin as 5, even though
+  the docstring's origin ranking implies origin 4 should win. Either
+  swap the search order so any-no-subs-kcat is tried before org-SA,
+  or update the docstring to match the search order. geckopy
+  replicates the current MATLAB behavior with a MATLAB-COMPAT note.
+- Cap the iterative-EC-escalation loop in `fuzzyKcatMatching` at 4
+  wildcards. The current `while ~success` loop has no termination
+  condition for tokens that never match; combined with
+  `EC{k} = [EC{k}(1:dot_pos(4-wild_num)) ...]`, when `wild_num`
+  exceeds 4 the indexing becomes invalid (``dot_pos(0)``) and MATLAB
+  errors out. geckopy returns "no match" cleanly at that point.
+- Remove the dead-code `if forceWClvl == 1` block in
+  `fuzzyKcatMatching`. After the preceding `while forceWClvl > 0`
+  loop, `forceWClvl` is always 0, so the `if` never fires. Either
+  delete it or capture the original `forceWClvl` value before the
+  loop and check that.
+- Drop the unused `ids` field from the loaded `phylDistStruct` in
+  `KEGG_struct`. It is parsed but never read.
+- Fix the `all(kcatSubSystemIdx)` check in `getStandardKcat`. The
+  intent is "does the reaction's subsystem appear in our subsystem
+  list?", but `all` of a length-N boolean vector is true only when
+  every entry is true (i.e. only when the model has a single unique
+  subsystem). For any model with more than one subsystem, the
+  per-subsystem mean kcat is effectively dead code and the function
+  always falls back to the global standard kcat. Use `any(...)` (or
+  the equivalent membership check) instead. geckopy uses the
+  intended semantics.
+- Make `readDLKcatOutput`'s substrate-name match against
+  `model.metNames` case-insensitive. `ismember` is case-sensitive by
+  default, which can fail spuriously when an SBML loader normalizes
+  case differently from how the DLKcat input was generated. geckopy
+  uses case-insensitive matching here.
+- Fix the `rxnsToClear(ecRxns) = false` block in `writeDLKcatInput`.
+  The `rxnsToClear` array has length `numel(ecRxns)` (the count of
+  selected reactions), but `ecRxns` (after `find()`) holds indices
+  into the larger `model.ec.rxns` space. For any non-trivial
+  selection, indices will exceed the array length and MATLAB will
+  error out. The intended behaviour ("clear unselected reactions in
+  the subset matrix") is already achieved by the preceding
+  `reducedS(:, origRxnIdxs)` slice; the `rxnsToClear` block is
+  dead/buggy and should be removed.
 
 ## get_enzyme_data subsystem
 

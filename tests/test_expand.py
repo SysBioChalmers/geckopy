@@ -230,3 +230,40 @@ def test_expansion_is_idempotent_in_the_no_op_sense():
 def test_empty_model_is_unchanged():
     model = cobra.Model("empty")
     assert expand_model(model) == []
+
+
+# --------------------------------------------------------------------------- #
+# Annotation and notes propagation (needed by get_ec_from_gem)
+# --------------------------------------------------------------------------- #
+
+def test_expanded_reactions_inherit_annotation_and_notes():
+    model = _build_model([
+        ("r1", {"A": -1.0, "B": 1.0}, 0.0, 1000.0, "g1 or g2"),
+    ])
+    r1 = model.reactions.get_by_id("r1")
+    r1.annotation["ec-code"] = "1.2.3.4"
+    r1.annotation["sbo"] = "SBO:0000176"
+    r1.notes["custom"] = "hello"
+
+    expand_model(model)
+
+    for suffix in ("_EXP_1", "_EXP_2"):
+        rxn = model.reactions.get_by_id(f"r1{suffix}")
+        assert rxn.annotation["ec-code"] == "1.2.3.4"
+        assert rxn.annotation["sbo"] == "SBO:0000176"
+        assert rxn.notes["custom"] == "hello"
+
+
+def test_expanded_reaction_annotation_is_independent_of_parent():
+    """Mutating one expanded reaction's annotation must not affect siblings."""
+    model = _build_model([
+        ("r1", {"A": -1.0, "B": 1.0}, 0.0, 1000.0, "g1 or g2"),
+    ])
+    model.reactions.get_by_id("r1").annotation["ec-code"] = ["1.2.3.4"]
+
+    expand_model(model)
+
+    r1_1 = model.reactions.get_by_id("r1_EXP_1")
+    r1_2 = model.reactions.get_by_id("r1_EXP_2")
+    r1_1.annotation["ec-code"].append("9.9.9.9")
+    assert r1_2.annotation["ec-code"] == ["1.2.3.4"]

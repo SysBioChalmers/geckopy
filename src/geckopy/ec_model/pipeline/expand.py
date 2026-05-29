@@ -15,6 +15,7 @@ GPR strings on the MATLAB side that the AST flags as invalid.
 from __future__ import annotations
 
 import ast
+import copy
 from typing import TYPE_CHECKING
 
 import cobra
@@ -116,6 +117,11 @@ def expand_model(model: "cobra.Model") -> list[str]:
             )
             new_rxn.subsystem = original_rxn.subsystem
             new_rxn.gene_reaction_rule = " and ".join(clause)
+            # Propagate per-reaction metadata (notably ec-code) so that
+            # downstream functions like get_ec_from_gem see the same
+            # annotations on expanded reactions as on the original.
+            new_rxn.annotation = copy.deepcopy(original_rxn.annotation)
+            new_rxn.notes = copy.deepcopy(original_rxn.notes)
             new_rxns.append(new_rxn)
 
         model.remove_reactions([original_rxn])

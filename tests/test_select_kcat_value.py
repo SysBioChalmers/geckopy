@@ -1,0 +1,324 @@
+"""Tests for select_kcat_value."""
+import cobra
+import numpy as np
+import pandas as pd
+import pytest
+from scipy import sparse
+
+from geckopy.ec_model import EcModel
+from geckopy.ec_model.ec_data import EcData
+from geckopy.gather_kcats import select_kcat_value
+
+
+# --------------------------------------------------------------------------- #
+# Fixture builders
+# --------------------------------------------------------------------------- #
+
+def _ec_model(
+    ec_rxns: list[str],
+    *,
+    initial_kcat: list[float] | None = None,
+    initial_source: list[str] | None = None,
+) -> EcModel:
+    """Build an EcModel with the given ec.rxns and starting state."""
+    n = len(ec_rxns)
+    if initial_kcat is None:
+        initial_kcat = [np.nan] * n
+    if initial_source is None:
+        initial_source = [""] * n
+    model = EcModel("test")
+    model.ec = EcData(
+        rxns=list(ec_rxns),
+        kcat=np.array(initial_kcat, dtype=float),
+        source=list(initial_source),
+        notes=[""] * n,
+        eccodes=[""] * n,
+        rxn_enz_mat=sparse.csr_matrix((n, 0), dtype=float),
+    )
+    return model
+
+
+def _kcat_list(rows: list[tuple[str, float, str]]) -> pd.DataFrame:
+    """Build a kcat_list DataFrame from (rxn_id, kcat, source) tuples."""
+    return pd.DataFrame(rows, columns=["rxn_id", "kcat", "source"])
+
+
+# --------------------------------------------------------------------------- #
+# Trivial cases
+# --------------------------------------------------------------------------- #
+
+def test_empty_kcat_list_returns_empty_no_updates():
+    model = _ec_model(["r1"])
+    updated = select_kcat_value(model, _kcat_list([]))
+    assert updated == []
+    assert np.isnan(model.ec.kcat[0])
+
+
+def test_all_zero_kcats_no_updates():
+    model = _ec_model(["r1"])
+    updated = select_kcat_value(
+        model, _kcat_list([("r1", 0.0, "brenda")]),
+    )
+    assert updated == []
+    assert np.isnan(model.ec.kcat[0])
+
+
+def test_single_kcat_per_reaction_basic():
+    model = _ec_model(["r1", "r2"])
+    updated = select_kcat_value(
+        model,
+        _kcat_list([("r1", 5.0, "brenda"), ("r2", 7.0, "brenda")]),
+    )
+    assert sorted(updated) == ["r1", "r2"]
+    np.testing.assert_array_equal(model.ec.kcat, [5.0, 7.0])
+    assert model.ec.source == ["brenda", "brenda"]
+
+
+def test_only_reactions_in_list_are_updated():
+    model = _ec_model(["r1", "r2", "r3"], initial_kcat=[1.0, 1.0, 1.0])
+    select_kcat_value(model, _kcat_list([("r2", 5.0, "brenda")]))
+    np.testing.assert_array_equal(model.ec.kcat, [1.0, 5.0, 1.0])
+
+
+# --------------------------------------------------------------------------- #
+# criteria
+# --------------------------------------------------------------------------- #
+
+def test_criteria_max_picks_largest():
+    model = _ec_model(["r1"])
+    select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 1.0, "src1"),
+            ("r1", 5.0, "src2"),
+            ("r1", 2.0, "src3"),
+        ]),
+        criteria="max",
+    )
+    assert model.ec.kcat[0] == 5.0
+    assert model.ec.source[0] == "src2"
+
+
+def test_criteria_min_picks_smallest():
+    model = _ec_model(["r1"])
+    select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 5.0, "src1"),
+            ("r1", 1.0, "src2"),
+            ("r1", 2.0, "src3"),
+        ]),
+        criteria="min",
+    )
+    assert model.ec.kcat[0] == 1.0
+    assert model.ec.source[0] == "src2"
+
+
+def test_criteria_median_picks_median_value():
+    model = _ec_model(["r1"])
+    select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 1.0, "src_first"),
+            ("r1", 3.0, "src_middle"),
+            ("r1", 5.0, "src_last"),
+        ]),
+        criteria="median",
+    )
+    assert model.ec.kcat[0] == 3.0
+
+
+def test_criteria_median_attributes_source_to_first_row():
+    """MATLAB-compat: median/mean source comes from the first row of
+    the group, not the median sample itself."""
+    model = _ec_model(["r1"])
+    select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 1.0, "src_first"),
+            ("r1", 3.0, "src_middle"),
+            ("r1", 5.0, "src_last"),
+        ]),
+        criteria="median",
+    )
+    assert model.ec.source[0] == "src_first"
+
+
+def test_criteria_mean_picks_average():
+    model = _ec_model(["r1"])
+    select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 2.0, "a"),
+            ("r1", 4.0, "b"),
+            ("r1", 6.0, "c"),
+        ]),
+        criteria="mean",
+    )
+    assert model.ec.kcat[0] == pytest.approx(4.0)
+
+
+def test_criteria_mean_attributes_source_to_first_row():
+    model = _ec_model(["r1"])
+    select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 2.0, "src_first"),
+            ("r1", 4.0, "src_second"),
+        ]),
+        criteria="mean",
+    )
+    assert model.ec.source[0] == "src_first"
+
+
+def test_criteria_invalid_raises():
+    model = _ec_model(["r1"])
+    with pytest.raises(ValueError, match="criteria must be"):
+        select_kcat_value(
+            model, _kcat_list([("r1", 5.0, "a")]), criteria="nonsense",
+        )
+
+
+# --------------------------------------------------------------------------- #
+# overwrite modes
+# --------------------------------------------------------------------------- #
+
+def test_overwrite_true_replaces_existing():
+    model = _ec_model(["r1"], initial_kcat=[10.0], initial_source=["old"])
+    updated = select_kcat_value(
+        model, _kcat_list([("r1", 5.0, "new")]), overwrite=True,
+    )
+    assert updated == ["r1"]
+    assert model.ec.kcat[0] == 5.0
+    assert model.ec.source[0] == "new"
+
+
+def test_overwrite_false_only_updates_zero_or_nan():
+    model = _ec_model(
+        ["r1", "r2", "r3"],
+        initial_kcat=[10.0, 0.0, np.nan],
+        initial_source=["old1", "old2", "old3"],
+    )
+    updated = select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 100.0, "new1"),
+            ("r2", 200.0, "new2"),
+            ("r3", 300.0, "new3"),
+        ]),
+        overwrite=False,
+    )
+    assert sorted(updated) == ["r2", "r3"]
+    assert model.ec.kcat[0] == 10.0  # untouched
+    assert model.ec.kcat[1] == 200.0
+    assert model.ec.kcat[2] == 300.0
+
+
+def test_overwrite_if_higher_only_replaces_when_strictly_higher():
+    model = _ec_model(
+        ["r1", "r2", "r3"],
+        initial_kcat=[10.0, 10.0, 10.0],
+        initial_source=["old1", "old2", "old3"],
+    )
+    updated = select_kcat_value(
+        model,
+        _kcat_list([
+            ("r1", 5.0, "lower"),    # 5 < 10 -> skip
+            ("r2", 10.0, "equal"),   # 10 == 10 -> skip
+            ("r3", 15.0, "higher"),  # 15 > 10 -> update
+        ]),
+        overwrite="if_higher",
+    )
+    assert updated == ["r3"]
+    assert model.ec.kcat[0] == 10.0
+    assert model.ec.kcat[1] == 10.0
+    assert model.ec.kcat[2] == 15.0
+
+
+def test_overwrite_if_higher_treats_zero_or_nan_as_unset():
+    model = _ec_model(
+        ["r1", "r2"],
+        initial_kcat=[0.0, np.nan],
+        initial_source=["old1", "old2"],
+    )
+    updated = select_kcat_value(
+        model,
+        _kcat_list([("r1", 5.0, "new1"), ("r2", 5.0, "new2")]),
+        overwrite="if_higher",
+    )
+    assert sorted(updated) == ["r1", "r2"]
+    assert model.ec.kcat[0] == 5.0
+    assert model.ec.kcat[1] == 5.0
+
+
+def test_overwrite_invalid_raises():
+    model = _ec_model(["r1"])
+    with pytest.raises(ValueError, match="overwrite must be"):
+        select_kcat_value(
+            model, _kcat_list([("r1", 5.0, "a")]), overwrite="nonsense",
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Error handling
+# --------------------------------------------------------------------------- #
+
+def test_unknown_rxn_id_raises():
+    model = _ec_model(["r1"])
+    with pytest.raises(ValueError, match="not present in model.ec.rxns"):
+        select_kcat_value(model, _kcat_list([("nonexistent", 5.0, "a")]))
+
+
+def test_missing_column_raises():
+    model = _ec_model(["r1"])
+    bad_list = pd.DataFrame({"rxn_id": ["r1"], "kcat": [5.0]})  # no source
+    with pytest.raises(KeyError, match="source"):
+        select_kcat_value(model, bad_list)
+
+
+# --------------------------------------------------------------------------- #
+# Return value
+# --------------------------------------------------------------------------- #
+
+def test_return_value_is_list_of_rxn_ids():
+    model = _ec_model(["r1", "r2"])
+    updated = select_kcat_value(
+        model,
+        _kcat_list([("r1", 5.0, "a"), ("r2", 7.0, "b")]),
+    )
+    assert isinstance(updated, list)
+    assert all(isinstance(r, str) for r in updated)
+    assert sorted(updated) == ["r1", "r2"]
+
+
+def test_return_value_omits_reactions_not_updated_under_if_higher():
+    model = _ec_model(["r1"], initial_kcat=[10.0])
+    updated = select_kcat_value(
+        model, _kcat_list([("r1", 5.0, "lower")]), overwrite="if_higher",
+    )
+    assert updated == []
+
+
+# --------------------------------------------------------------------------- #
+# Integration with fuzzy_kcat_matching DataFrame schema
+# --------------------------------------------------------------------------- #
+
+def test_consumes_fuzzy_kcat_matching_schema_directly():
+    """The full schema produced by fuzzy_kcat_matching should pass
+    through without column adjustments."""
+    model = _ec_model(["r1", "r2"])
+    df = pd.DataFrame({
+        "rxn_id": ["r1", "r2", "r1"],
+        "source": ["brenda", "brenda", "brenda"],
+        "eccode": ["1.1.1.1", "2.7.7.7", "1.1.1.1"],
+        "substrates": [["A"], ["B"], ["A"]],
+        "genes": [[], [], []],
+        "kcat": [5.0, 7.0, 9.0],
+        "wildcard_level": pd.array([0, 1, 0], dtype="Int64"),
+        "origin": pd.array([1, 3, 1], dtype="Int64"),
+    })
+    updated = select_kcat_value(model, df, criteria="max")
+    assert sorted(updated) == ["r1", "r2"]
+    # r1 had two entries (5.0, 9.0); max is 9.0.
+    assert model.ec.kcat[0] == 9.0
+    assert model.ec.kcat[1] == 7.0
