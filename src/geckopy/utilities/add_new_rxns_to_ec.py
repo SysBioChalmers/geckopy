@@ -19,7 +19,7 @@ from ..ec_model.constants import (
     PROT_PREFIX,
     USAGE_PREFIX,
 )
-from ..ec_model.pipeline.expand import _gpr_to_dnf
+from raven_python.manipulation.expand import _gpr_to_dnf
 from ..ec_model.pipeline.protein_pool import _resolve_enzyme_compartment_id
 
 if TYPE_CHECKING:

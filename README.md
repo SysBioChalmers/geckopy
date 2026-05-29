@@ -1,6 +1,6 @@
 # geckopy - under active development
 
-[![tests](https://github.com/edkerk/geckopy/actions/workflows/test.yml/badge.svg)](https://github.com/edkerk/geckopy/actions/workflows/test.yml)
+[![tests](https://github.com/SysBioChalmers/geckopy/actions/workflows/test.yml/badge.svg)](https://github.com/SysBioChalmers/geckopy/actions/workflows/test.yml)
 
 Enzyme-constrained genome-scale metabolic modelling in Python.
 
@@ -25,18 +25,27 @@ applies custom curations, and integrates proteomics measurements.
 
 ## Install
 
+geckopy depends on [raven-python](https://github.com/SysBioChalmers/raven-python)
+(the Python port of the RAVEN Toolbox), which is not yet on PyPI. Install both
+from GitHub:
+
 ```bash
-pip install git+https://github.com/edkerk/geckopy.git
+pip install \
+    git+https://github.com/SysBioChalmers/raven-python.git@main \
+    git+https://github.com/SysBioChalmers/geckopy.git@develop
 ```
+
+Once raven-python and geckopy are published to PyPI, this collapses to
+`pip install geckopy` (raven-python will be pulled in transitively).
 
 Optional extras:
 
 ```bash
 # Adds matplotlib (needed to render plots from the tutorial)
-pip install "geckopy[tutorial] @ git+https://github.com/edkerk/geckopy.git"
+pip install "geckopy[tutorial] @ git+https://github.com/SysBioChalmers/geckopy.git@develop"
 
 # Adds pytest + ruff (only needed if you're contributing)
-pip install "geckopy[dev] @ git+https://github.com/edkerk/geckopy.git"
+pip install "geckopy[dev] @ git+https://github.com/SysBioChalmers/geckopy.git@develop"
 ```
 
 Requires Python 3.11 or newer.

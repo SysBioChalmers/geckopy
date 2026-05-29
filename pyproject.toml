@@ -37,6 +37,9 @@ dependencies = [
     "numpy>=1.21",
     "pandas>=2",
     "pydantic>=2",
+    # raven-python provides the underlying model-manipulation primitives geckopy
+    # extends. Not yet on PyPI; pinned to the SysBioChalmers main branch.
+    "raven-python @ git+https://github.com/SysBioChalmers/raven-python.git@main",
     "requests>=2.28",
     "ruamel.yaml>=0.17",
     "scipy>=1.10",
@@ -54,10 +57,11 @@ tutorial = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/edkerk/geckopy"
-Source = "https://github.com/edkerk/geckopy"
-Issues = "https://github.com/edkerk/geckopy/issues"
+Homepage = "https://github.com/SysBioChalmers/geckopy"
+Source = "https://github.com/SysBioChalmers/geckopy"
+Issues = "https://github.com/SysBioChalmers/geckopy/issues"
 "GECKO MATLAB" = "https://github.com/SysBioChalmers/GECKO"
+"raven-python" = "https://github.com/SysBioChalmers/raven-python"
 
 [project.scripts]
 geckopy = "geckopy.cli:main"

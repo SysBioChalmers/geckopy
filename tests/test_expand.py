@@ -2,7 +2,8 @@
 import cobra
 
 from geckopy.ec_model.pipeline import expand_model
-from geckopy.ec_model.pipeline.expand import _gpr_to_dnf
+# _gpr_to_dnf lives in raven-python now (see docs/raven_integration.md).
+from raven_python.manipulation.expand import _gpr_to_dnf
 
 
 # --------------------------------------------------------------------------- #
