@@ -34,28 +34,28 @@ from ._brenda_query import (
 from ._escalation import apply_force_wildcards, escalate_wildcard
 from ._organism import filter_by_organism, resolve_organism_index
 
-# Backward-compat private aliases. The old monolithic
-# ``fuzzy_kcat_matching.py`` had all these as module-private
-# helpers (leading underscore). Tests and any other consumers
-# may import them under those names; the leading-underscore
-# convention says "internal", but the names are reachable. Keep
-# the aliases so the file split is invisible to existing callers.
-_apply_force_wildcards = apply_force_wildcards
-_build_ec_indices = build_ec_indices
-_escalate_wildcard = escalate_wildcard
-_filter_by_organism = filter_by_organism
-_find_ec_rows = find_ec_rows
-_iterative_match_one_ec = iterative_match_one_ec
-_main_match = main_match
-_match_kcat = match_kcat
-_resolve_organism_index = resolve_organism_index
-_NO_MATCH_WC = NO_MATCH_WC
-
 if TYPE_CHECKING:
     from ...databases import BrendaData, PhylDist
     from ...ec_model.ec_model import EcModel
 
 logger = logging.getLogger(__name__)
+
+# Public surface of the (internally split) subpackage. The helpers are
+# re-exported under their plain names; the leading-underscore back-compat
+# aliases have been removed.
+__all__ = [
+    "fuzzy_kcat_matching",
+    "NO_MATCH_WC",
+    "apply_force_wildcards",
+    "build_ec_indices",
+    "escalate_wildcard",
+    "filter_by_organism",
+    "find_ec_rows",
+    "iterative_match_one_ec",
+    "main_match",
+    "match_kcat",
+    "resolve_organism_index",
+]
 
 
 # Output DataFrame schema. Used both in the main return and in the

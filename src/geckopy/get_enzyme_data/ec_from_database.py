@@ -236,17 +236,7 @@ def _build_gene_to_protein_indices(
                 result[original] = [idx]
         return result
 
-    name_to_indices: dict[str, list[int]] = {}
-    for i, g in enumerate(uniprot_db.genes):
-        if g:
-            name_to_indices.setdefault(g, []).append(i)
-
-    result = {}
-    for original, name in zip(model_genes, transformed):
-        indices = name_to_indices.get(name)
-        if indices:
-            result[original] = list(indices)
-    return result
+    return _match_genes_by_name(model_genes, transformed, uniprot_db.genes)
 
 
 def _build_kegg_gene_to_indices(
@@ -258,8 +248,18 @@ def _build_kegg_gene_to_indices(
     if not model_genes:
         return {}
     transformed = adapter.get_kegg_compatible_genes(model_genes)
+    return _match_genes_by_name(model_genes, transformed, kegg_db.genes)
+
+
+def _match_genes_by_name(
+    model_genes: list[str],
+    transformed: list[str],
+    db_genes: list[str],
+) -> dict[str, list[int]]:
+    """Map each model gene to the db rows whose gene name equals its
+    transformed name (a name may match several rows)."""
     name_to_indices: dict[str, list[int]] = {}
-    for i, g in enumerate(kegg_db.genes):
+    for i, g in enumerate(db_genes):
         if g:
             name_to_indices.setdefault(g, []).append(i)
     result: dict[str, list[int]] = {}

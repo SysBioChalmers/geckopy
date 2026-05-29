@@ -13,11 +13,11 @@ from geckopy.databases import BrendaData, PhylDist
 from geckopy.ec_model.ec_data import EcData
 from geckopy.gather_kcats import fuzzy_kcat_matching
 from geckopy.gather_kcats.fuzzy_kcat_matching import (
-    _apply_force_wildcards,
-    _build_ec_indices,
-    _escalate_wildcard,
-    _find_ec_rows,
-    _resolve_organism_index,
+    apply_force_wildcards,
+    build_ec_indices,
+    escalate_wildcard,
+    find_ec_rows,
+    resolve_organism_index,
 )
 
 
@@ -111,99 +111,99 @@ def _phyl_dist(
 # Pure helper tests
 # --------------------------------------------------------------------------- #
 
-def test_escalate_wildcard_rightmost_first():
-    assert _escalate_wildcard("1.2.3.4") == "1.2.3.-"
-    assert _escalate_wildcard("1.2.3.-") == "1.2.-.-"
-    assert _escalate_wildcard("1.2.-.-") == "1.-.-.-"
-    assert _escalate_wildcard("1.-.-.-") == "-.-.-.-"
-    assert _escalate_wildcard("-.-.-.-") is None
+def testescalate_wildcard_rightmost_first():
+    assert escalate_wildcard("1.2.3.4") == "1.2.3.-"
+    assert escalate_wildcard("1.2.3.-") == "1.2.-.-"
+    assert escalate_wildcard("1.2.-.-") == "1.-.-.-"
+    assert escalate_wildcard("1.-.-.-") == "-.-.-.-"
+    assert escalate_wildcard("-.-.-.-") is None
 
 
-def test_escalate_wildcard_invalid_arity_returns_none():
-    assert _escalate_wildcard("1.2.3") is None
-    assert _escalate_wildcard("1.2.3.4.5") is None
+def testescalate_wildcard_invalid_arity_returns_none():
+    assert escalate_wildcard("1.2.3") is None
+    assert escalate_wildcard("1.2.3.4.5") is None
 
 
-def test_apply_force_wildcards_zero_is_noop():
-    assert _apply_force_wildcards("1.2.3.4", 0) == "1.2.3.4"
+def testapply_force_wildcards_zero_is_noop():
+    assert apply_force_wildcards("1.2.3.4", 0) == "1.2.3.4"
 
 
-def test_apply_force_wildcards_n_steps():
-    assert _apply_force_wildcards("1.2.3.4", 1) == "1.2.3.-"
-    assert _apply_force_wildcards("1.2.3.4", 2) == "1.2.-.-"
-    assert _apply_force_wildcards("1.2.3.4", 4) == "-.-.-.-"
-    assert _apply_force_wildcards("1.2.3.4", 5) == "-.-.-.-"
+def testapply_force_wildcards_n_steps():
+    assert apply_force_wildcards("1.2.3.4", 1) == "1.2.3.-"
+    assert apply_force_wildcards("1.2.3.4", 2) == "1.2.-.-"
+    assert apply_force_wildcards("1.2.3.4", 4) == "-.-.-.-"
+    assert apply_force_wildcards("1.2.3.4", 5) == "-.-.-.-"
 
 
-def test_build_ec_indices_groups_by_lowercase():
+def testbuild_ec_indices_groups_by_lowercase():
     df = pd.DataFrame({
         "ec_code": ["1.1.1.1", "1.1.1.1", "2.7.7.7"],
         "substrate": ["a", "b", "c"],
         "organism": ["x", "y", "z"],
         "kcat": [1.0, 2.0, 3.0],
     })
-    idx = _build_ec_indices(df)
+    idx = build_ec_indices(df)
     assert sorted(idx.keys()) == ["1.1.1.1", "2.7.7.7"]
     assert sorted(idx["1.1.1.1"].tolist()) == [0, 1]
 
 
-def test_find_ec_rows_exact_match():
+def testfind_ec_rows_exact_match():
     df = pd.DataFrame({
         "ec_code": ["1.1.1.1", "2.7.7.7"],
         "substrate": ["a", "b"],
         "organism": ["x", "y"],
         "kcat": [1.0, 2.0],
     })
-    idx = _build_ec_indices(df)
-    assert _find_ec_rows("1.1.1.1", idx).tolist() == [0]
-    assert _find_ec_rows("2.7.7.7", idx).tolist() == [1]
-    assert _find_ec_rows("9.9.9.9", idx).tolist() == []
+    idx = build_ec_indices(df)
+    assert find_ec_rows("1.1.1.1", idx).tolist() == [0]
+    assert find_ec_rows("2.7.7.7", idx).tolist() == [1]
+    assert find_ec_rows("9.9.9.9", idx).tolist() == []
 
 
-def test_find_ec_rows_wildcard_prefix_match():
+def testfind_ec_rows_wildcard_prefix_match():
     df = pd.DataFrame({
         "ec_code": ["1.1.1.1", "1.1.1.2", "1.1.2.1", "2.7.7.7"],
         "substrate": ["a"] * 4,
         "organism": ["x"] * 4,
         "kcat": [1.0] * 4,
     })
-    idx = _build_ec_indices(df)
+    idx = build_ec_indices(df)
     # Last-level wildcard: matches both 1.1.1.1 and 1.1.1.2 (prefix "1.1.1.")
-    assert sorted(_find_ec_rows("1.1.1.-", idx).tolist()) == [0, 1]
+    assert sorted(find_ec_rows("1.1.1.-", idx).tolist()) == [0, 1]
     # Two-level wildcard: 1.1.* prefix matches 1.1.1.1, 1.1.1.2, 1.1.2.1
-    assert sorted(_find_ec_rows("1.1.-.-", idx).tolist()) == [0, 1, 2]
+    assert sorted(find_ec_rows("1.1.-.-", idx).tolist()) == [0, 1, 2]
 
 
-def test_find_ec_rows_full_wildcard_matches_all():
+def testfind_ec_rows_full_wildcard_matches_all():
     df = pd.DataFrame({
         "ec_code": ["1.1.1.1", "2.7.7.7", "3.4.21.1"],
         "substrate": ["a", "b", "c"],
         "organism": ["x", "y", "z"],
         "kcat": [1.0, 2.0, 3.0],
     })
-    idx = _build_ec_indices(df)
-    assert sorted(_find_ec_rows("-.-.-.-", idx).tolist()) == [0, 1, 2]
+    idx = build_ec_indices(df)
+    assert sorted(find_ec_rows("-.-.-.-", idx).tolist()) == [0, 1, 2]
 
 
-def test_resolve_organism_index_direct_hit():
+def testresolve_organism_index_direct_hit():
     pd_obj = _phyl_dist(["Saccharomyces cerevisiae", "Escherichia coli"])
-    assert _resolve_organism_index("Saccharomyces cerevisiae", pd_obj) == 0
+    assert resolve_organism_index("Saccharomyces cerevisiae", pd_obj) == 0
 
 
-def test_resolve_organism_index_genus_fallback():
+def testresolve_organism_index_genus_fallback():
     pd_obj = _phyl_dist(["Saccharomyces cerevisiae", "Escherichia coli"])
     # Direct miss but genus matches.
-    assert _resolve_organism_index("Saccharomyces foo", pd_obj) == 0
+    assert resolve_organism_index("Saccharomyces foo", pd_obj) == 0
 
 
-def test_resolve_organism_index_no_match():
+def testresolve_organism_index_no_match():
     pd_obj = _phyl_dist(["Escherichia coli"])
-    assert _resolve_organism_index("totally unknown", pd_obj) is None
+    assert resolve_organism_index("totally unknown", pd_obj) is None
 
 
-def test_resolve_organism_index_empty_name():
+def testresolve_organism_index_empty_name():
     pd_obj = _phyl_dist(["Escherichia coli"])
-    assert _resolve_organism_index("", pd_obj) is None
+    assert resolve_organism_index("", pd_obj) is None
 
 
 # --------------------------------------------------------------------------- #

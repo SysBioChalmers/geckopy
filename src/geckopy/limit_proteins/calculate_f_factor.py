@@ -21,6 +21,7 @@ src/geckomat/limit_proteins/calculateFfactor.m.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -28,6 +29,8 @@ import numpy as np
 if TYPE_CHECKING:
     from ..databases.pax_db_loader import ProtData
     from ..ec_model.ec_model import EcModel
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_f_factor(
@@ -89,6 +92,10 @@ def calculate_f_factor(
 
     total_prot = float(np.nansum(avg))
     if total_prot == 0.0:
+        logger.warning(
+            "calculate_f_factor: total proteome abundance is zero; "
+            "returning f = 0."
+        )
         return 0.0
 
     enzyme_set = set(enzymes)
@@ -97,6 +104,15 @@ def calculate_f_factor(
         dtype=bool,
     )
     if not in_model.any():
+        # None of the proteomics IDs matched a model enzyme -- almost always
+        # an ID-namespace mismatch, not a real f of 0. Flag it loudly rather
+        # than silently zeroing the protein budget.
+        logger.warning(
+            "calculate_f_factor: none of the %d proteomics UniProt IDs match "
+            "a model enzyme; returning f = 0. Check that proteomics IDs and "
+            "ec.enzymes use the same namespace.",
+            len(prot_data.uniprot_ids),
+        )
         return 0.0
 
     total_enz = float(np.nansum(avg[in_model]))

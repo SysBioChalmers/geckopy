@@ -110,9 +110,15 @@ def run_dlkcat(
             "run_dlkcat: invoking %s (this may take several minutes, "
             "longer on first run)", docker_image,
         )
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout,
-        )
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"DLKcat Docker run timed out after {timeout}s. Increase "
+                f"`timeout` or check that the container can start."
+            ) from exc
 
         if result.returncode != 0:
             raise RuntimeError(

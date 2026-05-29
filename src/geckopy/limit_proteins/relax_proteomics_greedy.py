@@ -11,11 +11,14 @@ still proteomics-constrained, relax it (set usage upper bound
 back to the unconstrained default), re-solve, repeat. Returns
 the set of relaxed enzymes and a step-by-step trace.
 
-Different relaxation strategy from
-``flexibilize_enz_concs``: this one is
-shadow-price-ordered (purely LP-driven), and often converges in
-fewer iterations on different infeasibility shapes (e.g. when one
-or two enzymes dominate the binding behaviour).
+Different relaxation strategy from ``flexibilize_enz_concs``: this
+one is shadow-price-ordered (purely LP-driven, one solve per step)
+and often converges in fewer iterations when one or two enzymes
+dominate the infeasibility. The trade-off is that it fully
+unconstrains each picked enzyme with no tighten-back pass, so the
+result is looser (less proteomics-faithful) than
+``flexibilize_enz_concs``. See ``docs/relaxation_methods.md`` for
+the full comparison.
 """
 from __future__ import annotations
 

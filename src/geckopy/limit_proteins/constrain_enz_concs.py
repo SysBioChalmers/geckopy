@@ -5,6 +5,7 @@ src/geckomat/limit_proteins/constrainEnzConcs.m.
 """
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -17,6 +18,8 @@ from ..ec_model.constants import (
     POOL_ID,
     USAGE_PREFIX,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def constrain_enz_concs(
@@ -113,5 +116,14 @@ def constrain_enz_concs(
         if remove_constraints:
             continue
         conc = model.ec.concs[i]
-        if not np.isnan(conc):
-            rxn.upper_bound = float(conc)
+        if np.isnan(conc):
+            continue
+        if conc < 0:
+            # A negative bound would make the usage reaction infeasible
+            # (ub < lb == 0). Skip it and leave the enzyme unconstrained.
+            logger.warning(
+                "constrain_enz_concs: negative concentration %g for %r; "
+                "leaving it unconstrained.", float(conc), enz,
+            )
+            continue
+        rxn.upper_bound = float(conc)

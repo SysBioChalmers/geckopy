@@ -89,32 +89,8 @@ class ModelAdapter:
         if not params.conv_gem.is_absolute():
             params.conv_gem = folder / params.conv_gem
 
-        # Automatic discovery of a subclass in `adapter.py` is intentionally
-        # not enabled by default. Users should import their subclass
-        # explicitly. To enable auto-discovery, uncomment the block below.
-        #
-        # adapter_py = folder / "adapter.py"
-        # if adapter_py.is_file() and cls is ModelAdapter:
-        #     import importlib.util
-        #     spec = importlib.util.spec_from_file_location(
-        #         f"_adapter_{folder.name}", adapter_py
-        #     )
-        #     module = importlib.util.module_from_spec(spec)
-        #     spec.loader.exec_module(module)
-        #     subclasses = [
-        #         v for v in vars(module).values()
-        #         if isinstance(v, type)
-        #         and issubclass(v, ModelAdapter)
-        #         and v is not ModelAdapter
-        #     ]
-        #     if len(subclasses) == 1:
-        #         return subclasses[0](params)
-        #     elif len(subclasses) > 1:
-        #         raise RuntimeError(
-        #             f"Multiple ModelAdapter subclasses found in {adapter_py}. "
-        #             "Import the one you want explicitly."
-        #         )
-
+        # Note: a subclass in the project's `adapter.py` is not auto-discovered;
+        # import and instantiate your ModelAdapter subclass explicitly.
         return cls(params)
 
     # Overridable methods. The default implementations match the MATLAB
