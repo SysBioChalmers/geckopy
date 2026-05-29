@@ -253,5 +253,6 @@ def test_output_can_feed_apply_kcat_list(tmp_path):
     df = read_dlkcat_output(model, p)
     updated = apply_kcat_list(model, df)
     assert sorted(updated) == ["r1", "r2"]
-    assert model.ec.source == ["DLKcat", "DLKcat"]
+    # apply_kcat_list lowercases the source token (no fuzzy metadata).
+    assert model.ec.source == ["dlkcat", "dlkcat"]
     np.testing.assert_array_equal(model.ec.kcat, [5.0, 7.0])

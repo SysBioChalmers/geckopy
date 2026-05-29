@@ -1,8 +1,18 @@
-"""Tests for merge_dlkcat_and_fuzzy_kcats."""
+"""Tests for merge_kcats and the deprecated merge_dlkcat_and_fuzzy_kcats."""
 import pandas as pd
 import pytest
 
-from geckopy.gather_kcats import merge_dlkcat_and_fuzzy_kcats
+from geckopy.gather_kcats import (
+    merge_dlkcat_and_fuzzy_kcats,
+    merge_kcats,
+    normalize_source,
+)
+
+# The wrapper is intentionally deprecated; silence its warning so the
+# legacy-behaviour tests below stay quiet.
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:merge_dlkcat_and_fuzzy_kcats is deprecated:DeprecationWarning"
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -375,5 +385,208 @@ def test_output_can_feed_apply_kcat_list(tmp_path):
     )
     updated = apply_kcat_list(model, merged)
     assert sorted(updated) == ["r1", "r2"]
-    assert model.ec.source[0] == "brenda"
-    assert model.ec.source[1] == "DLKcat"
+    # Fuzzy match -> wildcard/origin detail; DLKcat -> bare lowercase token.
+    assert model.ec.source[0] == "brenda (wc=0, origin=1)"
+    assert model.ec.source[1] == "dlkcat"
+
+
+# --------------------------------------------------------------------------- #
+# merge_kcats: generalized merge over arbitrary / mixed sources
+# --------------------------------------------------------------------------- #
+
+def _okp_row(
+    rxn_id: str,
+    kcat: float,
+    source: str,
+    *,
+    eccode: str = "",
+    gene: str = "g1",
+) -> dict:
+    """A row as produced by parse_okp_output: per-row provenance source,
+    NA wildcard/origin."""
+    return {
+        "rxn_id": rxn_id,
+        "source": source,
+        "eccode": eccode,
+        "substrates": ["alpha"],
+        "genes": [gene],
+        "kcat": kcat,
+        "wildcard_level": pd.NA,
+        "origin": pd.NA,
+    }
+
+
+def _okp_df(rows: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(rows, columns=_CANONICAL_COLUMNS) if rows else pd.DataFrame(
+        columns=_CANONICAL_COLUMNS,
+    )
+    df["wildcard_level"] = df["wildcard_level"].astype("Int64")
+    df["origin"] = df["origin"].astype("Int64")
+    return df
+
+
+def test_normalize_source_folds_to_snake_case():
+    assert normalize_source("Sabio-RK") == "sabio_rk"
+    assert normalize_source("DLKcat") == "dlkcat"
+    assert normalize_source("CataPro") == "catapro"
+    assert normalize_source("BRENDA") == "brenda"
+    assert normalize_source("brenda") == "brenda"
+
+
+def test_merge_kcats_requires_at_least_one_list():
+    with pytest.raises(ValueError, match="at least one"):
+        merge_kcats(source_priority=["dlkcat"])
+
+
+def test_merge_kcats_empty_source_priority_raises():
+    with pytest.raises(ValueError, match="source_priority"):
+        merge_kcats(_okp_df([]), source_priority=[])
+
+
+def test_merge_kcats_missing_column_raises():
+    bad = pd.DataFrame({"rxn_id": ["r1"]})
+    with pytest.raises(ValueError, match="missing required"):
+        merge_kcats(bad, source_priority=["dlkcat"])
+
+
+def test_merge_kcats_okp_experimental_db_is_database_exact():
+    """An OKP BRENDA value (positive kcat, NA metadata) is an exact DB
+    hit (database_exact), beating a lower-priority CataPro prediction."""
+    okp = _okp_df([
+        _okp_row("r1", 7.0, "BRENDA"),
+        _okp_row("r1", 99.0, "CataPro"),
+    ])
+    out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
+    assert len(out) == 1
+    assert out.iloc[0]["source"] == "BRENDA"
+    assert out.iloc[0]["kcat"] == 7.0
+
+
+def test_merge_kcats_sabio_rk_is_database_exact():
+    okp = _okp_df([
+        _okp_row("r1", 4.0, "Sabio-RK"),
+        _okp_row("r1", 99.0, "CataPro"),
+    ])
+    out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
+    assert len(out) == 1
+    # Original (un-normalised) source label is preserved on output.
+    assert out.iloc[0]["source"] == "Sabio-RK"
+
+
+def test_merge_kcats_exact_db_preferred_over_fuzzy_top():
+    """An exact OKP BRENDA hit outranks a fuzzy BRENDA top match for the
+    same reaction when database_exact precedes database_top."""
+    fuzzy = _fuzzy_df([_fuzzy_row("r1", 5.0, wildcard_level=0, origin=1)])
+    okp = _okp_df([_okp_row("r1", 8.0, "BRENDA")])
+    out = merge_kcats(
+        fuzzy, okp,
+        source_priority=["database_exact", "database_top", "database_bottom"],
+    )
+    assert len(out) == 1
+    assert out.iloc[0]["source"] == "BRENDA"
+    assert out.iloc[0]["kcat"] == 8.0
+
+
+def test_merge_kcats_okp_brenda_beats_dlkcat():
+    """Contrast with the failed-fuzzy NA case: an OKP BRENDA row carries
+    a positive kcat, so it is a real database_exact value and wins."""
+    out = merge_kcats(
+        _okp_df([_okp_row("r1", 7.0, "BRENDA")]),
+        _dlkcat_df([_dlkcat_row("r1", 100.0)]),
+        source_priority=["database_exact", "dlkcat"],
+    )
+    assert len(out) == 1
+    assert out.iloc[0]["source"] == "BRENDA"
+
+
+def test_merge_kcats_catapro_used_when_no_database_value():
+    okp = _okp_df([
+        _okp_row("r1", 7.0, "BRENDA"),
+        _okp_row("r2", 50.0, "CataPro"),
+    ])
+    out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
+    assert sorted(out["rxn_id"]) == ["r1", "r2"]
+    by_rxn = {r["rxn_id"]: r["source"] for _, r in out.iterrows()}
+    assert by_rxn == {"r1": "BRENDA", "r2": "CataPro"}
+
+
+def test_merge_kcats_fuzzy_and_okp_mixed():
+    """Fuzzy BRENDA (metadata -> database_top), an OKP Sabio-RK exact hit
+    (database_exact) and a CataPro prediction merge together, each
+    winning its own reaction."""
+    fuzzy = _fuzzy_df([_fuzzy_row("r1", 5.0, wildcard_level=0, origin=1)])
+    okp = _okp_df([
+        _okp_row("r2", 8.0, "Sabio-RK"),
+        _okp_row("r3", 60.0, "CataPro"),
+    ])
+    out = merge_kcats(
+        fuzzy, okp,
+        source_priority=["database_exact", "database_top", "catapro"],
+    )
+    by_rxn = {r["rxn_id"]: r["source"] for _, r in out.iterrows()}
+    assert by_rxn == {"r1": "brenda", "r2": "Sabio-RK", "r3": "CataPro"}
+
+
+def test_merge_kcats_keeps_all_rows_of_winning_tier():
+    okp = _okp_df([
+        _okp_row("r1", 7.0, "BRENDA", gene="g1"),
+        _okp_row("r1", 9.0, "BRENDA", gene="g2"),
+        _okp_row("r1", 99.0, "CataPro"),
+    ])
+    out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
+    assert len(out) == 2
+    assert sorted(out["kcat"]) == [7.0, 9.0]
+    assert all(out["source"] == "BRENDA")
+
+
+def test_merge_kcats_database_bottom_fallback():
+    """A weak fuzzy match (wildcard) is database_bottom and only wins when
+    no higher tier covers the reaction."""
+    fuzzy = _fuzzy_df([_fuzzy_row("r1", 5.0, wildcard_level=2, origin=3)])
+    out = merge_kcats(
+        fuzzy,
+        source_priority=["database_top", "dlkcat", "database_bottom"],
+        top_origin_limit=3,
+        bottom_origin_limit=6,
+        wildcard_limit=3,
+    )
+    assert len(out) == 1
+    assert out.iloc[0]["source"] == "brenda"
+
+
+def test_merge_kcats_unknown_source_dropped_with_warning(caplog):
+    """A source not listed in source_priority is dropped and warned about."""
+    okp = _okp_df([
+        _okp_row("r1", 7.0, "BRENDA"),
+        _okp_row("r2", 50.0, "CataPro"),
+    ])
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        out = merge_kcats(okp, source_priority=["database_exact"])
+    assert list(out["rxn_id"]) == ["r1"]
+    assert "catapro" in caplog.text
+
+
+def test_merge_kcats_preserves_input_order():
+    okp = _okp_df([
+        _okp_row("r2", 50.0, "CataPro"),
+        _okp_row("r1", 7.0, "BRENDA"),
+    ])
+    out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
+    # Row order follows the input list (matching MATLAB mergeKcats), not
+    # the tier priority: CataPro was first in, so it stays first.
+    assert list(out["source"]) == ["CataPro", "BRENDA"]
+
+
+def test_merge_kcats_drops_nonpositive_kcat():
+    """An unmatched fuzzy row (kcat 0, NA metadata) is dropped, so a
+    DLKcat row for the same reaction wins -- mirroring the legacy
+    behaviour through the general entry point."""
+    out = merge_kcats(
+        _fuzzy_df([_fuzzy_row("r1", 0.0, wildcard_level=pd.NA, origin=pd.NA)]),
+        _dlkcat_df([_dlkcat_row("r1", 100.0)]),
+        source_priority=["database_top", "dlkcat", "database_bottom"],
+    )
+    assert len(out) == 1
+    assert out.iloc[0]["source"] == "DLKcat"

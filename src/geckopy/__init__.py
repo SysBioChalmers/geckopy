@@ -77,7 +77,8 @@ from geckopy.gather_kcats import (
     fetch_open_kinetics_predictor,
     fuzzy_kcat_matching,
     get_standard_kcat,  # deprecated; alias of assign_standard_kcat
-    merge_dlkcat_and_fuzzy_kcats,
+    merge_dlkcat_and_fuzzy_kcats,  # deprecated; alias of merge_kcats
+    merge_kcats,
     read_dlkcat_output,
     remove_standard_kcat,
     run_dlkcat,
@@ -191,7 +192,8 @@ __all__ = [
     "assign_standard_kcat",
     "fetch_open_kinetics_predictor",
     "fuzzy_kcat_matching",
-    "merge_dlkcat_and_fuzzy_kcats",
+    "merge_dlkcat_and_fuzzy_kcats",  # deprecated; alias of merge_kcats
+    "merge_kcats",
     "read_dlkcat_output",
     "remove_standard_kcat",
     "run_dlkcat",

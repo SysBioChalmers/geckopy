@@ -5,10 +5,12 @@ src/geckomat/gather_kcats/selectKcatValue.m.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Union
+from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
+
+from .merge_kcats import normalize_source
 
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
@@ -16,6 +18,33 @@ if TYPE_CHECKING:
 
 _CRITERIA = ("max", "min", "median", "mean")
 _OverwriteMode = Union[bool, Literal["if_higher"]]
+
+
+def format_kcat_source(
+    source: object,
+    wildcard_level: object = None,
+    origin: object = None,
+) -> str:
+    """Build the provenance string written to ``model.ec.source``.
+
+    The result is lowercase ``snake_case``: the first token is the
+    source (``brenda``, ``sabio_rk``, ``catapro``, ``dlkcat``, ...), and
+    for a *fuzzy* BRENDA match the bracketed detail records how the
+    value was obtained -- its wildcard level and origin, e.g.
+    ``"brenda (wc=0, origin=1)"``. Rows without fuzzy metadata (an exact
+    OKP database hit or a prediction) render as the bare token, so the
+    bracket's presence and the wildcard/origin numbers give downstream
+    consumers (notably Bayesian sensitivity tuning) a quick read on how
+    uncertain the kcat is.
+    """
+    token = normalize_source(source)
+    wc_ok = wildcard_level is not None and pd.notna(wildcard_level)
+    origin_ok = origin is not None and pd.notna(origin)
+    if wc_ok and origin_ok:
+        return f"{token} (wc={int(wildcard_level)}, origin={int(origin)})"
+    if wc_ok:
+        return f"{token} (wc={int(wildcard_level)})"
+    return token
 
 
 def apply_kcat_list(
@@ -34,8 +63,18 @@ def apply_kcat_list(
     aggregate the candidate kcats per ``criteria`` (``"max"`` is the
     default and most common) and write the result into
     ``model.ec.kcat`` at the matching ``model.ec.rxns`` position.
-    The contributing entry's ``source`` is recorded in
-    ``model.ec.source``.
+    The contributing entry's provenance is recorded in
+    ``model.ec.source`` via :func:`format_kcat_source`: a lowercase
+    string whose first token is the source and whose bracketed detail,
+    for a fuzzy BRENDA match, carries the wildcard level and origin
+    (e.g. ``"brenda (wc=0, origin=1)"``). If the list has no
+    ``wildcard_level`` / ``origin`` columns the source is the bare
+    token.
+
+    MATLAB-COMPAT: GECKO MATLAB stores the raw ``kcatSource`` string in
+    ``model.ec.source``. geckopy lowercases it and appends the fuzzy
+    wildcard/origin detail, giving Bayesian sensitivity tuning a direct
+    read on per-kcat uncertainty. (Parity change to mirror in MATLAB.)
 
     Rows with ``kcat == 0`` mark "no match" and are dropped before
     aggregation, matching MATLAB.
@@ -120,23 +159,36 @@ def apply_kcat_list(
         )
 
     rxn_to_idx = {rid: i for i, rid in enumerate(model.ec.rxns)}
+    n_group = len(nonzero)
+    wcs_all = (
+        nonzero["wildcard_level"].values
+        if "wildcard_level" in nonzero.columns
+        else [None] * n_group
+    )
+    origins_all = (
+        nonzero["origin"].values
+        if "origin" in nonzero.columns
+        else [None] * n_group
+    )
+    nonzero = nonzero.assign(_wc=wcs_all, _origin=origins_all)
 
     selected: dict[str, tuple[float, str]] = {}
     for rxn_id, group in nonzero.groupby("rxn_id", sort=False):
         kcats = group["kcat"].values.astype(float)
         sources = group["source"].astype(str).values
+        wcs = group["_wc"].values
+        origins = group["_origin"].values
         if criteria == "max":
             j = int(np.argmax(kcats))
-            kcat_val, source_val = float(kcats[j]), str(sources[j])
         elif criteria == "min":
             j = int(np.argmin(kcats))
-            kcat_val, source_val = float(kcats[j]), str(sources[j])
         elif criteria == "median":
-            kcat_val = float(np.median(kcats))
-            source_val = str(sources[0])
+            kcat_val, j = float(np.median(kcats)), 0
         else:  # "mean"
-            kcat_val = float(np.mean(kcats))
-            source_val = str(sources[0])
+            kcat_val, j = float(np.mean(kcats)), 0
+        if criteria in ("max", "min"):
+            kcat_val = float(kcats[j])
+        source_val = format_kcat_source(sources[j], wcs[j], origins[j])
         selected[str(rxn_id)] = (kcat_val, source_val)
 
     updated: list[str] = []
