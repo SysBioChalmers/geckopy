@@ -16,6 +16,7 @@ that operate on top.
 | `geckopy.utilities.add_new_rxns_to_ec` (internal `_gpr_to_dnf`) | `raven_python.manipulation.expand._gpr_to_dnf` |
 | `geckopy.utilities.save_ec_model` | `raven_python.io.write_yaml_model` |
 | `geckopy.utilities.load_ec_model` | `raven_python.io.read_yaml_model` |
+| `geckopy.utilities.ec_fseof` | `raven_python.analysis.fseof` (ec-specific post-filter: drops `usage_prot_*` from the scan + targets; adds adapter-aware `bio_rxn` resolution and optional carbon-source consistency check) |
 
 This mirrors MATLAB GECKO + RAVEN: `model.ec` is a RAVEN-owned struct,
 and `readYAMLmodel.m` / `writeYAMLmodel.m` populate / serialise it
@@ -47,9 +48,11 @@ raven-python / MATLAB RAVEN / MATLAB GECKO load in geckopy as full
 
 ## Planned future migrations
 
-| geckopy module / API | candidate raven-python module | why deferred |
-|---|---|---|
-| `geckopy.utilities.ec_fseof` | `raven_python.analysis.fseof` (base FSEOF) | raven-python's `fseof` is a redesign: regression-based target selection (vs strict monotonicity), pFBA per step (vs FBA), correlation threshold (vs top-25 %-by-slope). geckopy's `ec_fseof` mirrors GECKO MATLAB's `ecFSEOF.m` exactly. Migrating means either changing geckopy's documented behaviour or duplicating raven-python's primitives — both bigger than a re-export. Tracked for a post-alpha PR. |
+No outstanding migrations at the moment; the surface gap was closed by
+the YAML / `EcData` / FSEOF delegations above. Candidates for the next
+round (BRENDA, KEGG REST, phyl-dist, the protein-pool machinery) are
+unlikely to land in raven-python — they're GECKO-specific. Genuine new
+overlaps will be added back to this table as raven-python grows.
 
 ## What geckopy keeps in-tree (not raven-python territory)
 

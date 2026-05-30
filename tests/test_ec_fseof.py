@@ -1,19 +1,21 @@
-"""Tests for ec_fseof."""
+"""Tests for ec_fseof (thin wrapper around raven_python.analysis.fseof)."""
 from pathlib import Path
 
 import cobra
+import logging
 import numpy as np
 import pandas as pd
 import pytest
+from raven_python.analysis.fseof import FSEOFResult
 from scipy import sparse
 
 from geckopy import EcModel, ModelAdapter
 from geckopy.ec_model.ec_data import EcData
-from geckopy.utilities import EcFseofResult, ec_fseof
+from geckopy.utilities import ec_fseof
 
 
 # --------------------------------------------------------------------------- #
-# Tiny FSEOF-able model fixture
+# Tiny FSEOF-able ec model fixture
 # --------------------------------------------------------------------------- #
 
 def _adapter(tmp_path: Path, *, bio_rxn: str = "biomass") -> ModelAdapter:
@@ -27,17 +29,19 @@ def _adapter(tmp_path: Path, *, bio_rxn: str = "biomass") -> ModelAdapter:
 
 def _build_fseof_model(adapter: ModelAdapter) -> EcModel:
     """Substrate A is split between biomass (via R_BIO) and the
-    production target (via R_PROD). Both routes consume an enzyme.
+    production target (via R_PROD). Both routes consume an enzyme,
+    drawn from a shared pool — the upper bound on the pool creates the
+    tradeoff that makes FSEOF meaningful.
 
-    EX_A: -1*A_e (uptake)
-    TR_A: A_e -> A_c
-    R_BIO: A_c + (1/100)*prot_E_BIO -> bio_met        (gpr: g_BIO)
-    R_PROD: A_c + (1/100)*prot_E_PROD -> prod_met     (gpr: g_PROD)
-    biomass: bio_met ->                                (objective)
-    EX_PROD: prod_met ->                               (production target)
-    usage_prot_E_BIO: prot_pool -> prot_E_BIO
-    usage_prot_E_PROD: prot_pool -> prot_E_PROD
-    prot_pool_exchange: -> prot_pool                   (small ub forces tradeoff)
+    EX_A:                A_e <-                    (uptake)
+    TR_A:                A_e -> A_c
+    R_BIO:    A_c + (1/100)*prot_E_BIO -> bio_met  (gpr: g_BIO)
+    R_PROD:   A_c + (1/200)*prot_E_PROD -> prod_met (gpr: g_PROD)
+    biomass:             bio_met ->                (objective)
+    EX_PROD:             prod_met ->               (production target)
+    usage_prot_E_BIO:    prot_pool -> prot_E_BIO
+    usage_prot_E_PROD:   prot_pool -> prot_E_PROD
+    prot_pool_exchange:  -> prot_pool              (small ub forces tradeoff)
     """
     model = EcModel("toy", adapter=adapter)
 
@@ -66,8 +70,6 @@ def _build_fseof_model(adapter: ModelAdapter) -> EcModel:
     R_BIO.gene_reaction_rule = "g_BIO"
 
     R_PROD = cobra.Reaction("R_PROD")
-    # R_PROD uses half as much enzyme per unit flux as R_BIO,
-    # giving them differing slopes so the top-25% filter retains R_PROD.
     R_PROD.add_metabolites({A_c: -1.0, prot_PROD: -1/200, prod_met: 1.0})
     R_PROD.lower_bound = 0.0; R_PROD.upper_bound = 1000.0
     R_PROD.gene_reaction_rule = "g_PROD"
@@ -124,131 +126,191 @@ def _build_fseof_model(adapter: ModelAdapter) -> EcModel:
 # --------------------------------------------------------------------------- #
 
 def test_no_adapter_raises(tmp_path):
+    """resolve_param fails when neither model.adapter nor bio_rxn is set."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
     model.adapter = None
     with pytest.raises(ValueError, match="adapter"):
-        ec_fseof(model, "EX_PROD", "EX_A")
+        ec_fseof(model, "EX_PROD")
 
 
-def test_n_steps_too_small_raises(tmp_path):
-    adapter = _adapter(tmp_path)
+def test_explicit_bio_rxn_overrides_adapter(tmp_path):
+    """Passing bio_rxn= explicitly bypasses the adapter lookup."""
+    adapter = _adapter(tmp_path, bio_rxn="should_not_be_used")
     model = _build_fseof_model(adapter)
-    with pytest.raises(ValueError, match="n_steps"):
-        ec_fseof(model, "EX_PROD", "EX_A", n_steps=1)
+    # adapter says bio_rxn="should_not_be_used" (non-existent); explicit
+    # arg = "biomass" should be used and the call must succeed.
+    result = ec_fseof(model, "EX_PROD", bio_rxn="biomass", n_steps=4)
+    assert isinstance(result, FSEOFResult)
 
 
 def test_no_production_headroom_raises(tmp_path):
-    """If max prod flux <= initial prod flux, raise."""
+    """raven's fseof raises when the target reaction can't carry positive flux."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    # Force initial production = max by setting EX_PROD lb high.
-    model.reactions.get_by_id("EX_PROD").lower_bound = 100.0
-    model.reactions.get_by_id("EX_PROD").upper_bound = 100.0
-    with pytest.raises(ValueError, match="headroom|infeasible"):
-        ec_fseof(model, "EX_PROD", "EX_A")
+    # Block production entirely so EX_PROD's slim-optimise is 0.
+    model.reactions.get_by_id("R_PROD").upper_bound = 0.0
+    with pytest.raises(ValueError, match="cannot carry positive flux"):
+        ec_fseof(model, "EX_PROD")
 
 
 # --------------------------------------------------------------------------- #
-# Result dataclass shape
+# Carbon-source sanity-check warning
 # --------------------------------------------------------------------------- #
 
-def test_returns_dataclass(tmp_path):
+def test_cs_rxn_warns_when_under_constrained(tmp_path, caplog):
+    """If cs_rxn's lower bound is more negative than its uptake at
+    biomass-max, emit a warning so the user can tighten it."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    assert isinstance(result, EcFseofResult)
-    assert isinstance(result.alpha, np.ndarray)
-    assert result.alpha.shape == (8,)
-    assert isinstance(result.v_matrix, pd.DataFrame)
-    assert isinstance(result.rxn_targets, pd.DataFrame)
-    assert isinstance(result.transport_targets, pd.DataFrame)
-    assert isinstance(result.gene_targets, pd.DataFrame)
+    # EX_A lb = -100 but biomass-max uptake is much smaller, so we warn.
+    with caplog.at_level(logging.WARNING, logger="geckopy.utilities.ec_fseof"):
+        ec_fseof(model, "EX_PROD", cs_rxn="EX_A", n_steps=4)
+    assert any("carbon source" in r.getMessage() for r in caplog.records)
 
 
-def test_alpha_grid_endpoints(tmp_path):
-    """alpha[0] = initial production flux at biomass-max;
-    alpha[-1] = 90% of max theoretical production."""
+def test_cs_rxn_silent_when_tightly_bounded(tmp_path, caplog):
+    """When cs_rxn lb equals (or is above) the biomass-max uptake, no warning."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=4)
-    # Initial production at biomass max = 0 (model has no incentive
-    # to produce). 90% of max = 0.9 * (some max flux).
-    assert result.alpha[0] == pytest.approx(0.0, abs=1e-9)
-    assert result.alpha[-1] > 0
+    # First find what biomass-max actually uses, then set lb to that exact value.
+    with model:
+        model.objective = "biomass"
+        sol = model.optimize()
+        uptake = float(sol.fluxes["EX_A"])
+    # uptake is negative (uptake convention); set lb equal so lb >= cs_flux.
+    model.reactions.get_by_id("EX_A").lower_bound = uptake
+    with caplog.at_level(logging.WARNING, logger="geckopy.utilities.ec_fseof"):
+        ec_fseof(model, "EX_PROD", cs_rxn="EX_A", n_steps=4)
+    assert not any("carbon source" in r.getMessage() for r in caplog.records)
 
 
-def test_v_matrix_columns_match_alpha(tmp_path):
+def test_no_cs_rxn_no_warning(tmp_path, caplog):
+    """Omitting cs_rxn skips the check entirely, even when EX_A is loose."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=4)
-    assert list(result.v_matrix.columns) == [str(a) for a in result.alpha]
-
-
-# --------------------------------------------------------------------------- #
-# Target identification
-# --------------------------------------------------------------------------- #
-
-def test_r_prod_identified_as_oe_target(tmp_path):
-    """As alpha increases, R_PROD flux must increase (it produces the
-    target). It should be tagged OE."""
-    adapter = _adapter(tmp_path)
-    model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    # R_PROD (or its associated rxn) should appear with OE action.
-    if "R_PROD" in list(result.rxn_targets["rxn_id"]):
-        row = result.rxn_targets[
-            result.rxn_targets["rxn_id"] == "R_PROD"
-        ].iloc[0]
-        assert row["action"] == "OE"
-
-
-def test_gene_targets_have_expected_columns(tmp_path):
-    adapter = _adapter(tmp_path)
-    model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    assert list(result.gene_targets.columns) == [
-        "gene_id", "gene_name", "slope", "action", "essentiality",
-    ]
-
-
-def test_rxn_targets_have_expected_columns(tmp_path):
-    adapter = _adapter(tmp_path)
-    model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    assert list(result.rxn_targets.columns) == [
-        "rxn_id", "rxn_name", "slope", "gpr", "equation", "action",
-    ]
+    with caplog.at_level(logging.WARNING, logger="geckopy.utilities.ec_fseof"):
+        ec_fseof(model, "EX_PROD", n_steps=4)
+    assert not any("carbon source" in r.getMessage() for r in caplog.records)
 
 
 # --------------------------------------------------------------------------- #
-# Sorting
+# Result shape (raven-python's FSEOFResult)
 # --------------------------------------------------------------------------- #
 
-def test_gene_targets_sorted_by_slope_descending(tmp_path):
+def test_returns_raven_fseof_result(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    if len(result.gene_targets) >= 2:
-        slopes = list(result.gene_targets["slope"])
-        assert slopes == sorted(slopes, reverse=True)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    assert isinstance(result, FSEOFResult)
+    assert isinstance(result.scan, pd.DataFrame)
+    assert isinstance(result.enforced, list)
+    assert isinstance(result.targets, pd.DataFrame)
+
+
+def test_enforced_levels_count_matches_n_steps_when_feasible(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    # raven may truncate if levels become infeasible; the toy model has
+    # headroom so all 6 should succeed.
+    assert len(result.enforced) == 6
+
+
+def test_targets_have_expected_columns(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    expected_cols = {
+        "reaction", "name", "subsystem", "gene_reaction_rule", "genes",
+        "target_type", "slope", "correlation", "initial_flux",
+        "final_flux", "score",
+    }
+    assert expected_cols.issubset(set(result.targets.columns))
 
 
 # --------------------------------------------------------------------------- #
-# usage_prot_* excluded from rxn_targets
+# Target identification (ec-specific behaviour: amplify on R_PROD)
 # --------------------------------------------------------------------------- #
 
-def test_usage_prot_rxns_excluded_from_rxn_targets(tmp_path):
+def test_r_prod_classified_as_amplify(tmp_path):
+    """As the enforced EX_PROD flux rises, R_PROD's flux rises with it;
+    raven's regression-based selection labels that ``amplify``."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    for rid in result.rxn_targets["rxn_id"]:
-        assert not rid.startswith("usage_prot_")
+    result = ec_fseof(model, "EX_PROD", n_steps=8)
+    rprod = result.targets[result.targets["reaction"] == "R_PROD"]
+    assert len(rprod) == 1, "R_PROD must be classified as a target"
+    assert rprod.iloc[0]["target_type"] == "amplify"
 
 
-def test_usage_prot_rxns_excluded_from_v_matrix(tmp_path):
+def test_r_bio_classified_as_knockdown(tmp_path):
+    """R_BIO's flux falls as biomass loses budget to the enforced
+    product flux — raven labels that ``knockdown`` (or ``knockout``
+    when the fall is to ~0)."""
     adapter = _adapter(tmp_path)
     model = _build_fseof_model(adapter)
-    result = ec_fseof(model, "EX_PROD", "EX_A", n_steps=8)
-    for rid in result.v_matrix.index:
-        assert not rid.startswith("usage_prot_")
+    result = ec_fseof(model, "EX_PROD", n_steps=8)
+    rbio = result.targets[result.targets["reaction"] == "R_BIO"]
+    assert len(rbio) == 1
+    assert rbio.iloc[0]["target_type"] in ("knockdown", "knockout")
+
+
+# --------------------------------------------------------------------------- #
+# usage_prot_* filtered out of scan + targets
+# --------------------------------------------------------------------------- #
+
+def test_usage_prot_rxns_dropped_from_scan(tmp_path):
+    """The wrapper's job: ec-specific filtering of protein-pool plumbing
+    out of raven's full per-reaction scan."""
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    for rid in result.scan.index:
+        assert not rid.startswith("usage_prot_"), (
+            f"usage_prot_* rows must be filtered from scan; saw {rid}"
+        )
+
+
+def test_usage_prot_rxns_dropped_from_targets(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    for rid in result.targets["reaction"]:
+        assert not rid.startswith("usage_prot_"), (
+            f"usage_prot_* rows must be filtered from targets; saw {rid}"
+        )
+
+
+def test_gene_targets_property_recomputes_off_filtered_targets(tmp_path):
+    """raven's FSEOFResult.gene_targets is a @property over .targets;
+    once we filter usage_prot_* from targets, the per-gene rollup
+    inherits the filter automatically."""
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    # The toy model's only genes on real reactions are g_BIO and g_PROD;
+    # usage_prot_* reactions have no GPR, so the rollup is clean.
+    assert set(result.gene_targets["gene"]).issubset({"g_BIO", "g_PROD"})
+
+
+# --------------------------------------------------------------------------- #
+# Convenience slicers (raven properties survive filtering)
+# --------------------------------------------------------------------------- #
+
+def test_amplification_slice_works(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=8)
+    amp = result.amplification
+    assert isinstance(amp, pd.DataFrame)
+    assert "R_PROD" in list(amp["reaction"])
+
+
+def test_knockout_slice_works(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=8)
+    ko = result.knockout  # raven calls this slice "knockout" but it includes knockdown
+    assert isinstance(ko, pd.DataFrame)
+    assert "R_BIO" in list(ko["reaction"])

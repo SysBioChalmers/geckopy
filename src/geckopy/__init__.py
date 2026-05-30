@@ -127,7 +127,6 @@ from geckopy.limit_proteins import (
 # utilities
 from geckopy.utilities import (
     AddNewRxnsResult,
-    EcFseofResult,
     EnzymeUsageReport,
     EnzymeUsageResult,
     MapRxnsResult,
@@ -219,7 +218,6 @@ __all__ = [
     "relax_proteomics_greedy",
     # utilities
     "AddNewRxnsResult",
-    "EcFseofResult",
     "EnzymeUsageReport",
     "EnzymeUsageResult",
     "MapRxnsResult",

@@ -8,7 +8,7 @@ from .add_new_rxns_to_ec import (
     add_new_rxns_to_ec,
 )
 from .bottlenecks import get_enzyme_bottlenecks
-from .ec_fseof import EcFseofResult, ec_fseof
+from .ec_fseof import ec_fseof
 from .ec_fva import ec_fva
 from .enzyme_usage import EnzymeUsageResult, enzyme_usage
 from .get_subset_ec_model import get_subset_ec_model
@@ -21,7 +21,6 @@ from .save_ec_model import save_ec_model
 
 __all__ = [
     "AddNewRxnsResult",
-    "EcFseofResult",
     "EnzymeUsageReport",
     "EnzymeUsageResult",
     "MapRxnsResult",

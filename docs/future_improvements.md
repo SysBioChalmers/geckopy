@@ -59,16 +59,6 @@ Pieces of geckopy that have a clear destination (upstream package
 or a different in-tree shape) but whose migration was deferred to
 keep an in-flight release on schedule.
 
-- **`ec_fseof` → `raven_python.analysis.fseof`.** raven-python's
-  base FSEOF is a redesign of RAVEN's: regression-based target
-  selection instead of strict monotonicity, pFBA per scan step
-  instead of FBA, correlation threshold instead of top-25 %-by-slope,
-  and a different result dataclass. geckopy's `ec_fseof` mirrors
-  GECKO MATLAB's `ecFSEOF.m` exactly. Migrating means either
-  changing geckopy's documented behaviour or duplicating
-  raven-python's primitives — both bigger than a re-export. See
-  `docs/raven_integration.md`.
-
 - **`brenda/parse.py` range collapse.** A BRENDA value reported as
   a range (e.g. `"0.1-2.5"`) is collapsed to its upper bound
   unconditionally in `parse_brenda_json`. After the kcat-aggregation
