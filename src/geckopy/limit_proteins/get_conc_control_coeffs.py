@@ -109,7 +109,7 @@ def _shadow_price_coeffs(
     coeffs = np.zeros(n, dtype=float)
 
     sol = model.optimize()
-    if sol.objective_value is None or np.isnan(sol.objective_value):
+    if not _solution_is_optimal(sol):
         return enz_mask, coeffs
     fluxes = sol.fluxes
 
@@ -152,9 +152,9 @@ def _finite_difference_coeffs(
     coeffs = np.zeros(n, dtype=float)
 
     initial_sol = model.optimize()
-    initial_growth = initial_sol.objective_value
-    if initial_growth is None or np.isnan(initial_growth):
+    if not _solution_is_optimal(initial_sol):
         return enz_mask, coeffs
+    initial_growth = initial_sol.objective_value
     initial_fluxes = initial_sol.fluxes
 
     cobra_rxn_ids = {r.id for r in model.reactions}
@@ -174,14 +174,32 @@ def _finite_difference_coeffs(
         with model:
             rxn.upper_bound = new_ub
             new_sol = model.optimize()
-        new_growth = new_sol.objective_value
-        if new_growth is None or np.isnan(new_growth):
+        if not _solution_is_optimal(new_sol):
             continue
+        new_growth = new_sol.objective_value
         delta_growth = new_growth - initial_growth
         if delta_growth > _GROWTH_DELTA_THRESHOLD:
             coeffs[i] = delta_growth / (new_ub - prev_ub)
 
     return enz_mask, coeffs
+
+
+def _solution_is_optimal(sol) -> bool:
+    """Guard against solver states that aren't a genuine LP optimum.
+
+    On an infeasible LP some solvers (notably glpk via optlang) gracefully
+    return a non-NaN ``objective_value`` — for our infeasibility-by-binding
+    test, glpk reports ``status='infeasible'`` with ``objective_value=1000.0``
+    (the lower-bound rhs that made it infeasible) and ``fluxes`` populated
+    from the last attempted basis. The previous ``None or isnan`` check
+    accepted that, which then caused enz_mask to be set on a non-existent
+    optimum. Requiring ``status == "optimal"`` rejects every non-optimal
+    state (infeasible, unbounded, suboptimal, ...) cleanly.
+    """
+    if sol is None or sol.status != "optimal":
+        return False
+    obj = sol.objective_value
+    return obj is not None and not np.isnan(obj)
 
 
 def _solver_supports_duals(model: "EcModel") -> bool:
