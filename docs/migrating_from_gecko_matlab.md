@@ -5,32 +5,43 @@ enzyme-constrained models, follows the same algorithms, and writes the
 same on-disk format as **GECKO 4** (MATLAB). This guide is for someone
 who knows GECKO 4 in MATLAB and wants to do the same work in Python.
 
-If you are coming from **GECKO 3**, first read
-[GECKO3_to_GECKO4.md](https://github.com/SysBioChalmers/GECKO) in the
-GECKO repository: GECKO 4 changed a few things (notably the
-forward-direction protein reactions) that geckopy also follows.
-
 The port's goal is **behavioural and on-disk fidelity**: same reactions,
-metabolites, coefficients, kcats, and YAML/SBML output. Differences come
-from being idiomatic Python and from using cobrapy instead of RAVEN.
+metabolites, coefficients, kcats, YAML output. Differences come from
+being idiomatic Python and from using cobrapy instead of RAVEN. None of
+them require you to change your model files.
+
+> **Coming from GECKO 3?** GECKO 4 introduced a handful of changes
+> (forward-direction protein reactions, several bug fixes, a reformatted
+> BRENDA snapshot, the REST-based OpenKineticsPredictor flow) that
+> geckopy also follows — see
+> [GECKO3_to_GECKO4.md](https://github.com/SysBioChalmers/GECKO/blob/main/GECKO3_to_GECKO4.md)
+> for the full list. Throughout this guide, individual functions that
+> are affected by those 3→4 changes carry a **`[3→4]`** marker; that
+> marker is geckopy's signal that the function's behaviour or schema
+> differs from what GECKO 3 did, not a Python-vs-MATLAB difference.
 
 ---
 
 ## 1. At a glance
 
-| | GECKO 4 (MATLAB) | geckopy |
-|---|---|---|
-| Model toolbox | RAVEN + COBRA Toolbox | cobrapy |
-| Model object | RAVEN struct + `ec` field | `EcModel(cobra.Model)` with an `.ec` dataclass |
-| Adapter | `ModelAdapter` classdef + `ModelAdapterManager` | `ModelAdapter` + `model_adapter.toml` (pydantic-validated) |
-| Default adapter | global `ModelAdapterManager.getDefault()` | none; pass `adapter=` or set `model.adapter` |
-| Return style | multiple outputs `[a,b,c] = f(...)` | single return; the model is mutated in place |
-| Naming | `camelCase` | `snake_case` |
-| Missing data | often a silent default | usually a raised exception |
-| HTTP (BRENDA/KEGG/UniProt/OKP) | `webread`/`webwrite` | `requests` |
+|                                 | GECKO 4 (MATLAB)                       | geckopy                                                 |
+| ------------------------------- | -------------------------------------- | ------------------------------------------------------- |
+| Model toolbox                   | RAVEN + COBRA Toolbox                  | cobrapy + raven-python                                  |
+| Model object                    | RAVEN struct + `ec` field              | `EcModel(cobra.Model)` with an `.ec` dataclass          |
+| Per-entity classes              | none — parallel cell arrays            | `cobra.{Metabolite,Reaction,Gene}` instances            |
+| Per-enzyme accessor             | indexing into `model.ec.enzymes{i}`    | `Enzyme` proxy: `model.enzymes.get_by_id("P00350")`     |
+| Adapter                         | `ModelAdapter` classdef + `ModelAdapterManager` | `ModelAdapter` + `model_adapter.toml` (pydantic-validated) |
+| Default adapter                 | global `ModelAdapterManager.getDefault()` | none; pass `adapter=` or set `model.adapter`         |
+| Return style                    | `[a,b,c] = f(...)`                     | single return; model mutated in place                   |
+| Naming                          | `camelCase`                            | `snake_case`                                            |
+| Indexing                        | 1-based                                | 0-based                                                 |
+| Missing data                    | often a silent default                 | usually a raised exception                              |
+| Tabular output                  | cell arrays / structs                  | `pandas.DataFrame`                                      |
+| HTTP (BRENDA/KEGG/UniProt/OKP)  | `webread`/`webwrite`                   | `requests`                                              |
+| On-disk format                  | RAVEN/cobrapy YAML (+ SBML)            | RAVEN/cobrapy YAML (SBML ecModel I/O dropped in `0.1.0a2`) |
 
-The two exchange ecModels directly: a model saved by either tool loads
-in the other (see §6).
+The two toolboxes exchange ecModels directly: a model saved by either
+side loads in the other (see [§7](#7-file-exchange)).
 
 ---
 
@@ -38,43 +49,96 @@ in the other (see §6).
 
 GECKO MATLAB uses a RAVEN model struct with parallel cell arrays plus a
 `model.ec` struct and side cells (`model.metSmiles`, `model.eccodes`).
+The struct itself isn't a class — everything is an array, indexed by
+position.
 
-geckopy's `EcModel` subclasses `cobra.Model` and adds one `.ec`
-attribute (an `EcData` dataclass: kcat array, enzyme list, MW array,
-sequences, and the sparse reaction–enzyme coupling matrix). Per-reaction
-and per-metabolite metadata lives where cobrapy keeps it:
+geckopy's `EcModel` **subclasses** `cobra.Model`. cobrapy is
+class-based: `cobra.Metabolite`, `cobra.Reaction`, `cobra.Gene` are
+real classes, so `model.metabolites[17]` returns a `Metabolite`
+instance (with `.id`, `.name`, `.formula`, `.annotation`, …), not a
+string.
 
-| MATLAB | geckopy |
-|---|---|
-| `model.metSmiles{i}` | `metabolite.annotation['smiles']` |
-| `model.eccodes{i}` | `reaction.annotation['ec-code']` (a `list[str]`) |
-| `model.ec.rxnEnzMat` | `model.ec.rxn_enz_mat` (scipy sparse) |
-| `model.ec.kcat`, `.mw`, `.sequence`, ... | `model.ec.kcat`, `.mw`, `.sequence`, ... |
-| grRules (strings) | cobrapy GPR objects (parsed AST) |
+For the GECKO-specific data, geckopy keeps the **parallel-arrays
+layout** rather than a cobrapy-style per-enzyme class, because the
+algorithms (`apply_kcat_constraints`, sensitivity tuning) are bulk
+vector operations on `kcat` / `mw` and the sparse coupling matrix —
+those are several orders of magnitude faster as numpy arrays than as a
+loop over N enzyme objects. The layout is in a dataclass on
+`model.ec`:
+
+```python
+model.ec.rxns          # list[str]                  parallel to ec.kcat etc.
+model.ec.kcat          # np.ndarray (per-rxn)       — 0 means "unset"
+model.ec.source        # list[str]                  per-rxn provenance tag
+model.ec.notes         # list[str]                  per-rxn free-text
+model.ec.eccodes       # list[str]                  ';' -joined per-rxn
+model.ec.enzymes       # list[str]                  per-enzyme accessions
+model.ec.genes         # list[str]                  per-enzyme gene name
+model.ec.mw            # np.ndarray                 per-enzyme; NaN == "unknown"
+model.ec.sequence      # list[str]                  per-enzyme
+model.ec.concs         # np.ndarray                 per-enzyme proteomics; NaN == "not measured"
+model.ec.rxn_enz_mat   # scipy.sparse.csr_matrix    shape (n_rxns, n_enzymes), subunit counts
+model.ec.gecko_light   # bool
+```
+
+For ergonomic per-enzyme access, geckopy adds a separate **proxy
+class** `Enzyme` reached via `model.enzymes.get_by_id("P00350")`. The
+proxy holds no state of its own; it forwards reads/writes into the
+`model.ec.*` arrays. This gives you cobrapy-style code
+(`enz.kcats["R_FOO"] = 30.0`) without paying for N real objects. See
+the per-table explanation in §5 for which entry-points read it.
+
+The `EcData` dataclass itself is owned by **raven-python**
+(`raven_python.io.EcData`); geckopy re-exports it as `geckopy.EcData`
+so existing imports keep working. Mirrors MATLAB RAVEN's split:
+`model.ec` is RAVEN-owned; GECKO is just a consumer.
+
+Other side-cells move into cobrapy's `annotation` dict:
+
+| MATLAB                                                            | geckopy                                                         |
+| ----------------------------------------------------------------- | --------------------------------------------------------------- |
+| `model.metSmiles{i}`                                              | `metabolite.annotation['smiles']`                               |
+| `model.eccodes{i}`                                                | `reaction.annotation['ec-code']` (`list[str]`)                  |
+| `model.ec.rxnEnzMat`                                              | `model.ec.rxn_enz_mat` (scipy sparse)                           |
+| `model.ec.kcat`, `.mw`, `.sequence`, `.source`, `.notes`, `.concs` | `model.ec.kcat`, `.mw`, `.sequence`, `.source`, `.notes`, `.concs` |
+| `model.grRules` (strings)                                         | cobrapy `GPR` objects (parsed AST)                              |
 
 Loaders return dataclasses / DataFrames rather than structs: e.g.
-`BrendaData`, `ProtData`, and `fuzzy_kcat_matching` returns a
-`pandas.DataFrame`.
+`BrendaData`, `ProtData`, `FluxData`, `UniprotDB`, `PhylDist`. Helpers
+that produce tables (`fuzzyKcatMatching`, `ecFVA`,
+`getReactionsFromEnzyme`, `enzymeUsage`, `reportEnzymeUsage`,
+`mapRxnsToConv`) return `pandas.DataFrame`.
 
 ---
 
 ## 3. Adapters and configuration
 
 In MATLAB you write an adapter `classdef` and register a default with
-`ModelAdapterManager`. In geckopy you create an adapter folder with a
-`model_adapter.toml`, loaded via `ModelAdapter.from_folder(path)`. The
-TOML is parsed into pydantic models (`ModelParameters` with nested
-`kegg`, `uniprot`, `okp`, `bayesian`, ...) and validated strictly, so
-config typos are caught early.
+`ModelAdapterManager.setDefault`. In geckopy you create an adapter
+folder with a `model_adapter.toml`, loaded via
+`ModelAdapter.from_folder(path)`. The TOML is parsed into pydantic
+models (`ModelParameters` with nested `kegg`, `uniprot`, `okp`,
+`bayesian`, …) and validated strictly, so config typos are caught
+early.
 
 There is **no global default adapter**. Functions read `model.adapter`
-or take an explicit `adapter=` argument. Where a MATLAB function takes a
-`modelAdapter` only to derive a path, the geckopy version takes the path
-(or pre-loaded data) directly.
+or take an explicit `adapter=` argument. Where a MATLAB function takes
+a `modelAdapter` only to derive a path, the geckopy version takes the
+path (or pre-loaded data) directly. The pattern is:
 
-**Secrets** (e.g. an OpenKineticsPredictor API key) are never stored in
-the adapter. Provide them via a function argument, an environment
-variable, or a git-ignored file in the project `data/` folder.
+```python
+adapter = ModelAdapter.from_folder("my_project")    # has params.path, params.bio_rxn, ...
+model   = make_ec_model(conv_gem, adapter)          # adapter stored as model.adapter
+# downstream functions read model.adapter implicitly:
+apply_complex_data(model)
+# ...or take an explicit override:
+apply_complex_data(model, path=Path("/custom/complex.json"))
+```
+
+**Secrets** (e.g. an OpenKineticsPredictor API key) are never stored
+in the adapter. Provide them via a function argument, an environment
+variable (`OKP_API_KEY`), or a git-ignored file in the project
+`data/` folder (`data/okpApiKey.txt`).
 
 ---
 
@@ -83,16 +147,19 @@ variable, or a git-ignored file in the project `data/` folder.
 ### Mutate in place, return one thing
 
 MATLAB functions return several outputs including a copy of the model.
-geckopy mutates the model in place and returns at most one value,
-logging what MATLAB returned as extra outputs.
+geckopy mutates the model in place and returns at most one value;
+diagnostics that MATLAB returned as extra outputs go to the logger and
+to `rxn.notes['geckopy_warning']`.
 
-| MATLAB | geckopy |
-|---|---|
-| `[model,noUniprot] = makeEcModel(...)` | `make_ec_model(...)` mutates; logs unmatched genes, annotates `rxn.notes['geckopy_warning']` |
-| `[model,rxnUpdated,notMatch] = applyCustomKcats(...)` | `apply_custom_kcats(...)` returns `None`; logs the rows |
-| `[model,...] = getStandardKcat(...)` | `assign_standard_kcat(...)` mutates; diagnostics via logging |
-| `[minFlux,maxFlux] = ecFVA(...)` | `ec_fva(...)` returns a DataFrame indexed by reaction id |
-| `[rxns,kcat,name,gpr,idx] = getReactionsFromEnzyme(...)` | `get_reactions_from_enzyme(...)` returns one DataFrame |
+| MATLAB                                                     | geckopy                                                                                 |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `[model, noUniprot] = makeEcModel(...)`                    | `make_ec_model(...)` mutates; logs unmatched genes, annotates `rxn.notes['geckopy_warning']` |
+| `[model, rxnUpdated, notMatch] = applyCustomKcats(...)`    | `apply_custom_kcats(...)` returns `None`; logs the rows                                  |
+| `[model, ...] = getStandardKcat(...)`                      | `assign_standard_kcat(...)` mutates; diagnostics via logging                             |
+| `[minFlux, maxFlux] = ecFVA(...)`                          | `ec_fva(...)` returns a `DataFrame` indexed by reaction id                               |
+| `[rxns, kcat, name, gpr, idx] = getReactionsFromEnzyme(...)` | `get_reactions_from_enzyme(...)` returns one `DataFrame`                               |
+| `[model, kcatList] = sensitivityTuning(...)`               | `sensitivity_tuning(...)` mutates; returns a `TunedKcatsResult` dataclass               |
+| `[mappedFlux, enzUsageFlux, usageEnz] = mapRxnsToConv(...)` | `map_rxns_to_conv(...)` returns one `MapRxnsResult` dataclass                          |
 
 ### Errors instead of silent defaults
 
@@ -103,98 +170,305 @@ unknown protein id raises `ValueError` instead of returning empty.
 
 ### Names and indexing
 
-`camelCase` → `snake_case`. A couple of deliberate renames, e.g.
-`getKcatAcrossIsozymes` → `fill_kcats_from_isozymes` (kept as a
-deprecated alias). MATLAB is 1-indexed; geckopy is 0-indexed, which
-shows up in arguments like `data_col` (default `0`) and `condition`.
+`camelCase` → `snake_case` throughout. **Most renames are mechanical**
+(`makeEcModel → make_ec_model`); a handful are intentional re-naming
+for clarity (kept reachable as deprecated aliases — `from geckopy
+import old_name` still works for one minor cycle):
+
+| MATLAB                  | geckopy (canonical)            | Deprecated alias              |
+| ----------------------- | ------------------------------ | ----------------------------- |
+| `selectKcatValue`       | `apply_kcat_list`              | `select_kcat_value`           |
+| `getKcatAcrossIsozymes` | `fill_kcats_from_isozymes`     | `get_kcat_across_isozymes`    |
+| `getStandardKcat`       | `assign_standard_kcat`         | `get_standard_kcat`           |
+| `sigmaFitter`           | `fit_sigma`                    | `sigma_fitter`                |
+| `getECfromDatabase`     | `fill_eccodes_from_database`   | `get_ec_from_database`        |
+| `getECfromGEM`          | `fill_eccodes_from_gem`        | `get_ec_from_gem`             |
+| `constrainFluxData`     | `apply_flux_data_constraints`  | `constrain_flux_data`         |
+| `mergeDLKcatAndFuzzyKcats` | `merge_kcats` (generalised) | `merge_dlkcat_and_fuzzy_kcats` |
+
+MATLAB is 1-indexed; geckopy is 0-indexed, which shows up in arguments
+like `data_col` (default `0`) and `condition` (in `apply_flux_data_constraints`).
 
 ### gecko-light
 
-Not implemented yet; light-model code paths raise `NotImplementedError`.
-See [gecko_light_status.md](gecko_light_status.md).
+Implemented end-to-end. `make_ec_model(model, adapter, gecko_light=True)`
+produces a working light ecModel; `apply_kcat_constraints`,
+`set_kcat_for_reactions`, and the `Enzyme` proxy's read paths all
+handle the light layout. The per-enzyme prot-pool analyses (proteomics
+integration via `constrain_enz_concs`, `flexibilize_enz_concs`,
+`pfba_enzymes`) and the isozyme-aggregating helpers
+(`fill_kcats_from_isozymes`) raise `NotImplementedError` on a light
+model with a clear message — they have no meaning in the light layout
+by design. See [gecko_light_status.md](gecko_light_status.md) for the
+full availability table and a worked example.
 
 ---
 
-## 5. A minimal workflow comparison
+## 5. Function correspondence
 
-MATLAB (sketch):
+Each row maps a MATLAB function to its geckopy equivalent. The
+**Notes** column flags
+
+- **`[3→4]`** — function affected by GECKO 3→4 changes (direction
+  flip, bug fix, schema change). Behaviour matches GECKO 4, not
+  GECKO 3.
+- **`[Py]`** — geckopy-specific divergence from MATLAB GECKO 4 (a
+  port choice, not something flowing back to MATLAB).
+- **(new)** — geckopy entry-point with no direct MATLAB counterpart.
+
+### 5.1 Build / edit the ecModel (`src/geckomat/change_model`)
+
+| MATLAB                       | geckopy                       | Notes                                                                                                                                                                          |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `makeEcModel`                | `make_ec_model`               | **`[3→4]`** ec.genes/enzymes/mw/sequence are sorted alphabetically for stable order; KEGG fallback for unmatched genes is opt-in via `kegg_db=`. **`[Py]`** Single return; unmatched genes are logged and annotated on `rxn.notes['geckopy_warning']` instead of being returned. |
+| `applyComplexData`           | `apply_complex_data`          | —                                                                                                                                                                              |
+| `applyCustomKcats`           | `apply_custom_kcats`          | **`[Py]`** Mutates; diagnostics via logging. Takes a pre-loaded DataFrame, or reads `<adapter.path>/data/customKcats.tsv` by default.                                          |
+| `applyKcatConstraints`       | `apply_kcat_constraints`      | **`[3→4]`** Writes coefficients with the forward-direction `usage_prot_*` / `prot_pool_exchange` convention.                                                                  |
+| `findMetSmiles`              | `find_met_smiles`             | **`[Py]`** Asynchronous PubChem cache via `requests`; uses a TSV cache (`data/smilesDB.tsv`) so re-runs are offline.                                                          |
+| `getComplexData`             | `get_complex_data`            | —                                                                                                                                                                              |
+| `getKcatAcrossIsozymes`      | `fill_kcats_from_isozymes`    | **`[Py]`** Renamed; `get_kcat_across_isozymes` kept as deprecated alias. Aggregation strategy (`max` / `median` / `mean`) is adapter-configurable via `kcat_aggregate_isozymes`. |
+| `getReactionsFromEnzyme`     | `get_reactions_from_enzyme`   | **`[Py]`** Returns one `DataFrame` instead of five parallel cells.                                                                                                            |
+| `setKcatForReactions`        | `set_kcat_for_reactions`      | **`[Py]`** Recognises both `_EXP_<N>` (full) and `###_` (light) suffixes; understands base names that broadcast across isozymes.                                              |
+| `setProtPoolSize`            | `set_prot_pool_size`          | **`[3→4]`** Sets the **upper** bound of `prot_pool_exchange` (forward direction).                                                                                              |
+
+### 5.2 Gather kcats (`src/geckomat/gather_kcats`)
+
+| MATLAB                              | geckopy                              | Notes                                                                                                                                                                                                                            |
+| ----------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fuzzyKcatMatching`                 | `fuzzy_kcat_matching`                | **`[3→4]`** Wildcard escalation no longer escalates past the fully-wildcarded form. **`[Py]`** Returns a `DataFrame` (rows: ec / substrate / organism / kcat / source / wildcard\_level …) instead of a struct; takes pre-loaded `BrendaData` + `PhylDist`. |
+| `getStandardKcat`                   | `assign_standard_kcat`               | **`[3→4]`** Applies per-subsystem mean kcat (GECKO 3 fell back to the global standard kcat unless every subsystem matched). **`[Py]`** Renamed; `get_standard_kcat` kept as deprecated alias.                                  |
+| `mergeDLKcatAndFuzzyKcats`          | `merge_kcats`                        | **`[Py]`** Generalised to accept any combination of BRENDA / DLKcat / OpenKineticsPredictor / manual rows; records per-row provenance. `merge_dlkcat_and_fuzzy_kcats` kept as deprecated alias.                                |
+| `readDLKcatOutput`                  | `read_dlkcat_output`                 | **`[3→4]`** Case-insensitive substrate-name matching.                                                                                                                                                                          |
+| `removeStandardKcat`                | `remove_standard_kcat`               | —                                                                                                                                                                                                                                |
+| `runDLKcat`                         | `run_dlkcat`                         | —                                                                                                                                                                                                                                |
+| `selectKcatValue`                   | `apply_kcat_list`                    | **`[Py]`** Renamed; `select_kcat_value` kept as deprecated alias.                                                                                                                                                              |
+| `writeDLKcatInput`                  | `write_dlkcat_input`                 | **`[3→4]`** Bounds-safe when `ec_rxns` is a subset.                                                                                                                                                                            |
+| `submitOpenKineticsPredictor`       | `submit_open_kinetics_predictor`     | **`[3→4]`** New REST-based submit (replaced `writeOpenKineticsPredictorInput`). API key via argument / `OKP_API_KEY` env / `data/okpApiKey.txt`.                                                                                |
+| `fetchOpenKineticsPredictor`        | `fetch_open_kinetics_predictor`      | **`[3→4]`** New REST-based fetch (replaced `readOpenKineticsPredictorOutput`); per-row `kcatSource` reports actual provenance (CataPro / BRENDA / Sabio-RK).                                                                  |
+| `writeOpenKineticsPredictorInput`   | *(removed)*                          | **`[3→4]`** Replaced by `submit_open_kinetics_predictor`.                                                                                                                                                                      |
+| `readOpenKineticsPredictorOutput`   | *(removed)*                          | **`[3→4]`** Replaced by `fetch_open_kinetics_predictor`.                                                                                                                                                                       |
+
+### 5.3 Get enzyme data (`src/geckomat/get_enzyme_data`)
+
+| MATLAB                | geckopy                                                                | Notes                                                                                                                                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `calculateMW`         | `calculate_mw`                                                         | **`[Py]`** Stand-alone function (takes a sequence string, returns the MW); no model argument needed.                                                                                                                                       |
+| `copyECtoGEM`         | `copy_ec_to_gem`                                                       | —                                                                                                                                                                                                                                          |
+| `downloadKEGG`        | `geckopy.databases.kegg_download.download_kegg`                        | **`[3→4]`** Standalone helper (was split out in 4). **`[Py]`** Per-gene REST cache; `geckopy brenda-refresh` and friends drive it lazily.                                                                                                  |
+| `downloadUniProt`     | `geckopy.databases.uniprot_download.download_uniprot`                  | **`[3→4]`** Standalone helper (was split out in 4).                                                                                                                                                                                        |
+| `findECInDB`          | `find_ec_in_db`                                                        | **`[3→4]`** No duplicate EC codes emitted.                                                                                                                                                                                                |
+| `getECfromDatabase`   | `fill_eccodes_from_database`                                           | **`[3→4]`** Can consult KEGG when UniProt's EC field is empty or ends with `-` (opt-in via `kegg_db=`). **`[Py]`** Renamed; `get_ec_from_database` kept as deprecated alias.                                                              |
+| `getECfromGEM`        | `fill_eccodes_from_gem`                                                | **`[3→4]`** Actually assigns EC codes (the GECKO 3 validation regex silently discarded every EC string). **`[Py]`** Renamed; `get_ec_from_gem` kept as deprecated alias.                                                                  |
+| `getECstring`         | *(internal helper inside `fill_eccodes_*`)*                            | Not exposed as a public entry-point — folded into the EC-fill helpers.                                                                                                                                                                     |
+| `loadBRENDAdata`      | `load_brenda_data`                                                     | **`[3→4]`** Reads the new TSV schema (`kcat.tsv` / `sa.tsv` / `mw.tsv`, bare EC codes, plain organism names, `references` column). **`[Py]`** Ships **both** `max` and `median` per (ec, substrate, organism) triple — see [kcat_aggregation.md](kcat_aggregation.md). Returns a `BrendaData` dataclass. |
+| `loadDatabases`       | *(implicit)*                                                           | **`[Py]`** No combined-load entry-point; users call `load_brenda_data`, `load_uniprot_tsv`, etc. directly.                                                                                                                                |
+
+### 5.4 Kcat sensitivity analysis (`src/geckomat/kcat_sensitivity_analysis`)
+
+| MATLAB                                | geckopy                                                            | Notes                                                                                                                                                                                                                            |
+| ------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sensitivityTuning`                   | `sensitivity_tuning`                                               | **`[Py]`** Returns a `TunedKcatsResult` dataclass (kcat changes table + final flux).                                                                                                                                              |
+| `sigmaFitter`                         | `fit_sigma`                                                        | **`[3→4]`** Returns the model fitted to the **optimal** sigma (GECKO 3 returned the last trial value, sigma = 1.0). **`[Py]`** Renamed; `sigma_fitter` kept as deprecated alias. Returns a `SigmaFitterResult`.                  |
+| `findMaxValue`                        | `find_max_value`                                                   | **`[3→4]`** Wildcard EC branch matches real codes.                                                                                                                                                                                |
+| `truncateValues`                      | `truncate_values`                                                  | —                                                                                                                                                                                                                                |
+| `bayesianSensitivityTuning` + helpers | *(not ported)*                                                     | Planned. See `docs/internal/bayesian_tuning_plan.md` for the design notes.                                                                                                                                                       |
+
+### 5.5 Limit proteins (`src/geckomat/limit_proteins`)
+
+| MATLAB                | geckopy                              | Notes                                                                                                                                                                                                                                                                                                          |
+| --------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calculateFfactor`    | `calculate_f_factor`                 | **`[Py]`** Raises `FileNotFoundError` when no proteome data is provided (MATLAB silently returns `0.5`).                                                                                                                                                                                                       |
+| `constrainEnzConcs`   | `constrain_enz_concs`                | **`[3→4]`** Sets the **upper** bound of `usage_prot_*` (forward direction). **`[Py]`** Raises `NotImplementedError` on gecko-light (no per-enzyme constraint to set).                                                                                                                                          |
+| `constrainFluxData`   | `apply_flux_data_constraints`        | **`[Py]`** Renamed; `constrain_flux_data` kept as deprecated alias. Takes pre-loaded `FluxData`. 0-indexed `condition` (default `0`, MATLAB `1`).                                                                                                                                                              |
+| `fillEnzConcs`        | `fill_enz_concs`                     | —                                                                                                                                                                                                                                                                                                              |
+| `flexibilizeEnzConcs` | `flexibilize_enz_concs`              | **`[Py]`** Returns a `FlexEnzResult` dataclass. Raises `NotImplementedError` on gecko-light.                                                                                                                                                                                                                  |
+| `getConcControlCoeffs` | `get_conc_control_coeffs`            | **`[3→4]`** Probe direction reads the forward `usage_prot_*` upper bound. **`[Py]`** Default path uses the prot-met shadow price (one LP solve, *n* times fewer LPs than the finite-difference probe); falls back to finite-difference when the solver doesn't expose LP duals. Gates on `sol.status == "optimal"`. |
+| `updateProtPool`      | *(not ported)*                       | Obsolete since GECKO 3.2.0. Use `set_prot_pool_size` instead.                                                                                                                                                                                                                                                  |
+| —                     | `relax_proteomics_greedy` *(new)*    | **`[Py]`** Alternative to `flexibilize_enz_concs`: relaxes a fixed top-*k* of measured concentrations in a greedy loop until a target growth is reached. Returns a `GreedyRelaxResult`.                                                                                                                       |
+
+### 5.6 Utilities (`src/geckomat/utilities`)
+
+| MATLAB                | geckopy                                | Notes                                                                                                                                                                                                                                                                                                                                                          |
+| --------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `addNewRxnsToEC`      | `add_new_rxns_to_ec`                   | **`[Py]`** Returns an `AddNewRxnsResult` dataclass.                                                                                                                                                                                                                                                                                                            |
+| `ecFSEOF`             | `ec_fseof`                             | **`[Py]`** Thin wrapper over `raven_python.analysis.fseof`. Selection method is regression-based (`|correlation| ≥ threshold` + `|slope| ≥ eps`) with pFBA per step, replacing MATLAB's strict-monotonicity + top-25 %-by-slope filter. Result type is raven's `FSEOFResult` (replaces `EcFseofResult`). Action labels are `amplify` / `knockdown` / `knockout` (replaces `OE` / `KD` / `KO`). The per-gene `essentiality` column is dropped — use `cobra.flux_analysis.single_gene_deletion`. |
+| `ecFVA`               | `ec_fva`                               | **`[Py]`** Returns a `DataFrame` indexed by reaction id with `minimum` / `maximum` columns; can run in parallel (`n_jobs=`).                                                                                                                                                                                                                                  |
+| `enzymeUsage`         | `enzyme_usage`                         | **`[3→4]`** Usage flux read from positive `usage_prot_*` flux. **`[Py]`** Returns an `EnzymeUsageResult` dataclass (`per_enzyme` DataFrame + summary scalars).                                                                                                                                                                                                |
+| `findGECKOroot`       | *(not needed)*                         | Python: `pathlib.Path(__file__)` works.                                                                                                                                                                                                                                                                                                                        |
+| `getSubsetEcModel`    | `get_subset_ec_model`                  | **`[Py]`** Returns a new `EcModel`; the input is not mutated.                                                                                                                                                                                                                                                                                                  |
+| `loadConventionalGEM` | `load_conventional_gem`                | —                                                                                                                                                                                                                                                                                                                                                              |
+| `loadEcModel`         | `load_ec_model`                        | **`[3→4]`** Auto-flips legacy reverse-direction `usage_prot_*` / `prot_pool_exchange` to the forward convention (warns once). Reads the new cobrapy-style YAML. **`[Py]`** Thin wrapper over `raven_python.io.read_yaml_model` (which owns the YAML schema + typed `EcData`); SBML ecModel I/O dropped in `0.1.0a2`. |
+| `loadFluxData`        | `load_flux_data`                       | **`[Py]`** Returns a `FluxData` dataclass.                                                                                                                                                                                                                                                                                                                    |
+| `loadProtData`        | `load_prot_data`                       | **`[Py]`** Returns a `ProtData` dataclass.                                                                                                                                                                                                                                                                                                                    |
+| `mapRxnsToConv`       | `map_rxns_to_conv`                     | **`[Py]`** Returns a `MapRxnsResult` dataclass (was three parallel outputs).                                                                                                                                                                                                                                                                                  |
+| `plotEcFVA`           | *(not ported)*                         | Use matplotlib / seaborn against the `ec_fva` DataFrame directly.                                                                                                                                                                                                                                                                                              |
+| `reportEnzymeUsage`   | `report_enzyme_usage`                  | **`[3→4]`** Reads positive `usage_prot_*` flux. **`[Py]`** Returns an `EnzymeUsageReport` dataclass.                                                                                                                                                                                                                                                          |
+| `saveEcModel`         | `save_ec_model`                        | **`[3→4]`** Emits the new cobrapy-style YAML; `usage_prot_*` written in forward convention. **`[Py]`** Thin wrapper over `raven_python.io.write_yaml_model`; YAML only (`.yml` / `.yaml`), SBML ecModel I/O dropped in `0.1.0a2`. Injects a `metaData` provenance block. |
+| `startGECKOproject`   | `geckopy init` *(CLI)*                 | **`[Py]`** Project skeleton generator runs from the `geckopy` CLI (`geckopy init my_project`).                                                                                                                                                                                                                                                              |
+| `updateGECKOdoc`      | *(not applicable)*                     | Python docs are docstring-driven; no MATLAB Toolbox metadata to regenerate.                                                                                                                                                                                                                                                                                    |
+| —                     | `pfba_enzymes` *(new)*                 | **`[Py]`** pFBA variant that minimises total `usage_prot_*` flux instead of all fluxes. Raises `NotImplementedError` on gecko-light.                                                                                                                                                                                                                          |
+| —                     | `get_enzyme_bottlenecks` *(new)*       | **`[Py]`** Per-enzyme dual-based bottleneck ranker; returns a DataFrame.                                                                                                                                                                                                                                                                                       |
+
+### 5.7 Model adapter (`src/geckomat/model_adapter`)
+
+| MATLAB                  | geckopy                                                    | Notes                                                                                                                                                          |
+| ----------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ModelAdapter` classdef | `ModelAdapter` class + `model_adapter.toml`                | **`[Py]`** Config is in TOML, validated against a pydantic `ModelParameters` schema. Override via subclass when you need custom logic (rarely).               |
+| `ModelAdapterManager`   | *(no global default)*                                      | **`[Py]`** Removed by design — pass `adapter=` or set `model.adapter` so adapter use is explicit.                                                              |
+| `adapterTemplate.m`     | `geckopy init` *(CLI)* / `templates/model_adapter.toml`   | **`[Py]`** `geckopy init <name>` scaffolds a project folder with a starter TOML, `data/`, and `models/`.                                                       |
+
+---
+
+## 6. A minimal workflow comparison
+
+**MATLAB** (sketch):
 
 ```matlab
-adapter = ModelAdapterManager.setDefault('MyAdapter.m');
-model   = makeEcModel(loadConventionalGEM(), false, adapter);
-kcatList = fuzzyKcatMatching(model);
-model   = selectKcatValue(model, kcatList);
-model   = applyKcatConstraints(model);
+adapter   = ModelAdapterManager.setDefault('MyAdapter.m');
+model     = makeEcModel(loadConventionalGEM(), false, adapter);
+kcatList  = fuzzyKcatMatching(model);
+model     = selectKcatValue(model, kcatList);
+model     = applyKcatConstraints(model);
+model     = setProtPoolSize(model);
 saveEcModel(model, 'ecModel.yml');
 ```
 
-geckopy (sketch):
+**geckopy**:
 
 ```python
-import geckopy
-from geckopy import (ModelAdapter, make_ec_model, fuzzy_kcat_matching,
-                     apply_kcat_list, apply_kcat_constraints, save_ec_model,
-                     load_brenda_data, load_phyl_dist)
+from geckopy import (
+    ModelAdapter, make_ec_model, load_conventional_gem,
+    load_brenda_data, load_phyl_dist,
+    fuzzy_kcat_matching, apply_kcat_list, apply_kcat_constraints,
+    set_prot_pool_size, save_ec_model,
+)
 
-adapter = ModelAdapter.from_folder("my_model")
-model   = make_ec_model(conv_gem, adapter)         # mutates / returns EcModel
-brenda  = load_brenda_data(...)
-kcats   = fuzzy_kcat_matching(model, brenda, phyl_dist)   # returns a DataFrame
-apply_kcat_list(model, kcats)                       # mutates in place
+adapter   = ModelAdapter.from_folder("my_model")
+model     = make_ec_model(load_conventional_gem(adapter), adapter)
+brenda    = load_brenda_data(adapter.get_brenda_db_folder())
+phyl_dist = load_phyl_dist(adapter.params.path / "data" / "PhylDist.mat")
+kcats     = fuzzy_kcat_matching(model, brenda, phyl_dist)   # returns a DataFrame
+apply_kcat_list(model, kcats)                               # mutates in place
 apply_kcat_constraints(model)
+set_prot_pool_size(model)
 save_ec_model(model, "ecModel.yml", adapter=adapter)
 ```
 
-Note the geckopy steps take pre-loaded data (BRENDA, phylogenetic
-distance) explicitly rather than re-loading inside each function.
+Three patterns to notice:
+
+1. **Loaders are explicit.** Where MATLAB's `fuzzyKcatMatching`
+   re-loads BRENDA + phyl-dist internally on every call, geckopy
+   passes the pre-loaded `BrendaData` + `PhylDist` so you control
+   when (and from where) they load.
+2. **`apply_kcat_list` mutates.** No reassignment to `model`.
+3. **`save_ec_model` is YAML-only.** SBML ecModel I/O was dropped in
+   `0.1.0a2`; conventional starting GEMs still load from SBML via
+   `cobra.io.read_sbml_model` (called inside `load_conventional_gem`).
+
+The full tutorial (yeast-GEM, end-to-end, ~600 lines including kcat
+curation + proteomics + sensitivity tuning) lives at
+[`tutorials/full_ecModel/protocol.py`](../tutorials/full_ecModel/protocol.py).
+A scale-down for the light layout (also a working end-to-end script,
+~170 lines) is at [`tutorials/light_ecModel/protocol.py`](../tutorials/light_ecModel/protocol.py).
 
 ---
 
-## 6. File exchange
+## 7. File exchange
 
 ecModels move between the two tools without conversion:
 
-- **Saving** in either tool writes the same canonical, cobrapy-style
-  YAML, so a geckopy `.yml` loads in GECKO 4 and vice versa.
-- **Loading** is backward compatible: geckopy reads older MATLAB
-  ecModels too, and it auto-flips legacy reverse-direction protein
-  reactions on load — exactly as GECKO 4's `loadEcModel` does. So a
-  GECKO 3 model opened in geckopy and saved comes out as a current
-  model.
+- **Writing.** Both tools emit the same cobrapy-style YAML
+  (cobra-shaped portion as `!!omap`; the GECKO ec sections —
+  `ec-rxns`, `ec-enzymes`, `gecko_light` — as top-level keys cobrapy
+  silently ignores). A geckopy `.yml` loads in GECKO 4 and vice versa.
+- **Reading.** Backward-compatible: geckopy reads GECKO 3 / older
+  RAVEN ecModels too, and auto-flips legacy reverse-direction protein
+  reactions on load (warns once). Save the loaded model and it comes
+  out as a current model.
 
-The BRENDA database files use a refreshed schema. geckopy ships
-`kcat.tsv` / `sa.tsv` / `mw.tsv` with both max and median rows per
-(ec, substrate, organism) triple, while MATLAB GECKO still ships
-only max in `max_KCAT.txt` etc. See
-[kcat_aggregation.md](kcat_aggregation.md) for the rationale.
+The YAML schema and the legacy normalisations are owned by raven-python
+(`raven_python.io.ec_data.EcData`,
+`raven_python.io.yaml.{read,write}_yaml_model`); geckopy's
+`save_ec_model` / `load_ec_model` are thin wrappers that add geckopy's
+application-level concerns (adapter-aware path resolution,
+empty-ecModel guard, provenance injection). See
+[raven_integration.md](raven_integration.md) for the split, and
+[yaml_format.md](yaml_format.md) for the schema reference.
+
+**BRENDA data files.** **`[3→4]`** GECKO 4 / geckopy ship
+`kcat.tsv` / `sa.tsv` / `mw.tsv` (refreshed from the BRENDA bulk
+JSON; bare EC numbers, plain organism names, `#` release header,
+`references` column). GECKO 3's `max_KCAT.txt` etc. are no longer
+read. **`[Py]`** geckopy additionally ships both **max** and
+**median** rows per (ec, substrate, organism) triple in one file,
+distinguished by an `aggregation` column. The default
+`kcat_aggregate_brenda = "max"` preserves MATLAB-GECKO behaviour.
+See [kcat_aggregation.md](kcat_aggregation.md).
 
 ---
 
-## 7. What's the same, what's extra, what's missing
+## 8. What's available where
 
-**Same algorithms, aligned results.** The port found and fixed several
-GECKO 3 bugs (EC-code assignment, sigma fitting, standard-kcat
-subsystem means, duplicate EC codes, ...); GECKO 4 carries the same
-fixes, so the two toolboxes agree. The full per-function divergence list
-lives in the in-source `MATLAB-COMPAT:` comments
+### Same algorithms, aligned results
+
+The port found and fixed several GECKO 3 bugs (EC-code assignment,
+sigma fitting, standard-kcat subsystem means, duplicate EC codes,
+…); **`[3→4]`** GECKO 4 carries the same fixes, so the two toolboxes
+agree. The full per-function divergence list lives in the in-source
+`MATLAB-COMPAT:` comments
 (`grep -rn "MATLAB-COMPAT:" src/geckopy/`) and in
 [future_improvements.md](future_improvements.md).
 
-**Available in both** (added during the port): KEGG as a fallback
-protein/EC source, and OpenKineticsPredictor over its REST API
-(`submit_open_kinetics_predictor` / `fetch_open_kinetics_predictor`).
+### Available in both (added during the port)
 
-**Not yet in geckopy:** the light ecModel build
-([gecko_light_status.md](gecko_light_status.md)) and Bayesian (ABC-SMC)
-kcat tuning ([bayesian_tuning_plan.md](bayesian_tuning_plan.md)).
+- **KEGG as a fallback protein/EC source** (`make_ec_model(kegg_db=…)`,
+  `fill_eccodes_from_database`).
+- **OpenKineticsPredictor over its REST API** —
+  `submit_open_kinetics_predictor` / `fetch_open_kinetics_predictor`.
+- **Forward-direction protein reactions** (`usage_prot_*` /
+  `prot_pool_exchange`).
+- **Refreshed BRENDA TSV schema** (geckopy adds the max+median
+  variant; MATLAB ships only max so far).
+
+### geckopy-only (no MATLAB counterpart)
+
+- `pfba_enzymes` — enzyme-pool-minimising pFBA.
+- `get_enzyme_bottlenecks` — dual-based bottleneck ranking.
+- `relax_proteomics_greedy` — greedy alternative to
+  `flexibilize_enz_concs`.
+- `merge_kcats` — generalised n-source kcat merge (replaces the
+  DLKcat-only MATLAB helper).
+- `geckopy brenda-refresh` CLI — rebuilds the BRENDA TSV from a
+  bulk-JSON snapshot.
+- `get_subset_ec_model` — *(also exists in MATLAB)* but the Python
+  version returns a fresh model rather than mutating in place.
+- The `Enzyme` proxy (`model.enzymes.get_by_id(...)`).
+- `geckopy init` — project skeleton CLI.
+
+### Not yet in geckopy
+
+- **Bayesian (ABC-SMC) kcat tuning**
+  (`bayesianSensitivityTuning` + helpers). Tracked in
+  `docs/internal/bayesian_tuning_plan.md`.
+- **`plotEcFVA`** — Python users plot from the `ec_fva` DataFrame
+  with matplotlib / seaborn directly.
 
 ---
 
-## 8. Where to look when something differs
+## 9. Where to look when something differs
 
-- In the geckopy source, every intentional divergence carries a
-  `MATLAB-COMPAT:` comment, and each ported function's docstring opens
-  with `Ported from GECKO MATLAB: <path>.` so you can find the exact
-  MATLAB original.
+- Every intentional divergence in geckopy carries a
+  **`MATLAB-COMPAT:`** comment in source. Each ported function's
+  docstring also opens with `Ported from GECKO MATLAB: <path>.` so
+  you can find the exact MATLAB original.
 - MATLAB-side bugs and rough edges the port found are tracked in
   [future_improvements.md](future_improvements.md).
+- For the GECKO 3→4 changes as they apply on the MATLAB side, see
+  [GECKO3_to_GECKO4.md](https://github.com/SysBioChalmers/GECKO/blob/main/GECKO3_to_GECKO4.md)
+  in the GECKO repository.
+- For the YAML schema (shared with MATLAB GECKO 4 / RAVEN), see
+  [yaml_format.md](yaml_format.md).
+- For the gecko-light availability table, see
+  [gecko_light_status.md](gecko_light_status.md).
+- For the raven-python / geckopy responsibility split, see
+  [raven_integration.md](raven_integration.md).
