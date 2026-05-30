@@ -4,6 +4,82 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [0.1.0a2] — 2026-05-30
+
+Second public alpha. Layering pass: the bits of geckopy that aren't
+GECKO-specific moved into raven-python, and `gecko-light` ecModels are now
+buildable end-to-end. Repo housekeeping for a discoverable first GitHub
+release (LICENSE, planning docs out of the user-facing tree).
+
+### Added
+
+- **gecko-light end-to-end.** `make_ec_model(gecko_light=True)` now produces
+  a working light ecModel: cobra reactions stay singular; per-isozyme
+  coupling lives in `ec.rxns` as duplicate rows with a `###_` counter
+  prefix; only the shared `prot_pool` constrains enzyme usage. `apply_kcat_constraints`
+  picks the lowest-cost (smallest `MW_sum/kcat`) isozyme per cobra reaction
+  and writes one `prot_pool` stoichiometric coefficient. `set_kcat_for_reactions`
+  recognises both base names and the `###_` prefix; the `Enzyme` proxy's
+  read paths work on light models. New `tutorials/light_ecModel/protocol.py`
+  mirrors MATLAB GECKO's light tutorial; opt-in Human-GEM smoke test
+  (`pytest -m smoke`) builds an ecModel from the unmodified
+  Human-GEM YAML in ~2.5 min. See [`docs/gecko_light_status.md`](docs/gecko_light_status.md). ([#20])
+
+### Changed
+
+- **YAML I/O delegated to raven-python.** `save_ec_model` / `load_ec_model`
+  are now ~80-LOC wrappers around `raven_python.io.read_yaml_model` /
+  `write_yaml_model`. raven-python owns the typed `EcData` (now re-exported
+  as `geckopy.EcData`), the `ec-rxns` / `ec-enzymes` / `gecko_light` YAML
+  schema, and the three legacy GECKO normalisations (top-level `smiles` →
+  `annotation`, reverse-direction `usage_prot_*` flip, bare-`-` document
+  root). Geckopy keeps file-extension dispatch, adapter-aware path
+  resolution, and provenance/diagnostics. SBML ecModel I/O removed
+  (`geckopy.io.sbml` deleted; `cobra.io.read_sbml_model` is still used for
+  loading the conventional starting GEM). See [`docs/raven_integration.md`](docs/raven_integration.md). ([#19])
+
+- **`ec_fseof` re-aligned with `raven_python.analysis.fseof`.** Thin
+  wrapper over raven's regression-based FSEOF: drops `usage_prot_*` from
+  the scan + targets, resolves `bio_rxn` from the adapter, and emits an
+  optional carbon-source consistency warning. Selection moves from MATLAB
+  GECKO's strict-monotonicity + top-25%-by-slope to raven's
+  `|correlation| ≥ threshold` with pFBA per step. Result type is raven's
+  `FSEOFResult` (replaces `EcFseofResult`); action labels are
+  `amplify` / `knockdown` / `knockout` (replaces `OE` / `KD` / `KO`); the
+  per-gene `essentiality` column drops (use
+  `cobra.flux_analysis.single_gene_deletion`). ([#21])
+
+- **`raven-python` pin** moved from `@main` to `@develop`. raven-python's
+  `main` is empty in the current iteration; all releaseable work lives on
+  `develop`.
+
+### Fixed
+
+- **`get_conc_control_coeffs` solver-state guard.** Both `_shadow_price_coeffs`
+  and `_finite_difference_coeffs` previously accepted any solve whose
+  `objective_value` was non-`None` and non-NaN, including infeasible
+  glpk-via-optlang solves (which return `status="infeasible"` but a
+  non-NaN objective from the binding-constraint rhs). New `_solution_is_optimal`
+  helper requires `sol.status == "optimal"` at every solve point.
+
+### Removed
+
+- `geckopy.io.sbml.{read,write}_sbml_ec_model` and the `geckopy.io` package
+  (SBML ecModel I/O dropped; YAML is the supported on-disk format).
+- `geckopy.EcFseofResult` (use `raven_python.analysis.fseof.FSEOFResult`).
+- Top-level `requirements.txt` (a `pip freeze` snapshot that duplicated
+  `pyproject.toml`'s declared dependencies). pyproject is the source of
+  truth.
+
+### Internal
+
+- Internal planning docs (`brenda_refresh_plan`, `openkineticspredictor_plan`,
+  `porting_plan`, `raven_inventory`, `code_review`) moved from `docs/` to
+  `docs/internal/` so the user-facing docs tree only carries reference
+  documentation.
+- `LICENSE` file added (MIT was already declared in `pyproject.toml` and
+  classifier; the text file was missing).
+
 ## [0.1.0a1] — 2026-05-30
 
 First public alpha. Every MATLAB GECKO 3.2.5 function used in the standard
@@ -118,6 +194,7 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.
 
+[0.1.0a2]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a2
 [0.1.0a1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a1
 [#1]: https://github.com/SysBioChalmers/geckopy/pull/1
 [#2]: https://github.com/SysBioChalmers/geckopy/pull/2
@@ -137,3 +214,6 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
 [#16]: https://github.com/SysBioChalmers/geckopy/pull/16
 [#17]: https://github.com/SysBioChalmers/geckopy/pull/17
 [#18]: https://github.com/SysBioChalmers/geckopy/pull/18
+[#19]: https://github.com/SysBioChalmers/geckopy/pull/19
+[#20]: https://github.com/SysBioChalmers/geckopy/pull/20
+[#21]: https://github.com/SysBioChalmers/geckopy/pull/21
