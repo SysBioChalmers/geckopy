@@ -5,9 +5,11 @@ from .apply_kcat import apply_kcat_constraints
 from .expand import expand_model
 from .fill_kcats import fill_kcats_from_isozymes, get_kcat_across_isozymes
 from .populate_ec import (
+    allocate_ec_and_coupling_light,
     allocate_ec_for_catalyzed_reactions,
     build_rxn_enzyme_coupling,
     populate_enzyme_data,
+    split_light_rxn_id,
 )
 from .preprocess import (
     convert_to_irreversible,
@@ -29,6 +31,7 @@ __all__ = [
     "add_protein_pool_pseudometabolite",
     "add_protein_pseudometabolites",
     "add_protein_usage_reactions",
+    "allocate_ec_and_coupling_light",
     "allocate_ec_for_catalyzed_reactions",
     "apply_complex_data",
     "apply_custom_kcats",
@@ -44,4 +47,5 @@ __all__ = [
     "remove_pseudoreaction_gprs",
     "set_kcat_for_reactions",
     "set_prot_pool_size",
+    "split_light_rxn_id",
 ]

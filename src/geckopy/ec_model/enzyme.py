@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Iterator
 import cobra
 
 from .constants import PROT_PREFIX, USAGE_PREFIX
+from .pipeline.populate_ec import split_light_rxn_id
 
 if TYPE_CHECKING:
     from .ec_model import EcModel
@@ -126,12 +127,18 @@ class Enzyme:
     @mw.setter
     def mw(self, value: float) -> None:
         """Set MW (Da). Re-applies kcat constraints for every reaction
-        that uses this enzyme, because the coefficient depends on MW."""
+        that uses this enzyme, because the coefficient depends on MW.
+
+        ``update_rxns`` here uses ec.rxns ids (the prefixed light form
+        in gecko-light models), not cobra reaction ids, because
+        ``apply_kcat_constraints`` indexes ec rows.
+        """
         from .pipeline.apply_kcat import apply_kcat_constraints
         self._model.ec.mw[self.index] = float(value)
-        rxn_ids = [r.id for r in self.reactions]
-        if rxn_ids:
-            apply_kcat_constraints(self._model, update_rxns=rxn_ids)
+        col = self._model.ec.rxn_enz_mat.tocsc().getcol(self.index)
+        ec_rxn_ids = [self._model.ec.rxns[i] for i in col.nonzero()[0]]
+        if ec_rxn_ids:
+            apply_kcat_constraints(self._model, update_rxns=ec_rxn_ids)
 
     @property
     def concentration(self) -> float:
@@ -198,14 +205,27 @@ class Enzyme:
         Defined as the non-zero entries in
         ``rxn_enz_mat[:, self.index]``, intersected with reactions
         still present in the cobra model.
+
+        For gecko-light models, each ec row carries a ``###_`` prefix
+        identifying its isozyme; the prefix is stripped before the cobra
+        lookup so two isozyme rows of the same cobra reaction return a
+        single ``cobra.Reaction``.
         """
         col = self._model.ec.rxn_enz_mat.tocsc().getcol(self.index)
         rxn_indices = col.nonzero()[0]
+        is_light = self._model.ec.gecko_light
+        seen_cobra_ids: set[str] = set()
         rxns: list[cobra.Reaction] = []
         for i in rxn_indices:
-            rxn_id = self._model.ec.rxns[i]
+            ec_rxn_id = self._model.ec.rxns[i]
+            cobra_id = (
+                split_light_rxn_id(ec_rxn_id)[1] if is_light else ec_rxn_id
+            )
+            if cobra_id in seen_cobra_ids:
+                continue
+            seen_cobra_ids.add(cobra_id)
             try:
-                rxns.append(self._model.reactions.get_by_id(rxn_id))
+                rxns.append(self._model.reactions.get_by_id(cobra_id))
             except KeyError:
                 continue
         return frozenset(rxns)
@@ -219,10 +239,12 @@ class Enzyme:
         return f"<Enzyme {self._uniprot} gene={self.gene} mw={self.mw:.1f}Da>"
 
     def _repr_html_(self) -> str:
+        # NotImplementedError covers gecko-light (no usage reaction);
+        # RuntimeError covers full models that haven't been solved yet.
         try:
             flux_str = f"{self.flux:.3g}"
             cap_str = f"{self.cap_usage:.3g}"
-        except RuntimeError:
+        except (RuntimeError, NotImplementedError):
             flux_str = "-"
             cap_str = "-"
         return (

@@ -71,6 +71,12 @@ packages = ["src/geckopy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Smoke tests are opt-in (they need external data and can take minutes);
+# run them with `pytest -m smoke`. The default invocation excludes them.
+addopts = "-m 'not smoke'"
+markers = [
+    "smoke: real-scale smoke tests that need external data (e.g. Human-GEM). Opt-in with `pytest -m smoke`; auto-skipped when the data isn't present.",
+]
 
 [tool.ruff]
 line-length = 100

@@ -1,12 +1,16 @@
 """Apply kcat-derived stoichiometric constraints to an ecModel.
 
 Ported from GECKO MATLAB: src/geckomat/change_model/applyKcatConstraints.m.
-Only the full (non-light) formulation is supported; the gecko-light
-branch raises NotImplementedError.
+Supports both the full and gecko-light formulations. The two share the
+clear-then-write idempotency contract but write to different metabolites:
+full models write per-enzyme ``prot_<id>`` coefficients on each ec.rxn;
+light models pick the lowest-cost isozyme per cobra reaction and write a
+single ``prot_pool`` coefficient there.
 """
 from __future__ import annotations
 
 import warnings
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -15,7 +19,8 @@ if TYPE_CHECKING:
     from ..ec_model import EcModel
 
 
-from ..constants import PROT_PREFIX
+from ..constants import POOL_ID, PROT_PREFIX
+from .populate_ec import split_light_rxn_id
 
 
 def apply_kcat_constraints(
@@ -67,8 +72,6 @@ def apply_kcat_constraints(
 
     Raises
     ------
-    NotImplementedError
-        If the model is gecko-light (not yet supported).
     ValueError
         If ``update_rxns`` contains IDs not present in ``ec.rxns``.
 
@@ -79,10 +82,8 @@ def apply_kcat_constraints(
         still cleared in this case; nothing is written afterward.
     """
     if model.ec.gecko_light:
-        raise NotImplementedError(
-            "apply_kcat_constraints: gecko-light formulation is not yet "
-            "implemented."
-        )
+        _apply_kcat_constraints_light(model, update_rxns)
+        return
 
     ec_rxn_ids = model.ec.rxns
 
@@ -170,3 +171,122 @@ def apply_kcat_constraints(
 
         if updates:
             rxn.add_metabolites(updates, combine=False)
+
+
+# --------------------------------------------------------------------------- #
+# gecko-light branch
+# --------------------------------------------------------------------------- #
+
+def _apply_kcat_constraints_light(
+    model: "EcModel",
+    update_rxns: list[str] | None,
+) -> None:
+    """Write the lowest-cost-isozyme ``prot_pool`` coefficient on each
+    affected cobra reaction.
+
+    Ported from GECKO MATLAB: src/geckomat/change_model/applyKcatConstraints.m
+    (gecko-light branch). Light ec.rxns has one row per isozyme of each
+    cobra reaction (distinguished by a 3-digit counter prefix). The light
+    formulation collapses those rows to a single LP constraint per cobra
+    reaction by picking the isozyme with the lowest ``MW_sum / kcat``
+    cost, then writing ``-MW_sum / (kcat * 3600)`` as the ``prot_pool``
+    coefficient. ``MW_sum`` is the sum of subunit MWs (the row's
+    ``rxn_enz_mat`` slice dotted into ``ec.mw``).
+
+    Cobra reactions whose chosen isozyme has ``kcat == 0`` (or whose
+    every isozyme is kcat-less, or has no associated enzyme with a
+    known MW) get any prior ``prot_pool`` coefficient cleared and no
+    new one written.
+
+    Parameters
+    ----------
+    model
+        A gecko-light EcModel with ``ec.gecko_light is True``.
+    update_rxns
+        ec.rxns IDs (with the ``###_`` prefix) to update. ``None``
+        means update every cobra reaction backed by at least one
+        ec.rxns row.
+    """
+    ec_rxn_ids = model.ec.rxns
+
+    if update_rxns is None:
+        selected_idx = np.arange(len(ec_rxn_ids))
+    else:
+        id_to_idx = {rxn_id: i for i, rxn_id in enumerate(ec_rxn_ids)}
+        unknown = [r for r in update_rxns if r not in id_to_idx]
+        if unknown:
+            raise ValueError(
+                f"update_rxns contains IDs not present in ec.rxns: "
+                f"{unknown[:5]}"
+            )
+        selected_idx = np.array(
+            [id_to_idx[r] for r in update_rxns], dtype=int,
+        )
+
+    if selected_idx.size == 0:
+        return
+
+    # Group the selected ec rows by the cobra reaction they belong to;
+    # the cobra reaction is what carries the LP constraint.
+    rows_by_cobra: dict[str, list[int]] = defaultdict(list)
+    for idx in selected_idx:
+        _, cobra_id = split_light_rxn_id(ec_rxn_ids[idx])
+        rows_by_cobra[cobra_id].append(int(idx))
+
+    pool_met = model.metabolites.get_by_id(POOL_ID)
+    rxn_enz_mat_csr = model.ec.rxn_enz_mat.tocsr()
+    mw = model.ec.mw
+
+    cleared_only = True
+    for cobra_id, ec_rows in rows_by_cobra.items():
+        try:
+            rxn = model.reactions.get_by_id(cobra_id)
+        except KeyError:
+            continue
+
+        # Step 1: clear any prior prot_pool coefficient on this reaction.
+        # Done unconditionally so flipping every isozyme's kcat to 0 and
+        # re-applying genuinely drops the old constraint.
+        if pool_met in rxn.metabolites:
+            rxn.add_metabolites({pool_met: 0.0}, combine=False)
+
+        # Step 2: find the cheapest isozyme (smallest MW_sum / kcat).
+        # Each ec row contributes (kcat, MW_sum). Rows with kcat <= 0 or
+        # MW_sum == 0 (no enzyme matched in the coupling matrix) are
+        # ignored. NaN MW values are treated as missing.
+        best_cost = float("inf")
+        best_mw_sum = 0.0
+        best_kcat = 0.0
+        for r in ec_rows:
+            kcat = float(model.ec.kcat[r])
+            if kcat <= 0:
+                continue
+            row = rxn_enz_mat_csr.getrow(r)
+            if row.nnz == 0:
+                continue
+            mw_for_row = mw[row.indices]
+            if np.any(np.isnan(mw_for_row)):
+                continue
+            mw_sum = float(np.sum(row.data * mw_for_row))
+            if mw_sum <= 0:
+                continue
+            cost = mw_sum / kcat
+            if cost < best_cost:
+                best_cost = cost
+                best_mw_sum = mw_sum
+                best_kcat = kcat
+
+        if best_kcat == 0.0:
+            continue  # no valid isozyme; leave the reaction at cleared
+        coef = -best_mw_sum / (best_kcat * 3600.0)
+        rxn.add_metabolites({pool_met: coef}, combine=False)
+        cleared_only = False
+
+    if cleared_only:
+        warnings.warn(
+            "apply_kcat_constraints (gecko-light): ec.kcat has no real "
+            "entries for the selected reactions; existing prot_pool "
+            "constraints were cleared and no new ones written.",
+            UserWarning,
+            stacklevel=2,
+        )

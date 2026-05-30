@@ -214,14 +214,126 @@ def test_setting_kcat_to_zero_and_reapplying_clears_old_constraint():
 
 
 # --------------------------------------------------------------------------- #
-# Gecko-light not yet implemented
+# Gecko-light branch
 # --------------------------------------------------------------------------- #
 
-def test_gecko_light_raises():
-    ec_model = _ectestgem_ec_model()
-    ec_model.ec.gecko_light = True
-    with pytest.raises(NotImplementedError, match="gecko-light"):
-        apply_kcat_constraints(ec_model)
+_ECTESTGEM_LIGHT_CACHE: EcModel | None = None
+
+
+def _ectestgem_light_model() -> EcModel:
+    """Cached gecko-light build of the ecTestGEM fixture (deep-copy per call)."""
+    import copy as _copy
+    global _ECTESTGEM_LIGHT_CACHE
+    if _ECTESTGEM_LIGHT_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_LIGHT_CACHE = make_ec_model(
+            cobra_model, adapter, gecko_light=True,
+        )
+    return _copy.deepcopy(_ECTESTGEM_LIGHT_CACHE)
+
+
+def test_light_writes_prot_pool_coefficient_for_single_isozyme_reaction():
+    """R3 has one isozyme (G4 / P4). The coefficient on prot_pool of the
+    cobra reaction R3 should be -(MW / (kcat * 3600))."""
+    ec = _ectestgem_light_model()
+    i = ec.ec.rxns.index("001_R3")
+    ec.ec.kcat[i] = 10.0
+    p4_idx = ec.ec.genes.index("G4")
+    mw_p4 = float(ec.ec.mw[p4_idx])
+
+    apply_kcat_constraints(ec)
+
+    expected = -mw_p4 / (10.0 * 3600.0)
+    assert _get_s_coef(
+        ec.reactions.get_by_id("R3"), "prot_pool",
+    ) == pytest.approx(expected, rel=1e-12)
+
+
+def test_light_picks_lowest_cost_isozyme_when_multiple_set():
+    """R2 has two isozymes: complex (G1 AND G2) and singleton (G3). When
+    both have a kcat, pick the one with the smallest MW_sum / kcat."""
+    ec = _ectestgem_light_model()
+    i_complex = ec.ec.rxns.index("001_R2")
+    i_single = ec.ec.rxns.index("002_R2")
+
+    # Same kcat for both -> pick the smaller MW_sum. The single-subunit
+    # G3 isozyme should win.
+    ec.ec.kcat[i_complex] = 50.0
+    ec.ec.kcat[i_single] = 50.0
+    apply_kcat_constraints(ec)
+
+    g3_idx = ec.ec.genes.index("G3")
+    expected = -float(ec.ec.mw[g3_idx]) / (50.0 * 3600.0)
+    assert _get_s_coef(
+        ec.reactions.get_by_id("R2"), "prot_pool",
+    ) == pytest.approx(expected, rel=1e-12)
+
+
+def test_light_skips_isozyme_with_zero_kcat():
+    """When one isozyme has kcat == 0 and the other has a real kcat, the
+    real one wins (kcat == 0 is treated as 'no kcat assigned')."""
+    ec = _ectestgem_light_model()
+    i_complex = ec.ec.rxns.index("001_R2")
+    i_single = ec.ec.rxns.index("002_R2")
+
+    ec.ec.kcat[i_complex] = 0.0   # unassigned
+    ec.ec.kcat[i_single] = 7.0
+    apply_kcat_constraints(ec)
+
+    g3_idx = ec.ec.genes.index("G3")
+    expected = -float(ec.ec.mw[g3_idx]) / (7.0 * 3600.0)
+    assert _get_s_coef(
+        ec.reactions.get_by_id("R2"), "prot_pool",
+    ) == pytest.approx(expected, rel=1e-12)
+
+
+def test_light_no_isozyme_with_kcat_clears_constraint():
+    """All isozymes have kcat == 0 -> no prot_pool coefficient written."""
+    ec = _ectestgem_light_model()
+    apply_kcat_constraints(ec)  # default kcat=0; warns but doesn't write
+    assert _get_s_coef(
+        ec.reactions.get_by_id("R2"), "prot_pool",
+    ) == 0.0
+
+
+def test_light_idempotent():
+    """Running apply_kcat_constraints twice gives the same coefficient."""
+    ec = _ectestgem_light_model()
+    ec.ec.kcat[ec.ec.rxns.index("001_R3")] = 12.0
+    apply_kcat_constraints(ec)
+    first = _get_s_coef(ec.reactions.get_by_id("R3"), "prot_pool")
+    apply_kcat_constraints(ec)
+    second = _get_s_coef(ec.reactions.get_by_id("R3"), "prot_pool")
+    assert first == pytest.approx(second)
+    assert first != 0.0
+
+
+def test_light_setting_kcat_to_zero_and_reapplying_clears_old_constraint():
+    """Setting every isozyme of a reaction's kcat to 0 and reapplying
+    drops the prior prot_pool coefficient."""
+    ec = _ectestgem_light_model()
+    ec.ec.kcat[ec.ec.rxns.index("001_R3")] = 5.0
+    apply_kcat_constraints(ec)
+    assert _get_s_coef(ec.reactions.get_by_id("R3"), "prot_pool") != 0.0
+
+    ec.ec.kcat[ec.ec.rxns.index("001_R3")] = 0.0
+    apply_kcat_constraints(ec, update_rxns=["001_R3"])
+    assert _get_s_coef(ec.reactions.get_by_id("R3"), "prot_pool") == 0.0
+
+
+def test_light_update_rxns_unknown_id_raises():
+    ec = _ectestgem_light_model()
+    with pytest.raises(ValueError, match="not present in ec.rxns"):
+        apply_kcat_constraints(ec, update_rxns=["999_nonsense"])
+
+
+def test_light_warns_when_no_valid_kcats():
+    """When every selected reaction has kcat=0 across all isozymes, emit
+    the same warning the full branch does and leave the model unchanged."""
+    ec = _ectestgem_light_model()
+    with pytest.warns(UserWarning, match="no real entries"):
+        apply_kcat_constraints(ec)
 
 
 # --------------------------------------------------------------------------- #

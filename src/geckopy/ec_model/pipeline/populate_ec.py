@@ -330,3 +330,118 @@ def build_rxn_enzyme_coupling(model: "EcModel") -> None:
                 mat[i, j] = 1.0
 
     model.ec.rxn_enz_mat = mat.tocsr()
+
+
+# --------------------------------------------------------------------------- #
+# gecko-light replacement for stages 6 + 8
+# --------------------------------------------------------------------------- #
+
+# Width of the `###_` counter prefix that distinguishes isozyme copies of the
+# same cobra reaction in ec.rxns under the gecko-light layout. Three digits
+# accommodate up to 999 isozymes per reaction, matching MATLAB GECKO.
+_LIGHT_PREFIX_WIDTH = 3
+
+
+def allocate_ec_and_coupling_light(model: "EcModel") -> list[str]:
+    """Stages 6 + 8 (gecko-light layout): allocate ec.rxns and ec.rxn_enz_mat.
+
+    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
+    (gecko-light branches of stages 6 and 8). Light models do not split
+    isozyme reactions in the cobra layer (expand_model is skipped), so the
+    per-isozyme bookkeeping moves into ec instead:
+
+    - Each cobra reaction with N isozymes (i.e. ``len(_gpr_to_dnf(rxn.gpr))
+      == N``) produces N rows in ec.rxns. Row k carries the id
+      ``"{k:03d}_{rxn.id}"`` (1-indexed, three-digit zero-padded counter).
+    - Row k's slice of ``ec.rxn_enz_mat`` is 1.0 for each gene in that
+      isozyme's AND-clause; other genes are 0.
+
+    ``ec.kcat`` is initialized to 0 ("no kcat assigned"), and
+    ``ec.source`` / ``ec.notes`` / ``ec.eccodes`` to empty strings — same
+    convention as :func:`allocate_ec_for_catalyzed_reactions`.
+
+    Stage 7 (``populate_enzyme_data``) runs unchanged on light models, so
+    ``ec.genes`` / ``ec.enzymes`` / ``ec.mw`` / ``ec.sequence`` must
+    already be populated before this function builds the coupling matrix.
+    Call order in :func:`make_ec_model` for light: ``populate_enzyme_data``
+    first, then this function.
+
+    Parameters
+    ----------
+    model
+        An EcModel preprocessed through stage 4 (irreversibility), with
+        stage 5 (expand_model) skipped and stage 7 already complete.
+        Mutated in place.
+
+    Returns
+    -------
+    list of str
+        The prefixed reaction IDs written into ``model.ec.rxns``.
+    """
+    from raven_python.manipulation.expand import _gpr_to_dnf
+
+    enzyme_index: dict[str, int] = {
+        g: i for i, g in enumerate(model.ec.genes)
+    }
+    n_enz = model.ec.n_enzymes
+
+    rxn_ids: list[str] = []
+    # Buffer (row, gene_index) pairs and build the sparse matrix in one pass
+    # at the end; faster than incrementally mutating an lil_matrix per row.
+    row_for_gene: list[list[int]] = []
+
+    for rxn in model.reactions:
+        if not rxn.genes:
+            continue
+        clauses = _gpr_to_dnf(rxn.gpr)
+        if not clauses:
+            continue
+        for k, clause in enumerate(clauses, start=1):
+            rxn_ids.append(f"{k:0{_LIGHT_PREFIX_WIDTH}d}_{rxn.id}")
+            row_for_gene.append([
+                enzyme_index[g]
+                for g in clause
+                if g in enzyme_index
+            ])
+
+    n_rxns = len(rxn_ids)
+
+    model.ec.rxns = rxn_ids
+    # 0 marks "no kcat assigned" (matching MATLAB GECKO).
+    model.ec.kcat = np.zeros(n_rxns, dtype=float)
+    model.ec.source = [""] * n_rxns
+    model.ec.notes = [""] * n_rxns
+    model.ec.eccodes = [""] * n_rxns
+
+    if n_rxns == 0 or n_enz == 0:
+        model.ec.rxn_enz_mat = sparse.csr_matrix(
+            (n_rxns, n_enz), dtype=float,
+        )
+        return rxn_ids
+
+    mat = sparse.lil_matrix((n_rxns, n_enz), dtype=float)
+    for i, gene_indices in enumerate(row_for_gene):
+        for j in gene_indices:
+            mat[i, j] = 1.0
+    model.ec.rxn_enz_mat = mat.tocsr()
+    return rxn_ids
+
+
+def split_light_rxn_id(prefixed_id: str) -> tuple[int, str]:
+    """Split a gecko-light prefixed ec.rxn id into ``(isozyme_index, cobra_id)``.
+
+    Light models prefix each ec.rxns entry with a fixed-width zero-padded
+    counter (e.g. ``"001_RXN1"`` -> ``(1, "RXN1")``). Helpers that need
+    to look up the underlying cobra reaction use this to strip the prefix.
+    Raises ``ValueError`` on an unprefixed id.
+    """
+    if (
+        len(prefixed_id) <= _LIGHT_PREFIX_WIDTH + 1
+        or prefixed_id[_LIGHT_PREFIX_WIDTH] != "_"
+        or not prefixed_id[:_LIGHT_PREFIX_WIDTH].isdigit()
+    ):
+        raise ValueError(
+            f"{prefixed_id!r} is not a gecko-light ec.rxns id "
+            f"(expected '<3-digit>_<cobra_id>')"
+        )
+    return int(prefixed_id[:_LIGHT_PREFIX_WIDTH]), prefixed_id[_LIGHT_PREFIX_WIDTH + 1:]
