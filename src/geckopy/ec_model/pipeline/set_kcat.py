@@ -9,12 +9,14 @@ from typing import TYPE_CHECKING, Sequence, Union
 
 
 from .apply_kcat import apply_kcat_constraints
+from .populate_ec import split_light_rxn_id
 
 if TYPE_CHECKING:
     from ..ec_model import EcModel
 
 
 _EXP_SUFFIX_PATTERN = re.compile(r"_EXP_\d+$")
+_LIGHT_PREFIX_PATTERN = re.compile(r"^\d{3}_")
 _SOURCE_TAG = "manual"
 
 
@@ -31,11 +33,18 @@ def set_kcat_for_reactions(
 
     Each ID in ``rxn_ids`` is interpreted as follows:
 
-    - If the ID ends in ``_EXP_<n>``, only that exact reaction is matched.
+    - If the ID ends in ``_EXP_<n>`` (full layout) or starts with
+      ``###_`` (gecko-light), only that exact reaction is matched.
     - Otherwise, the ID is treated as a base name and matches every
-      ec.rxns entry whose ID, after stripping any ``_EXP_<n>`` suffix,
-      equals the base name. So ``"R2"`` matches ``R2``, ``R2_EXP_1``,
-      ``R2_EXP_2``, etc.
+      ec.rxns entry whose ID, after stripping the layout-specific
+      isozyme marker, equals the base name. So in a full model,
+      ``"R2"`` matches ``R2``, ``R2_EXP_1``, ``R2_EXP_2``; in a light
+      model, ``"R2"`` matches ``001_R2``, ``002_R2``.
+
+    MATLAB-COMPAT: MATLAB GECKO's setKcatForReactions only strips the
+    ``_EXP_<n>`` suffix, so in a light MATLAB ecModel users must pass
+    the explicit ``001_R2`` form. geckopy strips the light prefix too,
+    so the base-name shorthand works identically in both layouts.
 
     The ``kcat`` argument follows numpy-style broadcasting: a single
     float applies to every matched reaction; a sequence must match the
@@ -86,16 +95,23 @@ def set_kcat_for_reactions(
         return []
 
     ec_rxns = model.ec.rxns
-    nonexp_ec_rxns = [_EXP_SUFFIX_PATTERN.sub("", r) for r in ec_rxns]
+    if model.ec.gecko_light:
+        # Light: strip the leading ``###_`` counter so the cobra reaction
+        # id is what the base-name lookup sees.
+        base_ec_rxns = [split_light_rxn_id(r)[1] for r in ec_rxns]
+        explicit_pattern = _LIGHT_PREFIX_PATTERN
+    else:
+        base_ec_rxns = [_EXP_SUFFIX_PATTERN.sub("", r) for r in ec_rxns]
+        explicit_pattern = _EXP_SUFFIX_PATTERN
 
     # Resolve every input ID to a list of ec-row indices.
     matches_per_input: list[list[int]] = []
     for rxn_id in rxn_ids:
-        if _EXP_SUFFIX_PATTERN.search(rxn_id):
+        if explicit_pattern.search(rxn_id):
             indices = [i for i, r in enumerate(ec_rxns) if r == rxn_id]
         else:
             indices = [
-                i for i, r in enumerate(nonexp_ec_rxns) if r == rxn_id
+                i for i, r in enumerate(base_ec_rxns) if r == rxn_id
             ]
         if not indices:
             raise ValueError(

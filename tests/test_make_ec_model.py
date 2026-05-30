@@ -112,10 +112,101 @@ def test_make_ec_model_accepts_preloaded_uniprot_db():
     assert ec_model.ec.n_enzymes == 5
 
 
-def test_make_ec_model_gecko_light_raises():
+# --------------------------------------------------------------------------- #
+# gecko-light layout
+# --------------------------------------------------------------------------- #
+
+def _build_light_ectestgem() -> EcModel:
     model, adapter = _load_fresh_ectestgem()
-    with pytest.raises(NotImplementedError, match="gecko_light"):
-        make_ec_model(model, adapter, gecko_light=True)
+    return make_ec_model(model, adapter, gecko_light=True)
+
+
+def test_make_ec_model_gecko_light_sets_flag():
+    ec = _build_light_ectestgem()
+    assert ec.ec.gecko_light is True
+
+
+def test_make_ec_model_gecko_light_ec_rxns_have_3digit_prefix():
+    """Every ec.rxns id in a light model carries a `###_` counter prefix
+    distinguishing isozymes of the same cobra reaction."""
+    ec = _build_light_ectestgem()
+    for rxn_id in ec.ec.rxns:
+        assert (
+            len(rxn_id) > 4
+            and rxn_id[3] == "_"
+            and rxn_id[:3].isdigit()
+        ), f"{rxn_id!r} lacks the `###_` light prefix"
+
+
+def test_make_ec_model_gecko_light_one_row_per_isozyme():
+    """ecTestGEM's R2 has two isozymes (G1 and G2 as a complex, plus G3
+    alone). Both directions of R2 should appear twice in ec.rxns."""
+    ec = _build_light_ectestgem()
+    assert "001_R2" in ec.ec.rxns
+    assert "002_R2" in ec.ec.rxns
+    assert "001_R2_REV" in ec.ec.rxns
+    assert "002_R2_REV" in ec.ec.rxns
+    # R3 and R5 are single-isozyme; only the 001_ entry appears.
+    assert "001_R3" in ec.ec.rxns
+    assert "001_R5" in ec.ec.rxns
+    assert "002_R3" not in ec.ec.rxns
+    assert "002_R5" not in ec.ec.rxns
+
+
+def test_make_ec_model_gecko_light_coupling_row_per_isozyme():
+    """Each ec.rxns row's coupling vector contains 1.0 for exactly the
+    genes in that isozyme's AND-clause, not the whole GPR."""
+    ec = _build_light_ectestgem()
+    gene_idx = {g: i for i, g in enumerate(ec.ec.genes)}
+    mat = ec.ec.rxn_enz_mat.toarray()
+
+    # 001_R2 = G1 AND G2 (the complex isozyme)
+    i = ec.ec.rxns.index("001_R2")
+    expected = np.zeros(ec.ec.n_enzymes)
+    expected[gene_idx["G1"]] = 1.0
+    expected[gene_idx["G2"]] = 1.0
+    np.testing.assert_array_equal(mat[i], expected)
+
+    # 002_R2 = G3 alone
+    i = ec.ec.rxns.index("002_R2")
+    expected = np.zeros(ec.ec.n_enzymes)
+    expected[gene_idx["G3"]] = 1.0
+    np.testing.assert_array_equal(mat[i], expected)
+
+
+def test_make_ec_model_gecko_light_skips_per_enzyme_prot_mets():
+    """Light models have only the shared ``prot_pool``; no per-enzyme
+    ``prot_<accession>`` pseudometabolites or ``usage_prot_<accession>``
+    reactions."""
+    ec = _build_light_ectestgem()
+    met_ids = {m.id for m in ec.metabolites}
+    rxn_ids = {r.id for r in ec.reactions}
+
+    assert "prot_pool" in met_ids
+    assert "prot_pool_exchange" in rxn_ids
+    assert not any(
+        mid.startswith("prot_") and mid != "prot_pool" for mid in met_ids
+    )
+    assert not any(rid.startswith("usage_prot_") for rid in rxn_ids)
+
+
+def test_make_ec_model_gecko_light_kcat_initialized_zero():
+    ec = _build_light_ectestgem()
+    assert np.all(ec.ec.kcat == 0.0)
+
+
+def test_make_ec_model_gecko_light_enzymes_match_full():
+    """The per-enzyme arrays (genes/enzymes/mw/sequence) are identical to
+    the full build because stage 7 doesn't branch on gecko_light."""
+    model, adapter = _load_fresh_ectestgem()
+    full = make_ec_model(model, adapter)
+    model2, adapter2 = _load_fresh_ectestgem()
+    light = make_ec_model(model2, adapter2, gecko_light=True)
+
+    assert full.ec.genes == light.ec.genes
+    assert full.ec.enzymes == light.ec.enzymes
+    np.testing.assert_array_equal(full.ec.mw, light.ec.mw)
+    assert full.ec.sequence == light.ec.sequence
 
 
 def test_make_ec_model_missing_uniprot_tsv_raises(tmp_path):

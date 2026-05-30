@@ -248,3 +248,95 @@ def test_source_string_is_manual():
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R3"], 10.0, apply=False)
     assert _source_at(ec_model, "R3") == "manual"
+
+
+# --------------------------------------------------------------------------- #
+# gecko-light layout
+# --------------------------------------------------------------------------- #
+
+_ECTESTGEM_LIGHT_CACHE: EcModel | None = None
+
+
+def _ectestgem_light_ec_model() -> EcModel:
+    """Cached gecko-light build of ecTestGEM; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_LIGHT_CACHE
+    if _ECTESTGEM_LIGHT_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_LIGHT_CACHE = make_ec_model(
+            cobra_model, adapter, gecko_light=True,
+        )
+    return _copy.deepcopy(_ECTESTGEM_LIGHT_CACHE)
+
+
+def test_light_set_single_explicit_prefixed_id():
+    """Passing ``001_R3`` should match only that one ec row."""
+    ec = _ectestgem_light_ec_model()
+    updated = set_kcat_for_reactions(ec, ["001_R3"], 10.0, apply=False)
+    assert updated == ["001_R3"]
+    assert _kcat_at(ec, "001_R3") == 10.0
+    assert _source_at(ec, "001_R3") == "manual"
+
+
+def test_light_unsuffixed_id_expands_to_all_isozyme_rows():
+    """Bare ``R2`` should match both ``001_R2`` and ``002_R2`` (R2's two
+    isozymes), but not ``001_R2_REV`` / ``002_R2_REV``."""
+    ec = _ectestgem_light_ec_model()
+    updated = set_kcat_for_reactions(ec, ["R2"], 5.0, apply=False)
+    assert sorted(updated) == ["001_R2", "002_R2"]
+    assert _kcat_at(ec, "001_R2") == 5.0
+    assert _kcat_at(ec, "002_R2") == 5.0
+    assert _kcat_at(ec, "001_R2_REV") == 0.0
+    assert _kcat_at(ec, "002_R2_REV") == 0.0
+
+
+def test_light_unsuffixed_with_list_kcat_forbidden():
+    """Same strict rule as full: an un-suffixed ID that expands to
+    multiple matches must take a scalar kcat."""
+    ec = _ectestgem_light_ec_model()
+    with pytest.raises(ValueError, match="must be a scalar"):
+        set_kcat_for_reactions(ec, ["R2"], [1.0, 2.0], apply=False)
+
+
+def test_light_set_specific_isozyme_with_prefix():
+    """Explicit ``002_R2`` should leave its sibling ``001_R2`` untouched."""
+    ec = _ectestgem_light_ec_model()
+    updated = set_kcat_for_reactions(ec, ["002_R2"], 99.0, apply=False)
+    assert updated == ["002_R2"]
+    assert _kcat_at(ec, "002_R2") == 99.0
+    assert _kcat_at(ec, "001_R2") == 0.0
+
+
+def test_light_apply_true_writes_prot_pool_coefficient():
+    """With apply=True on a single-isozyme reaction, the chosen kcat must
+    appear as a ``prot_pool`` coefficient on the cobra reaction."""
+    ec = _ectestgem_light_ec_model()
+    set_kcat_for_reactions(ec, ["001_R3"], 10.0, apply=True)
+
+    r3 = ec.reactions.get_by_id("R3")
+    # R3 is G4 alone (MW = 40000).
+    coef = _get_s_coef(r3, "prot_pool")
+    expected = -(40000.0 / (10.0 * 3600.0))
+    assert coef == pytest.approx(expected)
+
+
+def test_light_apply_picks_lowest_cost_isozyme():
+    """If both isozymes of R2 get a kcat via the base-name shorthand,
+    apply_kcat must pick the cheapest (lowest MW_sum/kcat) one."""
+    ec = _ectestgem_light_ec_model()
+    set_kcat_for_reactions(ec, ["R2"], 5.0, apply=True)
+
+    r2 = ec.reactions.get_by_id("R2")
+    coef = _get_s_coef(r2, "prot_pool")
+    # 001_R2 = G1+G2 (MW = 30000); 002_R2 = G3 alone (MW = 30000).
+    # Same kcat and same MW_sum, so both have identical cost. The
+    # implementation breaks ties on first-wins, so MW_sum = 30000.
+    expected = -(30000.0 / (5.0 * 3600.0))
+    assert coef == pytest.approx(expected)
+
+
+def test_light_unknown_rxn_id_raises():
+    ec = _ectestgem_light_ec_model()
+    with pytest.raises(ValueError, match="matched no entries"):
+        set_kcat_for_reactions(ec, ["nonsense"], 1.0)

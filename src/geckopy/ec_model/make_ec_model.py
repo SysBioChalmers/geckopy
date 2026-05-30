@@ -34,6 +34,7 @@ from .pipeline import (
     add_protein_pool_pseudometabolite,
     add_protein_pseudometabolites,
     add_protein_usage_reactions,
+    allocate_ec_and_coupling_light,
     allocate_ec_for_catalyzed_reactions,
     build_rxn_enzyme_coupling,
     convert_to_irreversible,
@@ -92,9 +93,16 @@ def make_ec_model(
         id, biomass reaction, sigma factor, ...) and the path to
         the UniProt cache.
     gecko_light
-        Build a light ecModel instead of a full one. Not yet
-        implemented in geckopy; raises NotImplementedError. See
-        ``docs/gecko_light_status.md``.
+        Build a light ecModel instead of a full one. The light layout
+        skips the isozyme split (cobra reactions stay singular), omits
+        the per-enzyme ``prot_<id>`` pseudometabolites and
+        ``usage_prot_<id>`` reactions, and keeps only the shared
+        ``prot_pool``. The per-isozyme bookkeeping moves into ``ec``
+        instead: each cobra reaction with N isozymes produces N rows
+        in ``ec.rxns`` distinguished by a 3-digit counter prefix
+        (e.g. ``001_RXN1``, ``002_RXN1``). Suitable for large GEMs
+        (HumanGEM, Recon3D) where the full layout's LP size becomes
+        impractical. See ``docs/gecko_light_status.md``.
     uniprot_db
         Pre-loaded UniprotDB. If None, the function looks for
         ``adapter.params.path / "data" / "uniprot.tsv"`` and loads
@@ -117,8 +125,6 @@ def make_ec_model(
 
     Raises
     ------
-    NotImplementedError
-        If ``gecko_light`` is True (not yet supported).
     FileNotFoundError
         If ``uniprot_db`` is None and no ``uniprot.tsv`` is found
         under the adapter's data folder.
@@ -135,40 +141,57 @@ def make_ec_model(
 
     Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
     """
-    if gecko_light:
-        raise NotImplementedError(
-            "gecko_light mode is not yet implemented in geckopy."
-        )
-
     if isinstance(model, EcModel) and model.ec.n_rxns > 0:
         raise ValueError(
             "make_ec_model was called on a model that already has a "
             "populated ec substructure. Run it only on a conventional GEM."
         )
 
-    # Stages 1-5: preprocess on a plain cobra.Model.
+    # Stages 1-4: preprocess on a plain cobra.Model. Stage 5 (isozyme
+    # expansion) is full-only; light keeps isozymes singular and tracks
+    # them per-row in ec instead.
     remove_pseudoreaction_gprs(model, adapter)
     invert_backwards_only_reactions(model)
     convert_to_irreversible(model)
-    expand_model(model)
+    if not gecko_light:
+        expand_model(model)
 
     # Promote to EcModel for stages 6-12.
     ec_model = EcModel.from_cobra(model, adapter, gecko_light=gecko_light)
-
-    # Stages 6-8: build the ec substructure.
-    allocate_ec_for_catalyzed_reactions(ec_model)
 
     if uniprot_db is None:
         uniprot_path = adapter.params.path / "data" / "uniprot.tsv"
         uniprot_db = load_uniprot_tsv(uniprot_path)
 
-    no_uniprot = populate_enzyme_data(ec_model, uniprot_db, kegg_db=kegg_db)
-    build_rxn_enzyme_coupling(ec_model)
+    if gecko_light:
+        # Light: stage 7 (per-enzyme data) runs first so the coupling
+        # builder can index ec.genes when emitting the per-isozyme rows.
+        # Stage 6 is folded into the light helper, which writes both
+        # ec.rxns (one row per isozyme, with the 3-digit counter prefix)
+        # and ec.rxn_enz_mat in one pass.
+        no_uniprot = populate_enzyme_data(
+            ec_model, uniprot_db, kegg_db=kegg_db,
+        )
+        allocate_ec_and_coupling_light(ec_model)
+    else:
+        # Full: stage 6 (allocate empty slots) runs first; stage 7
+        # populates per-enzyme arrays; stage 8 fills the coupling matrix
+        # from cobra GPRs (one AND-clause per reaction after the stage-5
+        # expansion).
+        allocate_ec_for_catalyzed_reactions(ec_model)
+        no_uniprot = populate_enzyme_data(
+            ec_model, uniprot_db, kegg_db=kegg_db,
+        )
+        build_rxn_enzyme_coupling(ec_model)
 
-    # Stages 9-12: protein pool machinery.
-    add_protein_pseudometabolites(ec_model)
+    # Stages 9-12: protein pool machinery. Light skips the per-enzyme
+    # pseudometabolites + usage reactions (no per-enzyme bookkeeping in
+    # the LP) but keeps the shared pool exactly as full models do.
+    if not gecko_light:
+        add_protein_pseudometabolites(ec_model)
     add_protein_pool_pseudometabolite(ec_model)
-    add_protein_usage_reactions(ec_model)
+    if not gecko_light:
+        add_protein_usage_reactions(ec_model)
     add_protein_pool_exchange_reaction(ec_model)
 
     if no_uniprot:

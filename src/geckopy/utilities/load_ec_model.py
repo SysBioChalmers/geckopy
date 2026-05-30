@@ -2,17 +2,21 @@
 
 Reads the cobrapy YAML format plus the GECKO-specific top-level keys
 (``ec-rxns``, ``ec-enzymes``, ``gecko_light``, ``metaData``). The
-cobra-shaped portion is rebuilt by ``cobra.io.dict.model_from_dict``;
-this module reads the ec keys on top.
+cobra-shaped portion plus the round-trip of unknown top-level keys is
+handled by ``raven_python.io.yaml.model_from_yaml_data``; this module
+reads the ec sections back off ``model.notes['_yaml_sections']`` to
+populate the typed ``EcData``.
 
 The loader also dispatches SBML files (`.xml` / `.sbml`) to
 ``geckopy.io.sbml.read_sbml_ec_model``, so the same call works
 for both formats.
 
 Legacy MATLAB / RAVEN ecModels load too: ``_normalize_legacy_layout``
-lifts ``id`` / ``name`` / ``version`` out of ``metaData`` and moves
-per-metabolite ``smiles`` into ``annotation`` before handing the
-document to cobra.
+is applied to the raw YAML dict before the raven-python pass, lifting
+``id`` / ``name`` / ``version`` out of ``metaData`` and moving
+per-metabolite ``smiles`` into ``annotation``. Old RAVEN files written
+as a bare ``-`` sequence of single-key mappings (no ``!!omap``) are
+also merged to a single mapping before the pass.
 
 Some ecModels write ``usage_prot_*`` and ``prot_pool_exchange`` with
 the opposite sign convention to the forward direction (positive flux).
@@ -42,7 +46,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
-from cobra.io.dict import model_from_dict
+from raven_python.io.yaml import model_from_yaml_data
 from ruamel.yaml import YAML
 from scipy import sparse
 
@@ -105,22 +109,30 @@ def load_ec_model(
     if path.suffix.lower() in _SBML_SUFFIXES:
         from ..io.sbml import read_sbml_ec_model
         return read_sbml_ec_model(path, adapter=adapter)
+
     data = _read_yaml(path)
     data = _normalize_legacy_layout(data)
-
-    ec_rxns_raw = data.pop("ec-rxns", None)
-    ec_enzymes_raw = data.pop("ec-enzymes", None)
-    if ec_rxns_raw is None or ec_enzymes_raw is None:
+    # Check for the GECKO sections up-front so a non-ecmodel YAML gets a
+    # clear ValueError before cobra's looser "missing .reactions" complaint.
+    if "ec-rxns" not in data or "ec-enzymes" not in data:
         raise ValueError(
             f"{path}: YAML lacks `ec-rxns` and/or `ec-enzymes` "
             "top-level keys; this is not a geckopy ecModel YAML"
         )
 
-    gecko_light = bool(data.pop("gecko_light", False))
-    data.pop("metaData", None)  # preserved on disk; ignored on load
-
-    cobra_model = model_from_dict(data)
+    cobra_model = model_from_yaml_data(data)
     _flip_legacy_prot_direction(cobra_model)
+
+    yaml_sections = cobra_model.notes.get("_yaml_sections") or {}
+    ec_rxns_raw = yaml_sections["ec-rxns"]
+    ec_enzymes_raw = yaml_sections["ec-enzymes"]
+    gecko_light = bool(yaml_sections.get("gecko_light", False))
+    # The ec sections live on the typed EcData from here on; drop them from
+    # .notes so a subsequent save_ec_model doesn't double-emit. metaData is
+    # also preserved on disk but ignored on load.
+    cobra_model.notes.pop("_yaml_sections", None)
+    cobra_model.notes.pop("metaData", None)
+
     ec_data = _build_ec_data(
         ec_rxns_raw, ec_enzymes_raw, gecko_light=gecko_light,
     )
