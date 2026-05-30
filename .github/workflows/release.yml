@@ -19,6 +19,13 @@ jobs:
   build:
     name: Build sdist + wheel
     runs-on: ubuntu-latest
+    # softprops/action-gh-release uses the workflow GITHUB_TOKEN to attach
+    # assets to the release; without contents:write it fails with HTTP 403
+    # "Resource not accessible by integration". Repos created after the
+    # 2023 GITHUB_TOKEN-permissions tightening default to read-only, so
+    # this needs to be declared explicitly.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
