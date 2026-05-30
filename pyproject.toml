@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "geckopy"
-version = "0.1.0a2"
+version = "0.1.0a3"
 description = "Enzyme-constrained genome-scale metabolic modeling in Python, inspired by the GECKO Toolbox"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -67,6 +67,15 @@ Issues = "https://github.com/SysBioChalmers/geckopy/issues"
 
 [project.scripts]
 geckopy = "geckopy.cli:main"
+
+[tool.hatch.metadata]
+# Allow `raven-python @ git+https://...` (PEP 508 direct URL) in
+# project.dependencies. hatchling refuses direct references by default
+# because PyPI rejects sdists that contain them — geckopy can't go on
+# PyPI yet anyway (name is taken), and raven-python isn't on PyPI yet
+# either, so the git URL is the only option for the alpha series.
+# Re-evaluate when raven-python ships to PyPI.
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/geckopy"]
