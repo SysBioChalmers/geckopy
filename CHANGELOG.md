@@ -4,6 +4,22 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [0.1.0a3] — 2026-05-30
+
+Build-config hotfix. v0.1.0a2 was tagged but its release.yml build
+failed: hatchling refuses PEP 508 direct-URL dependencies
+(`raven-python @ git+https://...`) by default. The v0.1.0a2 tag and
+release were deleted; v0.1.0a3 is the published artifact carrying the
+0.1.0a2 content described below. No code changes vs. v0.1.0a2.
+
+### Fixed
+
+- `pyproject.toml`: `[tool.hatch.metadata] allow-direct-references =
+  true` so hatchling accepts the `raven-python` git URL dependency.
+  PyPI publish stays disabled (geckopy's name is taken, raven-python
+  isn't on PyPI yet); the direct reference is acceptable for the
+  git-install path the alpha series uses.
+
 ## [0.1.0a2] — 2026-05-30
 
 Second public alpha. Layering pass: the bits of geckopy that aren't
@@ -194,6 +210,7 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.
 
+[0.1.0a3]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a3
 [0.1.0a2]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a2
 [0.1.0a1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a1
 [#1]: https://github.com/SysBioChalmers/geckopy/pull/1
