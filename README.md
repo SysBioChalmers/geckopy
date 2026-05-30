@@ -31,7 +31,7 @@ from GitHub:
 
 ```bash
 pip install \
-    git+https://github.com/SysBioChalmers/raven-python.git@main \
+    git+https://github.com/SysBioChalmers/raven-python.git@develop \
     git+https://github.com/SysBioChalmers/geckopy.git@develop
 ```
 
@@ -78,14 +78,14 @@ uniprot = load_uniprot_tsv(adapter.params.path / "data" / "uniprot.tsv")
 #    protein pool, and per-enzyme usage reactions on top of the GEM.
 ec_model = make_ec_model(model, adapter, uniprot_db=uniprot)
 
-# 4. Save in geckopy's YAML format. SBML (.xml) is also supported.
+# 4. Save in geckopy's YAML format.
 save_ec_model(ec_model, "ecModel.yml", adapter=adapter)
 ```
 
 Every public function (loaders, kcat fetchers, FBA/FVA helpers,
-SBML I/O, ...) is reachable as `from geckopy import X` -- the
+YAML I/O, ...) is reachable as `from geckopy import X` -- the
 subpackages exist for code organisation but you don't have to use
-them. See `geckopy.__all__` for the full list (~85 names).
+them. See `geckopy.__all__` for the full list (~80 names).
 
 The full protocol (which adds kcat curation from BRENDA and DLKcat,
 proteomics integration, and Crabtree-effect simulation) is in
@@ -93,18 +93,16 @@ proteomics integration, and Crabtree-effect simulation) is in
 That script reproduces the MATLAB GECKO Nature Protocols tutorial in
 Python, step by step, and is the easiest way to see geckopy in action.
 
-## On-disk formats
+## On-disk format
 
-geckopy reads and writes ecModels in two formats:
-
-- **YAML** (recommended): a canonical, human-readable format that is a
-  strict superset of cobrapy's YAML schema, with two extra top-level
-  keys for the ec data (`ec-rxns`, `ec-enzymes`). Standard cobrapy
-  tools (escher, memote, ...) can read the cobra portion and silently
-  ignore the GECKO-specific extensions.
-- **SBML** (.xml): for interoperability with other constraint-based
-  modelling tools. The ec data is encoded as a `Protein` SBML group
-  with MW carried in species notes.
+geckopy reads and writes ecModels as **YAML**: a canonical,
+human-readable format that is a strict superset of cobrapy's YAML
+schema, with three extra top-level keys for the ec data (`ec-rxns`,
+`ec-enzymes`, `gecko_light`). Standard cobrapy tools (escher, memote,
+...) can read the cobra portion and silently ignore the GECKO
+extensions. The same format is read and written by MATLAB GECKO /
+RAVEN, so ecModels exchange between the two toolboxes with no
+translator. The schema and the parsing live in raven-python.
 
 See [`docs/yaml_format.md`](docs/yaml_format.md) for the YAML
 specification and how it differs from the legacy MATLAB / RAVEN format.

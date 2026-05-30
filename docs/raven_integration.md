@@ -2,52 +2,48 @@
 
 geckopy depends on [raven-python](https://github.com/SysBioChalmers/raven-python),
 the Python port of the RAVEN Toolbox. raven-python owns the generic
-model-manipulation primitives and the YAML I/O backbone; geckopy keeps
-the enzyme-constraint layer that's specific to it.
+model-manipulation primitives and the YAML I/O (including the GECKO
+ec-model substructure); geckopy keeps the enzyme-constraint *algorithms*
+that operate on top.
 
 ## What geckopy delegates to raven-python today
 
 | geckopy module / API | re-exports from raven-python |
 |---|---|
+| `geckopy.EcData` | `raven_python.io.EcData` |
 | `geckopy.ec_model.pipeline.expand.expand_model` | `raven_python.manipulation.expand.expand_model` |
 | `geckopy.ec_model.pipeline.preprocess.convert_to_irreversible` | `raven_python.manipulation.irreversible.convert_to_irreversible` |
 | `geckopy.utilities.add_new_rxns_to_ec` (internal `_gpr_to_dnf`) | `raven_python.manipulation.expand._gpr_to_dnf` |
-| `geckopy.utilities.save_ec_model` | `raven_python.io.yaml.write_yaml_model` (cobra-side serialisation + opaque round-trip of GECKO top-level keys) |
-| `geckopy.utilities.load_ec_model` | `raven_python.io.yaml.model_from_yaml_data` (cobra-side parsing + capture of unknown top-level keys onto `model.notes['_yaml_sections']`) |
+| `geckopy.utilities.save_ec_model` | `raven_python.io.write_yaml_model` |
+| `geckopy.utilities.load_ec_model` | `raven_python.io.read_yaml_model` |
 
-The first three are 1:1 re-exports — same function names, same
-signatures. geckopy keeps the modules as the documented entry points so
-existing user code keeps working; over time callers can `import` from
-raven-python directly if they prefer.
+This mirrors MATLAB GECKO + RAVEN: `model.ec` is a RAVEN-owned struct,
+and `readYAMLmodel.m` / `writeYAMLmodel.m` populate / serialise it
+without any GECKO involvement. Downstream consumers (geckopy / GECKO)
+operate on the populated struct.
 
-The YAML I/O delegation is layered:
+## YAML I/O split
 
-- **`save_ec_model`** builds the `ec-rxns` / `ec-enzymes` / `gecko_light`
-  sections from `EcData` (with the GECKO conventions: omit empty
-  `source` / `notes` / `eccodes`, treat `kcat == 0` as "no kcat
-  assigned", omit NaN `mw` / `concs` and empty `sequence`), stashes
-  them on `model.notes['_yaml_sections']` plus `metaData` on
-  `model.notes['metaData']`, calls `raven_python.io.yaml.write_yaml_model`,
-  then restores the caller's `model.notes` (the mutation is transient).
-  Numerical coercion of the GECKO sections happens inside geckopy
-  because raven-python's writer only coerces the cobra-shaped portion;
-  numpy / ruamel scalars inside `_yaml_sections` would otherwise trip
-  the safe-dumper.
-- **`load_ec_model`** reads the raw YAML with its own `_read_yaml`
-  (handles legacy bare-`-` sequences of single-key mappings), applies
-  `_normalize_legacy_layout` (lifts `id`/`name`/`version` out of
-  `metaData`, moves per-metabolite top-level `smiles` into `annotation`),
-  hands the cleaned dict to `model_from_yaml_data`, then reads the
-  GECKO sections back off `cobra_model.notes['_yaml_sections']` to build
-  the typed `EcData`. Geckopy also keeps `_flip_legacy_prot_direction`
-  (a geckopy-specific post-pass for older MATLAB ecModels written with
-  reverse-sign protein reactions).
+raven-python's `read_yaml_model` and `write_yaml_model`:
 
-On-disk format is the same RAVEN/cobrapy YAML in both directions — files
-written by geckopy load in raven-python (as a plain `cobra.Model` with
-the GECKO sections stashed opaquely on `.notes['_yaml_sections']`), and
-files written by raven-python / MATLAB RAVEN / MATLAB GECKO load in
-geckopy as full `EcModel`s.
+- handle the cobra-shaped portion (metabolites / reactions / genes / compartments / annotations);
+- on read, parse the `ec-rxns` / `ec-enzymes` / `gecko_light` top-level sections into a typed `EcData` (`raven_python.io.ec_data`) and attach it as `model.ec`;
+- on write, serialise `model.ec` back to the same top-level sections when present;
+- normalise three legacy MATLAB GECKO quirks transparently: top-level `smiles` → `annotation['smiles']`, reverse-direction `usage_prot_*` / `prot_pool_exchange` flipped to forward, bare-`-` document root merged into one mapping;
+- preserve other unknown top-level keys opaquely via `model.notes['_yaml_sections']` for round-trip.
+
+geckopy's `save_ec_model` / `load_ec_model` are thin wrappers that
+add three application-level concerns on top:
+
+1. **File-extension validation** — only `.yml` / `.yaml` is accepted (SBML ecModel I/O was dropped; the message points users at the new contract).
+2. **Adapter-aware path resolution** — relative filenames resolve under `<adapter.params.path>/models/<filename>`.
+3. **Provenance + diagnostics** — `save_ec_model` injects a `metaData` block (date + geckopy version + description); both wrappers fast-fail with clear messages when the YAML isn't an ecModel or the in-memory model has an empty `ec`.
+
+On-disk format is the same RAVEN/cobrapy YAML in both directions: files
+written by geckopy load in raven-python (as a `cobra.Model` with
+`model.ec` populated as a typed `EcData`), and files written by
+raven-python / MATLAB RAVEN / MATLAB GECKO load in geckopy as full
+`EcModel`s.
 
 ## Planned future migrations
 
@@ -57,8 +53,10 @@ geckopy as full `EcModel`s.
 
 ## What geckopy keeps in-tree (not raven-python territory)
 
-- The `EcModel` / `EcData` / `Enzyme` dataclasses and the
-  `make_ec_model` 9-stage pipeline (GECKO-specific).
+- The `EcModel` class (subclass of `cobra.Model` with `model.ec` +
+  `model.adapter` + `model.enzymes`) and the `make_ec_model` 9-stage
+  pipeline (GECKO-specific).
+- The `Enzyme` proxy (`model.enzymes.get_by_id(...)`).
 - BRENDA loaders + fuzzy kcat matching + DLKcat wrappers
   (`geckopy.gather_kcats`, `geckopy.databases.brenda`).
 - Per-gene KEGG REST-API downloader (`geckopy.databases.kegg_download`).
@@ -67,8 +65,6 @@ geckopy as full `EcModel`s.
 - Phylogenetic-distance matrix loading (`geckopy.databases.phyl_dist`).
   raven-python has a different concern: KEGG taxonomy parsing
   (`raven_python.reconstruction.kegg.taxonomy`).
-- SBML round-trip with `ec_*` metadata encoded in notes
-  (`geckopy.io.sbml`).
 - Everything under `geckopy.limit_proteins`,
   `geckopy.kcat_sensitivity_analysis`,
   `geckopy.ec_model.pipeline.protein_pool`, etc. — pure

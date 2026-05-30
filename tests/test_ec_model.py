@@ -39,7 +39,7 @@ def test_from_cobra_preserves_reactions():
 def test_validate_ec_catches_unknown_reaction_id():
     base = _tiny_cobra_model()
     ec_model = EcModel.from_cobra(base, adapter=None)
-    ec_model.ec = EcData.empty_for_reactions(n_rxns=1)
+    ec_model.ec = EcData.empty(n_rxns=1)
     ec_model.ec.rxns = ["not_in_model"]
     with pytest.raises(ValueError, match="not present in the model"):
         ec_model.validate_ec()
@@ -48,6 +48,6 @@ def test_validate_ec_catches_unknown_reaction_id():
 def test_validate_ec_accepts_consistent_state():
     base = _tiny_cobra_model()
     ec_model = EcModel.from_cobra(base, adapter=None)
-    ec_model.ec = EcData.empty_for_reactions(n_rxns=1)
+    ec_model.ec = EcData.empty(n_rxns=1)
     ec_model.ec.rxns = ["r1"]
     ec_model.validate_ec()  # should not raise
