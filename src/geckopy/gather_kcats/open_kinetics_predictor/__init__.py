@@ -1,7 +1,7 @@
 """Submit/fetch kcat predictions via the OpenKineticsPredictor REST API.
 
 Replaces the manual write-CSV -> upload -> download -> parse workflow.
-See ``docs/openkineticspredictor_plan.md``.
+See ``docs/internal/openkineticspredictor_plan.md``.
 """
 from __future__ import annotations
 
