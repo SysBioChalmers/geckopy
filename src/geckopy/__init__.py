@@ -26,8 +26,9 @@ The most-used names, grouped by stage of a typical workflow:
 - **Analyse**: ``ec_fva``, ``ec_fseof``, ``enzyme_usage``,
   ``report_enzyme_usage``, ``get_enzyme_bottlenecks``,
   ``pfba_enzymes``, ``map_rxns_to_conv``
-- **I/O**: ``save_ec_model``, ``load_ec_model``,
-  ``read_sbml_ec_model``, ``write_sbml_ec_model``
+- **I/O**: ``save_ec_model``, ``load_ec_model``  (YAML only — SBML
+  ecModel I/O was removed; the YAML schema and the (de)serialisation
+  live in raven-python, see ``raven_python.io.ec_data``)
 - **Per-enzyme proxy**: ``Enzyme`` (lazy view via ``model.enzymes``)
 """
 # Adapter
@@ -145,12 +146,6 @@ from geckopy.utilities import (
     save_ec_model,
 )
 
-# SBML I/O (libsbml is already a cobra-py hard dependency).
-from geckopy.io import (
-    read_sbml_ec_model,
-    write_sbml_ec_model,
-)
-
 __all__ = [
     # Adapter
     "ModelAdapter",
@@ -241,9 +236,6 @@ __all__ = [
     "pfba_enzymes",
     "report_enzyme_usage",
     "save_ec_model",
-    # SBML I/O
-    "read_sbml_ec_model",
-    "write_sbml_ec_model",
     # Deprecated aliases (kept reachable so old `from geckopy import X` still works)
     "constrain_flux_data",  # -> apply_flux_data_constraints
     "get_ec_from_database",  # -> fill_eccodes_from_database

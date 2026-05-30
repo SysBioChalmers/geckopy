@@ -123,9 +123,16 @@ def test_default_filename_without_adapter_raises(tmp_path):
 
 
 def test_unknown_extension_raises(tmp_path):
-    """Anything outside YAML/SBML is rejected."""
-    with pytest.raises(ValueError, match="YAML or SBML"):
+    """Anything outside YAML is rejected (SBML ecModel I/O was removed)."""
+    with pytest.raises(ValueError, match="YAML only"):
         load_ec_model("ecModel.txt", adapter=None)
+
+
+def test_sbml_extension_raises_with_helpful_message(tmp_path):
+    """Past versions accepted .xml / .sbml; the new error message points
+    that out so existing callers learn what changed."""
+    with pytest.raises(ValueError, match="SBML ecModel I/O has been removed"):
+        load_ec_model("ecModel.xml", adapter=None)
 
 
 def test_missing_file_raises(tmp_path):
@@ -144,14 +151,26 @@ def test_scalar_top_level_raises(tmp_path):
 
 
 def test_legacy_sequence_top_level_is_merged(tmp_path):
-    """A legacy RAVEN `- key: val` sequence-of-single-key-maps is merged
-    into one mapping; it then fails the ec-rxns check (not the
-    must-be-a-mapping check), confirming the merge happened."""
+    """A legacy RAVEN `- key: val` sequence-of-single-key-maps loads as
+    if it had been written as one big mapping — verifies the merge in
+    raven-python's reader is reached through the geckopy wrapper.
+    """
     adapter = _adapter(tmp_path)
+    # Take the canonical doc and re-emit it as one-key-per-list-item.
+    doc = _canonical_yaml()
     path = tmp_path / "models" / "ecModel.yml"
-    path.write_text("- id: m1\n- metabolites: []\n")
-    with pytest.raises(ValueError, match="ec-rxns"):
-        load_ec_model("ecModel.yml", adapter=adapter)
+    legacy_lines = []
+    yaml = YAML(typ="safe")
+    yaml.default_flow_style = False
+    import io as _io
+    for key, value in doc.items():
+        block = _io.StringIO()
+        yaml.dump({key: value}, block)
+        legacy_lines.append("- " + block.getvalue().replace("\n", "\n  "))
+    path.write_text("\n".join(legacy_lines))
+    model = load_ec_model("ecModel.yml", adapter=adapter)
+    assert model.id == "demo"
+    assert model.ec.rxns == ["R1", "R2"]
 
 
 def test_missing_ec_rxns_raises(tmp_path):

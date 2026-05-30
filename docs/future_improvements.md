@@ -34,15 +34,6 @@ dependencies. Each is worked around in source today; the entries
 exist so the next person hitting the same wall can find the fix
 fast, and so we have a list of things to retest when we upgrade.
 
-- **`libsbml.Species.appendNotes` silently fails on cobra-written
-  documents.** Returns status `-5` (`LIBSBML_INVALID_OBJECT`) with
-  no exception, so the MW we tried to write into the species notes
-  was lost. Tried both `<html>` and `<notes>` wrappers; same result.
-  Workaround: set MW via `cobra.Metabolite.notes["mw"]` *before*
-  calling `cobra.io.write_sbml_model`; cobra serialises that dict
-  into SBML `<notes>` reliably. See
-  `geckopy.io.sbml._annotate_mw`. Tested with libsbml 5.21.1.
-
 - **`multiprocessing.Pool(context="spawn")` deadlocks on some WSL
   kernels.** Even a trivial 2-worker pool with a `lambda x: x*2`
   task hangs forever — no error, no timeout. The original plan for
@@ -180,11 +171,3 @@ Notable items:
   factor look fine until they don't. geckopy's split design
   (`load_pax_db` raises FileNotFoundError, `calculate_f_factor`
   requires pre-loaded data) makes the missing-data case explicit.
-- Drop the `e-005` -> `e-05 ` post-processing in `saveEcModel`'s
-  SBML branch. The Windows/Mac stoichiometric-coefficient
-  formatting workaround predates current libSBML, which formats
-  consistently across platforms. The backup-file dance is also a
-  footgun: if the function errors mid-way the user is left with a
-  dangling `backup.xml`. Either rely on libSBML's current output
-  directly, or fix it via a libSBML option rather than text
-  rewriting.

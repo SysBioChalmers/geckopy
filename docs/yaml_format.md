@@ -11,9 +11,11 @@ handful of GECKO-specific top-level keys added alongside for the data
 cobra doesn't model: kcat values, the enzyme list (MW, sequence,
 concentration), and the reaction-enzyme coupling matrix.
 
-geckopy builds the cobra portion with `cobra.io.dict.model_to_dict`
-and writes the whole document with cobra's own YAML serialiser. That
-means:
+geckopy delegates the I/O to
+[raven-python](https://github.com/SysBioChalmers/raven-python), which
+calls cobrapy for the cobra-shaped portion and parses the GECKO
+`ec-rxns` / `ec-enzymes` / `gecko_light` sections into a typed
+`EcData` substructure attached as `model.ec`. That means:
 
 - any cobrapy-aware tool (Escher, Memote, plain cobra) loads the file
   and simply ignores the extra `ec-*` keys;
@@ -45,16 +47,17 @@ contains the following keys:
 | `metabolites` | yes | cobra | List of metabolite entries (see below) |
 | `reactions` | yes | cobra | List of reaction entries (see below) |
 | `genes` | yes | cobra | List of gene entries (see below) |
-| `ec-rxns` | yes (for ecModel) | geckopy | Per-reaction ec data (see below) |
-| `ec-enzymes` | yes (for ecModel) | geckopy | Per-enzyme ec data (see below) |
-| `gecko_light` | optional | geckopy | Boolean flag; defaults to `false` |
-| `metaData` | optional | geckopy | Free-form provenance: version, date, author, taxonomy, note |
+| `ec-rxns` | yes (for ecModel) | raven-python | Per-reaction ec data (see below) |
+| `ec-enzymes` | yes (for ecModel) | raven-python | Per-enzyme ec data (see below) |
+| `gecko_light` | optional | raven-python | Boolean flag; defaults to `false` |
+| `metaData` | optional | raven-python | Free-form provenance: version, date, author, taxonomy, note |
 
-The "Owner" column says which library the field belongs to. Tools
-that only understand the cobra side (cobrapy, escher, memote, ...)
-silently ignore the geckopy-specific keys (`ec-rxns`, `ec-enzymes`,
-`gecko_light`, `metaData`), so a geckopy YAML loads cleanly as a
-plain cobra model in those tools — you just lose the ec layer.
+The "Owner" column says which library defines and parses each field.
+Tools that only understand the cobra side (cobrapy, escher, memote,
+...) silently ignore the GECKO-specific keys (`ec-rxns`,
+`ec-enzymes`, `gecko_light`, `metaData`), so the same file loads
+cleanly as a plain cobra model in those tools — you just lose the ec
+layer.
 
 ## Cobra-shaped section
 
