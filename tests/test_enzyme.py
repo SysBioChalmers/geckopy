@@ -282,3 +282,90 @@ def test_repr_smoke():
     s = repr(enz)
     assert "P4" in s
     assert "G4" in s
+
+
+# --------------------------------------------------------------------------- #
+# Real gecko-light builds (not a flipped flag — actual ec.rxns shape)
+# --------------------------------------------------------------------------- #
+
+_ECTESTGEM_LIGHT_CACHE: EcModel | None = None
+
+
+def _ectestgem_light_ec_model() -> EcModel:
+    """Cached gecko-light build of ecTestGEM; deep-copied per call."""
+    import copy as _copy
+    global _ECTESTGEM_LIGHT_CACHE
+    if _ECTESTGEM_LIGHT_CACHE is None:
+        adapter = ModelAdapter.from_folder(EXAMPLE_DIR)
+        cobra_model = cobra.io.read_sbml_model(str(adapter.params.conv_gem))
+        _ECTESTGEM_LIGHT_CACHE = make_ec_model(
+            cobra_model, adapter, gecko_light=True,
+        )
+    return _copy.deepcopy(_ECTESTGEM_LIGHT_CACHE)
+
+
+def test_light_reactions_returns_cobra_reactions():
+    """On a real light build, ec.rxns ids are prefixed (``001_R3``) but
+    cobra has the unprefixed reaction. ``Enzyme.reactions`` must strip
+    the prefix so it returns the real cobra reaction, not an empty set.
+    """
+    model = _ectestgem_light_ec_model()
+    enz = model.enzymes.get_by_id("P4")  # G4 catalyses R3
+    rxn_ids = {r.id for r in enz.reactions}
+    assert "R3" in rxn_ids
+    # And the entries are real cobra.Reaction instances.
+    assert all(isinstance(r, cobra.Reaction) for r in enz.reactions)
+
+
+def test_light_reactions_dedupes_isozyme_rows():
+    """G1 is part of R2's complex isozyme (``001_R2`` AND ``001_R2_REV``).
+    Both ec rows point to the same pair of cobra reactions, so the
+    returned set must contain each cobra reaction once."""
+    model = _ectestgem_light_ec_model()
+    enz = model.enzymes.get_by_id("P1")
+    cobra_ids = [r.id for r in enz.reactions]
+    assert len(cobra_ids) == len(set(cobra_ids)), (
+        f"Duplicate cobra reactions in Enzyme.reactions: {cobra_ids}"
+    )
+    assert set(cobra_ids) == {"R2", "R2_REV"}
+
+
+def test_light_mw_setter_reapplies_constraints():
+    """Changing MW on a light build must re-apply prot_pool coefficients
+    for every reaction the enzyme participates in. Uses ec.rxns ids
+    (the ``###_`` prefixed form) internally."""
+    model = _ectestgem_light_ec_model()
+    # Set a kcat on 001_R3 (the single isozyme of R3 = G4) and apply.
+    r3_idx = model.ec.rxns.index("001_R3")
+    model.ec.kcat[r3_idx] = 10.0
+    apply_kcat_constraints(model)
+
+    enz = model.enzymes.get_by_id("P4")
+    enz.mw = 50000.0
+
+    coef = _get_s_coef(model.reactions.get_by_id("R3"), "prot_pool")
+    # cheapest isozyme cost: -MW_sum / (kcat * 3600), MW_sum = 50000.
+    expected = -(50000.0 / (10.0 * 3600.0))
+    assert coef == pytest.approx(expected)
+
+
+def test_light_repr_html_does_not_crash():
+    """The HTML repr accesses flux/cap_usage; on light those raise
+    NotImplementedError, which the repr now catches alongside
+    RuntimeError. Verify it returns a string without crashing."""
+    model = _ectestgem_light_ec_model()
+    enz = model.enzymes.get_by_id("P4")
+    html = enz._repr_html_()
+    assert "P4" in html
+    assert ">-<" in html  # flux + cap_usage shown as '-'
+
+
+def test_light_kcats_keys_are_prefixed_ec_rxn_ids():
+    """Light kcats are keyed by ec.rxns ids (which carry the ``###_``
+    prefix in light), not by cobra reaction ids. Different isozymes
+    can hold different kcat values, so the prefix has to stay."""
+    model = _ectestgem_light_ec_model()
+    enz = model.enzymes.get_by_id("P4")  # only catalyses one row: 001_R3
+    assert list(enz.kcats) == ["001_R3"]
+    model.ec.kcat[model.ec.rxns.index("001_R3")] = 7.5
+    assert enz.kcats["001_R3"] == pytest.approx(7.5)
