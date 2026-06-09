@@ -350,7 +350,7 @@ def allocate_ec_and_coupling_light(model: "EcModel") -> list[str]:
     isozyme reactions in the cobra layer (expand_model is skipped), so the
     per-isozyme bookkeeping moves into ec instead:
 
-    - Each cobra reaction with N isozymes (i.e. ``len(_gpr_to_dnf(rxn.gpr))
+    - Each cobra reaction with N isozymes (i.e. ``len(gpr_to_dnf(rxn.gpr))
       == N``) produces N rows in ec.rxns. Row k carries the id
       ``"{k:03d}_{rxn.id}"`` (1-indexed, three-digit zero-padded counter).
     - Row k's slice of ``ec.rxn_enz_mat`` is 1.0 for each gene in that
@@ -378,7 +378,7 @@ def allocate_ec_and_coupling_light(model: "EcModel") -> list[str]:
     list of str
         The prefixed reaction IDs written into ``model.ec.rxns``.
     """
-    from raven_python.manipulation.expand import _gpr_to_dnf
+    from raven_python.manipulation.expand import gpr_to_dnf
 
     enzyme_index: dict[str, int] = {
         g: i for i, g in enumerate(model.ec.genes)
@@ -393,7 +393,7 @@ def allocate_ec_and_coupling_light(model: "EcModel") -> list[str]:
     for rxn in model.reactions:
         if not rxn.genes:
             continue
-        clauses = _gpr_to_dnf(rxn.gpr)
+        clauses = gpr_to_dnf(rxn.gpr)
         if not clauses:
             continue
         for k, clause in enumerate(clauses, start=1):
