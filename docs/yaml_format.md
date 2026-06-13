@@ -12,7 +12,7 @@ cobra doesn't model: kcat values, the enzyme list (MW, sequence,
 concentration), and the reaction-enzyme coupling matrix.
 
 geckopy delegates the I/O to
-[raven-python](https://github.com/SysBioChalmers/raven-python), which
+[raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox), which
 calls cobrapy for the cobra-shaped portion and parses the GECKO
 `ec-rxns` / `ec-enzymes` / `gecko_light` sections into a typed
 `EcData` substructure attached as `model.ec`. That means:
@@ -47,10 +47,10 @@ contains the following keys:
 | `metabolites` | yes | cobra | List of metabolite entries (see below) |
 | `reactions` | yes | cobra | List of reaction entries (see below) |
 | `genes` | yes | cobra | List of gene entries (see below) |
-| `ec-rxns` | yes (for ecModel) | raven-python | Per-reaction ec data (see below) |
-| `ec-enzymes` | yes (for ecModel) | raven-python | Per-enzyme ec data (see below) |
-| `gecko_light` | optional | raven-python | Boolean flag; defaults to `false` |
-| `metaData` | optional | raven-python | Free-form provenance: version, date, author, taxonomy, note |
+| `ec-rxns` | yes (for ecModel) | raven-toolbox | Per-reaction ec data (see below) |
+| `ec-enzymes` | yes (for ecModel) | raven-toolbox | Per-enzyme ec data (see below) |
+| `gecko_light` | optional | raven-toolbox | Boolean flag; defaults to `false` |
+| `metaData` | optional | raven-toolbox | Free-form provenance: version, date, author, taxonomy, note |
 
 The "Owner" column says which library defines and parses each field.
 Tools that only understand the cobra side (cobrapy, escher, memote,

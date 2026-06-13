@@ -4,26 +4,48 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [0.2.0] — 2026-06-14
+
+Dependency rename + CI hardening. geckopy now targets **raven-toolbox**
+(the renamed raven-python) and runs its test matrix on every pull request.
+
+### Changed
+
+- **Depend on `raven-toolbox`** (renamed from `raven-python`): all imports are
+  now `raven_toolbox.*`, and the `pyproject.toml` git-URL dependency and project
+  URL point at `SysBioChalmers/raven-toolbox`. (#29)
+- Use the public `raven_toolbox.manipulation.expand.gpr_to_dnf` instead of the
+  former private `_gpr_to_dnf`. (#26)
+- **CI: run the test matrix on every pull request**, not only PRs into
+  `main` / `master`.
+- **CI: bump GitHub Actions to Node 24 runtimes** — `checkout@v5`,
+  `setup-python@v6`, `upload-artifact@v7`, `download-artifact@v8`. (#27)
+
+### Documentation
+
+- Rewrote `migrating_from_gecko_matlab.md` as a complete reference (#25); moved
+  internal planning notes into `docs/internal/` (#28).
+
 ## [0.1.0a3] — 2026-05-30
 
 Build-config hotfix. v0.1.0a2 was tagged but its release.yml build
 failed: hatchling refuses PEP 508 direct-URL dependencies
-(`raven-python @ git+https://...`) by default. The v0.1.0a2 tag and
+(`raven-toolbox @ git+https://...`) by default. The v0.1.0a2 tag and
 release were deleted; v0.1.0a3 is the published artifact carrying the
 0.1.0a2 content described below. No code changes vs. v0.1.0a2.
 
 ### Fixed
 
 - `pyproject.toml`: `[tool.hatch.metadata] allow-direct-references =
-  true` so hatchling accepts the `raven-python` git URL dependency.
-  PyPI publish stays disabled (geckopy's name is taken, raven-python
+  true` so hatchling accepts the `raven-toolbox` git URL dependency.
+  PyPI publish stays disabled (geckopy's name is taken, raven-toolbox
   isn't on PyPI yet); the direct reference is acceptable for the
   git-install path the alpha series uses.
 
 ## [0.1.0a2] — 2026-05-30
 
 Second public alpha. Layering pass: the bits of geckopy that aren't
-GECKO-specific moved into raven-python, and `gecko-light` ecModels are now
+GECKO-specific moved into raven-toolbox, and `gecko-light` ecModels are now
 buildable end-to-end. Repo housekeeping for a discoverable first GitHub
 release (LICENSE, planning docs out of the user-facing tree).
 
@@ -43,9 +65,9 @@ release (LICENSE, planning docs out of the user-facing tree).
 
 ### Changed
 
-- **YAML I/O delegated to raven-python.** `save_ec_model` / `load_ec_model`
-  are now ~80-LOC wrappers around `raven_python.io.read_yaml_model` /
-  `write_yaml_model`. raven-python owns the typed `EcData` (now re-exported
+- **YAML I/O delegated to raven-toolbox.** `save_ec_model` / `load_ec_model`
+  are now ~80-LOC wrappers around `raven_toolbox.io.read_yaml_model` /
+  `write_yaml_model`. raven-toolbox owns the typed `EcData` (now re-exported
   as `geckopy.EcData`), the `ec-rxns` / `ec-enzymes` / `gecko_light` YAML
   schema, and the three legacy GECKO normalisations (top-level `smiles` →
   `annotation`, reverse-direction `usage_prot_*` flip, bare-`-` document
@@ -54,7 +76,7 @@ release (LICENSE, planning docs out of the user-facing tree).
   (`geckopy.io.sbml` deleted; `cobra.io.read_sbml_model` is still used for
   loading the conventional starting GEM). See [`docs/raven_integration.md`](docs/raven_integration.md). ([#19])
 
-- **`ec_fseof` re-aligned with `raven_python.analysis.fseof`.** Thin
+- **`ec_fseof` re-aligned with `raven_toolbox.analysis.fseof`.** Thin
   wrapper over raven's regression-based FSEOF: drops `usage_prot_*` from
   the scan + targets, resolves `bio_rxn` from the adapter, and emits an
   optional carbon-source consistency warning. Selection moves from MATLAB
@@ -65,7 +87,7 @@ release (LICENSE, planning docs out of the user-facing tree).
   per-gene `essentiality` column drops (use
   `cobra.flux_analysis.single_gene_deletion`). ([#21])
 
-- **`raven-python` pin** moved from `@main` to `@develop`. raven-python's
+- **`raven-toolbox` pin** moved from `@main` to `@develop`. raven-toolbox's
   `main` is empty in the current iteration; all releaseable work lives on
   `develop`.
 
@@ -82,7 +104,7 @@ release (LICENSE, planning docs out of the user-facing tree).
 
 - `geckopy.io.sbml.{read,write}_sbml_ec_model` and the `geckopy.io` package
   (SBML ecModel I/O dropped; YAML is the supported on-disk format).
-- `geckopy.EcFseofResult` (use `raven_python.analysis.fseof.FSEOFResult`).
+- `geckopy.EcFseofResult` (use `raven_toolbox.analysis.fseof.FSEOFResult`).
 - Top-level `requirements.txt` (a `pip freeze` snapshot that duplicated
   `pyproject.toml`'s declared dependencies). pyproject is the source of
   truth.
@@ -202,10 +224,10 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
 
 ### Dependencies
 
-- **raven-python is now a hard dependency** — geckopy delegates
-  `expand_model` and `convert_to_irreversible` to raven-python (the
+- **raven-toolbox is now a hard dependency** — geckopy delegates
+  `expand_model` and `convert_to_irreversible` to raven-toolbox (the
   functions originated in geckopy and were adopted upstream as their
-  canonical home). raven-python is not yet on PyPI; install both via
+  canonical home). raven-toolbox is not yet on PyPI; install both via
   the git URLs in the README. See
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.

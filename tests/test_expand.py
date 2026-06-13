@@ -2,8 +2,8 @@
 import cobra
 
 from geckopy.ec_model.pipeline import expand_model
-# _gpr_to_dnf lives in raven-python now (see docs/raven_integration.md).
-from raven_python.manipulation.expand import _gpr_to_dnf
+# gpr_to_dnf lives in raven-toolbox now (see docs/raven_integration.md).
+from raven_toolbox.manipulation.expand import gpr_to_dnf
 
 
 # --------------------------------------------------------------------------- #
@@ -13,7 +13,7 @@ from raven_python.manipulation.expand import _gpr_to_dnf
 def _dnf_from_gpr_string(gpr_str: str) -> list[list[str]]:
     from cobra.core.gene import GPR
     gpr = GPR.from_string(gpr_str)
-    return _gpr_to_dnf(gpr)
+    return gpr_to_dnf(gpr)
 
 
 def test_dnf_empty_gpr():

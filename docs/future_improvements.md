@@ -68,13 +68,13 @@ keep an in-flight release on schedule.
   would make every layer consistent. Small effect (only rows
   reported as ranges) — deferred.
 
-- **Drop the git URL from `pyproject.toml`'s raven-python
-  dependency once raven-python publishes to PyPI.** Currently
-  pinned to `raven-python @ git+https://github.com/SysBioChalmers/raven-python.git@main`,
+- **Drop the git URL from `pyproject.toml`'s raven-toolbox
+  dependency once raven-toolbox publishes to PyPI.** Currently
+  pinned to `raven-toolbox @ git+https://github.com/SysBioChalmers/raven-toolbox.git@main`,
   which forces an internet round-trip on every install and means
   no install reproducibility per release. Switch to a plain
-  `raven-python>=<min>` pin (and collapse the README install
-  block to `pip install geckopy`) the moment raven-python is on
+  `raven-toolbox>=<min>` pin (and collapse the README install
+  block to `pip install geckopy`) the moment raven-toolbox is on
   PyPI.
 
 ## MATLAB GECKO changes

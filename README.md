@@ -25,18 +25,18 @@ applies custom curations, and integrates proteomics measurements.
 
 ## Install
 
-geckopy depends on [raven-python](https://github.com/SysBioChalmers/raven-python)
+geckopy depends on [raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox)
 (the Python port of the RAVEN Toolbox), which is not yet on PyPI. Install both
 from GitHub:
 
 ```bash
 pip install \
-    git+https://github.com/SysBioChalmers/raven-python.git@develop \
+    git+https://github.com/SysBioChalmers/raven-toolbox.git@develop \
     git+https://github.com/SysBioChalmers/geckopy.git@develop
 ```
 
-Once raven-python and geckopy are published to PyPI, this collapses to
-`pip install geckopy` (raven-python will be pulled in transitively).
+Once raven-toolbox and geckopy are published to PyPI, this collapses to
+`pip install geckopy` (raven-toolbox will be pulled in transitively).
 
 Optional extras:
 
@@ -102,7 +102,7 @@ schema, with three extra top-level keys for the ec data (`ec-rxns`,
 ...) can read the cobra portion and silently ignore the GECKO
 extensions. The same format is read and written by MATLAB GECKO /
 RAVEN, so ecModels exchange between the two toolboxes with no
-translator. The schema and the parsing live in raven-python.
+translator. The schema and the parsing live in raven-toolbox.
 
 See [`docs/yaml_format.md`](docs/yaml_format.md) for the YAML
 specification and how it differs from the legacy MATLAB / RAVEN format.

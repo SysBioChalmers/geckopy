@@ -19,7 +19,7 @@ from ..ec_model.constants import (
     PROT_PREFIX,
     USAGE_PREFIX,
 )
-from raven_python.manipulation.expand import _gpr_to_dnf
+from raven_toolbox.manipulation.expand import gpr_to_dnf
 from ..ec_model.pipeline.protein_pool import _resolve_enzyme_compartment_id
 
 if TYPE_CHECKING:
@@ -258,7 +258,7 @@ def _expand_new_rxn(rxn: cobra.Reaction) -> list[cobra.Reaction]:
     name, etc.)."""
     is_reversible = rxn.lower_bound < 0
     if rxn.gene_reaction_rule:
-        clauses = _gpr_to_dnf(rxn.gpr)
+        clauses = gpr_to_dnf(rxn.gpr)
     else:
         clauses = []
 

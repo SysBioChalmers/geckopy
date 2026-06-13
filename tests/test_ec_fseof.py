@@ -1,4 +1,4 @@
-"""Tests for ec_fseof (thin wrapper around raven_python.analysis.fseof)."""
+"""Tests for ec_fseof (thin wrapper around raven_toolbox.analysis.fseof)."""
 from pathlib import Path
 
 import cobra
@@ -6,7 +6,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pytest
-from raven_python.analysis.fseof import FSEOFResult
+from raven_toolbox.analysis.fseof import FSEOFResult
 from scipy import sparse
 
 from geckopy import EcModel, ModelAdapter
@@ -195,7 +195,7 @@ def test_no_cs_rxn_no_warning(tmp_path, caplog):
 
 
 # --------------------------------------------------------------------------- #
-# Result shape (raven-python's FSEOFResult)
+# Result shape (raven-toolbox's FSEOFResult)
 # --------------------------------------------------------------------------- #
 
 def test_returns_raven_fseof_result(tmp_path):
