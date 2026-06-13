@@ -49,7 +49,7 @@ def test_loads_sbml_gem(tmp_path):
     if not sbml_src.is_file():
         pytest.skip("ecTestGEM fixture not present")
     (tmp_path / "model_adapter.toml").write_text(
-        f'conv_gem = "{sbml_src}"\n'
+        f'conv_gem = "{sbml_src.as_posix()}"\n'
         'org_name = "test"\n'
     )
     adapter = ModelAdapter.from_folder(tmp_path)
