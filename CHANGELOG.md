@@ -4,6 +4,28 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [0.2.0] — 2026-06-14
+
+Dependency rename + CI hardening. geckopy now targets **raven-toolbox**
+(the renamed raven-python) and runs its test matrix on every pull request.
+
+### Changed
+
+- **Depend on `raven-toolbox`** (renamed from `raven-python`): all imports are
+  now `raven_toolbox.*`, and the `pyproject.toml` git-URL dependency and project
+  URL point at `SysBioChalmers/raven-toolbox`. (#29)
+- Use the public `raven_toolbox.manipulation.expand.gpr_to_dnf` instead of the
+  former private `_gpr_to_dnf`. (#26)
+- **CI: run the test matrix on every pull request**, not only PRs into
+  `main` / `master`.
+- **CI: bump GitHub Actions to Node 24 runtimes** — `checkout@v5`,
+  `setup-python@v6`, `upload-artifact@v7`, `download-artifact@v8`. (#27)
+
+### Documentation
+
+- Rewrote `migrating_from_gecko_matlab.md` as a complete reference (#25); moved
+  internal planning notes into `docs/internal/` (#28).
+
 ## [0.1.0a3] — 2026-05-30
 
 Build-config hotfix. v0.1.0a2 was tagged but its release.yml build
