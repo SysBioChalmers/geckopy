@@ -153,7 +153,7 @@ def test_scalar_top_level_raises(tmp_path):
 def test_legacy_sequence_top_level_is_merged(tmp_path):
     """A legacy RAVEN `- key: val` sequence-of-single-key-maps loads as
     if it had been written as one big mapping — verifies the merge in
-    raven-python's reader is reached through the geckopy wrapper.
+    raven-toolbox's reader is reached through the geckopy wrapper.
     """
     adapter = _adapter(tmp_path)
     # Take the canonical doc and re-emit it as one-key-per-list-item.

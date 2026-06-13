@@ -26,7 +26,7 @@ them require you to change your model files.
 
 |                                 | GECKO 4 (MATLAB)                       | geckopy                                                 |
 | ------------------------------- | -------------------------------------- | ------------------------------------------------------- |
-| Model toolbox                   | RAVEN + COBRA Toolbox                  | cobrapy + raven-python                                  |
+| Model toolbox                   | RAVEN + COBRA Toolbox                  | cobrapy + raven-toolbox                                  |
 | Model object                    | RAVEN struct + `ec` field              | `EcModel(cobra.Model)` with an `.ec` dataclass          |
 | Per-entity classes              | none — parallel cell arrays            | `cobra.{Metabolite,Reaction,Gene}` instances            |
 | Per-enzyme accessor             | indexing into `model.ec.enzymes{i}`    | `Enzyme` proxy: `model.enzymes.get_by_id("P00350")`     |
@@ -88,8 +88,8 @@ proxy holds no state of its own; it forwards reads/writes into the
 (`enz.kcats["R_FOO"] = 30.0`) without paying for N real objects. See
 the per-table explanation in §5 for which entry-points read it.
 
-The `EcData` dataclass itself is owned by **raven-python**
-(`raven_python.io.EcData`); geckopy re-exports it as `geckopy.EcData`
+The `EcData` dataclass itself is owned by **raven-toolbox**
+(`raven_toolbox.io.EcData`); geckopy re-exports it as `geckopy.EcData`
 so existing imports keep working. Mirrors MATLAB RAVEN's split:
 `model.ec` is RAVEN-owned; GECKO is just a consumer.
 
@@ -291,19 +291,19 @@ Each row maps a MATLAB function to its geckopy equivalent. The
 | MATLAB                | geckopy                                | Notes                                                                                                                                                                                                                                                                                                                                                          |
 | --------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `addNewRxnsToEC`      | `add_new_rxns_to_ec`                   | **`[Py]`** Returns an `AddNewRxnsResult` dataclass.                                                                                                                                                                                                                                                                                                            |
-| `ecFSEOF`             | `ec_fseof`                             | **`[Py]`** Thin wrapper over `raven_python.analysis.fseof`. Selection method is regression-based (`|correlation| ≥ threshold` + `|slope| ≥ eps`) with pFBA per step, replacing MATLAB's strict-monotonicity + top-25 %-by-slope filter. Result type is raven's `FSEOFResult` (replaces `EcFseofResult`). Action labels are `amplify` / `knockdown` / `knockout` (replaces `OE` / `KD` / `KO`). The per-gene `essentiality` column is dropped — use `cobra.flux_analysis.single_gene_deletion`. |
+| `ecFSEOF`             | `ec_fseof`                             | **`[Py]`** Thin wrapper over `raven_toolbox.analysis.fseof`. Selection method is regression-based (`|correlation| ≥ threshold` + `|slope| ≥ eps`) with pFBA per step, replacing MATLAB's strict-monotonicity + top-25 %-by-slope filter. Result type is raven's `FSEOFResult` (replaces `EcFseofResult`). Action labels are `amplify` / `knockdown` / `knockout` (replaces `OE` / `KD` / `KO`). The per-gene `essentiality` column is dropped — use `cobra.flux_analysis.single_gene_deletion`. |
 | `ecFVA`               | `ec_fva`                               | **`[Py]`** Returns a `DataFrame` indexed by reaction id with `minimum` / `maximum` columns; can run in parallel (`n_jobs=`).                                                                                                                                                                                                                                  |
 | `enzymeUsage`         | `enzyme_usage`                         | **`[3→4]`** Usage flux read from positive `usage_prot_*` flux. **`[Py]`** Returns an `EnzymeUsageResult` dataclass (`per_enzyme` DataFrame + summary scalars).                                                                                                                                                                                                |
 | `findGECKOroot`       | *(not needed)*                         | Python: `pathlib.Path(__file__)` works.                                                                                                                                                                                                                                                                                                                        |
 | `getSubsetEcModel`    | `get_subset_ec_model`                  | **`[Py]`** Returns a new `EcModel`; the input is not mutated.                                                                                                                                                                                                                                                                                                  |
 | `loadConventionalGEM` | `load_conventional_gem`                | —                                                                                                                                                                                                                                                                                                                                                              |
-| `loadEcModel`         | `load_ec_model`                        | **`[3→4]`** Auto-flips legacy reverse-direction `usage_prot_*` / `prot_pool_exchange` to the forward convention (warns once). Reads the new cobrapy-style YAML. **`[Py]`** Thin wrapper over `raven_python.io.read_yaml_model` (which owns the YAML schema + typed `EcData`); SBML ecModel I/O dropped in `0.1.0a2`. |
+| `loadEcModel`         | `load_ec_model`                        | **`[3→4]`** Auto-flips legacy reverse-direction `usage_prot_*` / `prot_pool_exchange` to the forward convention (warns once). Reads the new cobrapy-style YAML. **`[Py]`** Thin wrapper over `raven_toolbox.io.read_yaml_model` (which owns the YAML schema + typed `EcData`); SBML ecModel I/O dropped in `0.1.0a2`. |
 | `loadFluxData`        | `load_flux_data`                       | **`[Py]`** Returns a `FluxData` dataclass.                                                                                                                                                                                                                                                                                                                    |
 | `loadProtData`        | `load_prot_data`                       | **`[Py]`** Returns a `ProtData` dataclass.                                                                                                                                                                                                                                                                                                                    |
 | `mapRxnsToConv`       | `map_rxns_to_conv`                     | **`[Py]`** Returns a `MapRxnsResult` dataclass (was three parallel outputs).                                                                                                                                                                                                                                                                                  |
 | `plotEcFVA`           | *(not ported)*                         | Use matplotlib / seaborn against the `ec_fva` DataFrame directly.                                                                                                                                                                                                                                                                                              |
 | `reportEnzymeUsage`   | `report_enzyme_usage`                  | **`[3→4]`** Reads positive `usage_prot_*` flux. **`[Py]`** Returns an `EnzymeUsageReport` dataclass.                                                                                                                                                                                                                                                          |
-| `saveEcModel`         | `save_ec_model`                        | **`[3→4]`** Emits the new cobrapy-style YAML; `usage_prot_*` written in forward convention. **`[Py]`** Thin wrapper over `raven_python.io.write_yaml_model`; YAML only (`.yml` / `.yaml`), SBML ecModel I/O dropped in `0.1.0a2`. Injects a `metaData` provenance block. |
+| `saveEcModel`         | `save_ec_model`                        | **`[3→4]`** Emits the new cobrapy-style YAML; `usage_prot_*` written in forward convention. **`[Py]`** Thin wrapper over `raven_toolbox.io.write_yaml_model`; YAML only (`.yml` / `.yaml`), SBML ecModel I/O dropped in `0.1.0a2`. Injects a `metaData` provenance block. |
 | `startGECKOproject`   | `geckopy init` *(CLI)*                 | **`[Py]`** Project skeleton generator runs from the `geckopy` CLI (`geckopy init my_project`).                                                                                                                                                                                                                                                              |
 | `updateGECKOdoc`      | *(not applicable)*                     | Python docs are docstring-driven; no MATLAB Toolbox metadata to regenerate.                                                                                                                                                                                                                                                                                    |
 | —                     | `pfba_enzymes` *(new)*                 | **`[Py]`** pFBA variant that minimises total `usage_prot_*` flux instead of all fluxes. Raises `NotImplementedError` on gecko-light.                                                                                                                                                                                                                          |
@@ -386,9 +386,9 @@ ecModels move between the two tools without conversion:
   reactions on load (warns once). Save the loaded model and it comes
   out as a current model.
 
-The YAML schema and the legacy normalisations are owned by raven-python
-(`raven_python.io.ec_data.EcData`,
-`raven_python.io.yaml.{read,write}_yaml_model`); geckopy's
+The YAML schema and the legacy normalisations are owned by raven-toolbox
+(`raven_toolbox.io.ec_data.EcData`,
+`raven_toolbox.io.yaml.{read,write}_yaml_model`); geckopy's
 `save_ec_model` / `load_ec_model` are thin wrappers that add geckopy's
 application-level concerns (adapter-aware path resolution,
 empty-ecModel guard, provenance injection). See
@@ -470,5 +470,5 @@ agree. The full per-function divergence list lives in the in-source
   [yaml_format.md](yaml_format.md).
 - For the gecko-light availability table, see
   [gecko_light_status.md](gecko_light_status.md).
-- For the raven-python / geckopy responsibility split, see
+- For the raven-toolbox / geckopy responsibility split, see
   [raven_integration.md](raven_integration.md).

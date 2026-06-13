@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 
 import cobra
 
-# Stage 4 (convertToIrrev): delegated to raven-python. The function originated
-# in geckopy and was adopted upstream once raven-python was created. Re-export
+# Stage 4 (convertToIrrev): delegated to raven-toolbox. The function originated
+# in geckopy and was adopted upstream once raven-toolbox was created. Re-export
 # under the same name so the rest of geckopy is unaffected.
-from raven_python.manipulation.irreversible import convert_to_irreversible
+from raven_toolbox.manipulation.irreversible import convert_to_irreversible
 
 if TYPE_CHECKING:
     from ...adapter import ModelAdapter

@@ -28,7 +28,7 @@ The most-used names, grouped by stage of a typical workflow:
   ``pfba_enzymes``, ``map_rxns_to_conv``
 - **I/O**: ``save_ec_model``, ``load_ec_model``  (YAML only — SBML
   ecModel I/O was removed; the YAML schema and the (de)serialisation
-  live in raven-python, see ``raven_python.io.ec_data``)
+  live in raven-toolbox, see ``raven_toolbox.io.ec_data``)
 - **Per-enzyme proxy**: ``Enzyme`` (lazy view via ``model.enzymes``)
 """
 # Adapter
