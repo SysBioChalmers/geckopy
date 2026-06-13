@@ -1,7 +1,6 @@
 """Tests for the OpenKineticsPredictor (OKP) subpackage."""
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
 import cobra

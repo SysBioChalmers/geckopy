@@ -2,7 +2,6 @@
 from pathlib import Path
 
 import cobra
-import numpy as np
 import pytest
 
 from geckopy import EcModel, ModelAdapter, make_ec_model
