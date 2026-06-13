@@ -1,10 +1,10 @@
 """Load an ecModel from a YAML file.
 
-Thin wrapper around :func:`raven_python.io.read_yaml_model`. raven-python
+Thin wrapper around :func:`raven_toolbox.io.read_yaml_model`. raven-toolbox
 owns the YAML schema for the ec sections (see
-``raven_python.io.ec_data``): it reads the cobra-shaped portion plus the
+``raven_toolbox.io.ec_data``): it reads the cobra-shaped portion plus the
 ``ec-rxns`` / ``ec-enzymes`` / ``gecko_light`` top-level sections,
-populates ``model.ec`` as a typed :class:`~raven_python.io.EcData`, and
+populates ``model.ec`` as a typed :class:`~raven_toolbox.io.EcData`, and
 normalises three legacy MATLAB GECKO quirks (top-level ``smiles`` on
 metabolites, reverse-direction ``usage_prot_*`` / ``prot_pool_exchange``,
 bare-``-`` document root).
@@ -32,7 +32,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
-from raven_python.io import EcData, read_yaml_model
+from raven_toolbox.io import EcData, read_yaml_model
 
 from ..ec_model.ec_model import EcModel
 

@@ -1,6 +1,6 @@
 """Flux-Scanning with Enforced Objective Function for an ecModel.
 
-Thin wrapper around :func:`raven_python.analysis.fseof.fseof` that adds
+Thin wrapper around :func:`raven_toolbox.analysis.fseof.fseof` that adds
 ec-specific concerns on top of raven's general-purpose FSEOF:
 
 - resolves the biomass reaction from ``model.adapter`` when not passed
@@ -11,22 +11,22 @@ ec-specific concerns on top of raven's general-purpose FSEOF:
   ``targets`` DataFrames — those reactions are protein-pool plumbing,
   never engineering targets.
 
-The selection method and output shape come from raven-python: each
+The selection method and output shape come from raven-toolbox: each
 reaction's flux is regressed against the enforced product flux across
 the scan, and a reaction is a target if ``|correlation| >=
 correlation_threshold`` and ``|slope| >= flux_eps``. Targets are
 classified as ``amplify`` / ``knockdown`` / ``knockout``. See
-:class:`raven_python.analysis.fseof.FSEOFResult` for the full output
+:class:`raven_toolbox.analysis.fseof.FSEOFResult` for the full output
 schema.
 
 Ported from GECKO MATLAB: ``src/geckomat/utilities/ecFSEOF.m``,
-re-designed around :func:`raven_python.analysis.fseof.fseof`.
+re-designed around :func:`raven_toolbox.analysis.fseof.fseof`.
 
 MATLAB-COMPAT: GECKO MATLAB uses strict monotonicity + top-25%-by-slope
-to pick targets; geckopy delegates to raven-python's regression-based
+to pick targets; geckopy delegates to raven-toolbox's regression-based
 selection (``|correlation|`` against the enforced flux) with pFBA per
 step. Regression is more robust to LP alternative optima — see
-raven-python's IMPROVEMENTS notes FS1-FS4 for the rationale.
+raven-toolbox's IMPROVEMENTS notes FS1-FS4 for the rationale.
 
 MATLAB-COMPAT: GECKO MATLAB classifies targets as ``OE`` / ``KD`` /
 ``KO``; raven uses ``amplify`` / ``knockdown`` / ``knockout``. Same
@@ -52,7 +52,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Optional
 
-from raven_python.analysis.fseof import FSEOFResult, fseof
+from raven_toolbox.analysis.fseof import FSEOFResult, fseof
 
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
@@ -111,9 +111,9 @@ def ec_fseof(
     Returns
     -------
     FSEOFResult
-        raven-python's FSEOF output dataclass, with ``usage_prot_*``
+        raven-toolbox's FSEOF output dataclass, with ``usage_prot_*``
         rows filtered out of both ``scan`` and ``targets``. See
-        :class:`raven_python.analysis.fseof.FSEOFResult` for the full
+        :class:`raven_toolbox.analysis.fseof.FSEOFResult` for the full
         field list (``scan``, ``enforced``, ``targets``, plus the
         ``amplification`` / ``knockout`` / ``gene_targets`` properties).
     """

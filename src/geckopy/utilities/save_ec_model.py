@@ -1,9 +1,9 @@
 """Save an ecModel to a YAML file.
 
-Thin wrapper around :func:`raven_python.io.write_yaml_model`. raven-python
+Thin wrapper around :func:`raven_toolbox.io.write_yaml_model`. raven-toolbox
 owns the YAML schema for the ec sections (see
-``raven_python.io.ec_data``): given a ``model`` with a populated
-``model.ec`` (an :class:`~raven_python.io.EcData`), it serialises both the
+``raven_toolbox.io.ec_data``): given a ``model`` with a populated
+``model.ec`` (an :class:`~raven_toolbox.io.EcData`), it serialises both the
 cobra-shaped portion and the ``ec-rxns`` / ``ec-enzymes`` / ``gecko_light``
 top-level sections.
 
@@ -39,7 +39,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Union
 
-from raven_python.io import write_yaml_model
+from raven_toolbox.io import write_yaml_model
 
 from ..ec_model.ec_model import EcModel
 
@@ -98,7 +98,7 @@ def save_ec_model(
     path = _resolve_path(filename, resolved_adapter)
 
     # Inject provenance into model.notes for the duration of the write so
-    # raven-python's writer emits a metaData block at top level. Restore
+    # raven-toolbox's writer emits a metaData block at top level. Restore
     # the caller's notes in a finally block so the in-memory model isn't
     # permanently altered.
     saved_notes = dict(model.notes or {})

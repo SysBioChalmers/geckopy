@@ -191,7 +191,7 @@ def test_doc_top_level_keys(tmp_path):
     model = _build_full_ec_model(adapter)
     path = save_ec_model(model)
     doc = _read_yaml(path)
-    # raven-python's RAVEN/cobra-aligned writer nests the model id under
+    # raven-toolbox's RAVEN/cobra-aligned writer nests the model id under
     # ``metaData`` (alongside date/version/description), so ``id`` is not a
     # top-level key.
     assert {

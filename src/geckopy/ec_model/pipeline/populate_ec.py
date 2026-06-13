@@ -378,7 +378,7 @@ def allocate_ec_and_coupling_light(model: "EcModel") -> list[str]:
     list of str
         The prefixed reaction IDs written into ``model.ec.rxns``.
     """
-    from raven_python.manipulation.expand import gpr_to_dnf
+    from raven_toolbox.manipulation.expand import gpr_to_dnf
 
     enzyme_index: dict[str, int] = {
         g: i for i, g in enumerate(model.ec.genes)
