@@ -4,7 +4,6 @@ on:
   push:
     branches: [master, main]
   pull_request:
-    branches: [master, main]
 
 # Cancel in-progress runs of this workflow on the same ref when a new
 # push lands; saves runner minutes on rapid iteration.
