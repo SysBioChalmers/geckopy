@@ -4,6 +4,14 @@
 
 Enzyme-constrained genome-scale metabolic modelling in Python.
 
+> **Disambiguation — this is not "geckopy 3.0".** The current geckopy is a new,
+> from-scratch port of the MATLAB [GECKO Toolbox](https://github.com/SysBioChalmers/GECKO).
+> It is unrelated to, and shares no code with, the earlier and separate `geckopy`
+> Python package ([on PyPI as `geckopy`](https://pypi.org/project/geckopy/)) described in
+> Carrasco Muriel, Long & Sonnenschein, *Microbiology Spectrum* 11(6):e01705-23 (2023),
+> [doi:10.1128/spectrum.01705-23](https://doi.org/10.1128/spectrum.01705-23). The two
+> projects share only the name.
+
 ## What this is
 
 Genome-scale metabolic models (GEMs) describe an organism's chemistry as a
