@@ -101,6 +101,30 @@ def test_make_ec_model_attaches_adapter():
     assert ec_model.adapter is adapter
 
 
+def test_make_ec_model_does_not_mutate_input():
+    """The input GEM must be left untouched; make_ec_model works on a copy.
+
+    The preprocessing/expansion stages add _REV and _EXP_ reactions and
+    prot_ pseudometabolites, and strip pseudoreaction GPRs, so mutation of
+    the input would be visible in the reaction/metabolite sets, bounds and
+    gene rules.
+    """
+    model, adapter = _load_fresh_ectestgem()
+    rxn_ids_before = {r.id for r in model.reactions}
+    met_ids_before = {m.id for m in model.metabolites}
+    gene_ids_before = {g.id for g in model.genes}
+    bounds_before = {r.id: r.bounds for r in model.reactions}
+    grrules_before = {r.id: r.gene_reaction_rule for r in model.reactions}
+
+    make_ec_model(model, adapter)
+
+    assert {r.id for r in model.reactions} == rxn_ids_before
+    assert {m.id for m in model.metabolites} == met_ids_before
+    assert {g.id for g in model.genes} == gene_ids_before
+    assert {r.id: r.bounds for r in model.reactions} == bounds_before
+    assert {r.id: r.gene_reaction_rule for r in model.reactions} == grrules_before
+
+
 # --------------------------------------------------------------------------- #
 # Branching and error handling
 # --------------------------------------------------------------------------- #

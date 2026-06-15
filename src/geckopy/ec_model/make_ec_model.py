@@ -85,9 +85,10 @@ def make_ec_model(
     Parameters
     ----------
     model
-        A conventional cobra.Model (the starting GEM). Mutated in
-        place by stages 1-5 (preprocessing + isozyme expansion)
-        and then wrapped as an EcModel for stages 6-12.
+        A conventional cobra.Model (the starting GEM). Left
+        unchanged: the function operates on an internal copy, so the
+        caller's model is never mutated (matching the MATLAB GECKO
+        ``makeEcModel`` value semantics).
     adapter
         A loaded ModelAdapter. Carries organism parameters (taxonomy
         id, biomass reaction, sigma factor, ...) and the path to
@@ -146,6 +147,11 @@ def make_ec_model(
             "make_ec_model was called on a model that already has a "
             "populated ec substructure. Run it only on a conventional GEM."
         )
+
+    # Work on a copy: the pipeline stages below mutate the model in place
+    # (splitting reactions, adding pseudometabolites, ...), but the caller's
+    # input GEM must be left untouched.
+    model = model.copy()
 
     # Stages 1-4: preprocess on a plain cobra.Model. Stage 5 (isozyme
     # expansion) is full-only; light keeps isozymes singular and tracks
