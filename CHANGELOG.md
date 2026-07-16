@@ -4,6 +4,35 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [0.2.1] — 2026-07-16
+
+Bugfix release. `make_ec_model` no longer mutates the GEM it is given.
+
+### Fixed
+
+- **`make_ec_model` leaves the input GEM unchanged.** Stages 1–5
+  (`remove_pseudoreaction_gprs`, `invert_backwards_only_reactions`,
+  `convert_to_irreversible`, `expand_model`) ran in place on the caller's
+  model, leaving it with `_REV` / `_EXP_` reaction splits, `prot_`
+  pseudometabolites, and stripped pseudoreaction GPRs. The pipeline now works
+  on an internal `model.copy()`, matching MATLAB GECKO's `makeEcModel` value
+  semantics. (#32)
+- `test_loads_sbml_gem` on Windows: the test wrote a backslash path into the
+  adapter TOML, which TOML reads as an escape sequence.
+
+### Documentation
+
+- README: disambiguation note stating that this geckopy is a from-scratch port
+  of the MATLAB GECKO Toolbox, unrelated to and sharing no code with the
+  separate PyPI `geckopy` package described in Carrasco Muriel et al. (2023).
+
+### Internal
+
+- **CI: leaner test matrix** — full Python range (3.11–3.13) on Linux plus a
+  single Python (3.12) on macOS and Windows, instead of the full 3×3
+  OS × Python grid. Same OS coverage at roughly half the runner cost. (#31)
+- Removed unused test imports flagged by ruff (F401).
+
 ## [0.2.0] — 2026-06-14
 
 Dependency rename + CI hardening. geckopy now targets **raven-toolbox**
@@ -232,6 +261,8 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.
 
+[0.2.1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.1
+[0.2.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.0
 [0.1.0a3]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a3
 [0.1.0a2]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a2
 [0.1.0a1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a1
@@ -256,3 +287,5 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
 [#19]: https://github.com/SysBioChalmers/geckopy/pull/19
 [#20]: https://github.com/SysBioChalmers/geckopy/pull/20
 [#21]: https://github.com/SysBioChalmers/geckopy/pull/21
+[#31]: https://github.com/SysBioChalmers/geckopy/pull/31
+[#32]: https://github.com/SysBioChalmers/geckopy/pull/32
