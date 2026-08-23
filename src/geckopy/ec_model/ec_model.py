@@ -20,6 +20,7 @@ See ``geckopy.ec_model.enzyme.Enzyme`` for the full surface.
 """
 from __future__ import annotations
 
+import copy as _copy
 from typing import TYPE_CHECKING, Optional, Union
 
 import cobra
@@ -89,6 +90,41 @@ class EcModel(cobra.Model):
         """
         ec_model = cls(model, adapter=adapter, gecko_light=gecko_light)
         return ec_model
+
+    def copy(self) -> "EcModel":
+        """Copy the model, including an independent ``ec`` substructure.
+
+        ``cobra.Model.copy`` rebuilds the reactions, metabolites and genes
+        but carries every other attribute over **by reference**, so without
+        this override ``model.copy().ec`` would be the same ``EcData``
+        object as ``model.ec``: writing a kcat on the copy would silently
+        change the original. For the same reason the copy's ``enzymes``
+        view would still be bound to the model it was copied from.
+
+        This override clones ``ec`` and rebinds ``enzymes``, giving the
+        value semantics MATLAB GECKO has throughout (``ecModel2 =
+        getECfromGEM(ecModel)`` leaves ``ecModel`` untouched).
+
+        ``adapter`` stays a shared reference: it is immutable project
+        configuration, not model state, and copying it would detach the
+        copy from the project it belongs to.
+
+        ``copy.deepcopy(model)`` was already correct and is left alone --
+        it is a full deep copy, so overriding ``__deepcopy__`` to delegate
+        here would weaken it (a shared adapter, cobra's partial copy of the
+        network) rather than fix anything.
+        """
+        new = super().copy()
+        # deepcopy rather than a field-by-field clone: EcData holds only
+        # lists, numpy arrays, a scipy sparse matrix and a bool, and this
+        # keeps working if raven-toolbox adds a field.
+        new.ec = _copy.deepcopy(self.ec)
+        new.adapter = self.adapter
+        # Deferred import, as in __init__: enzyme.py imports EcModel only
+        # under TYPE_CHECKING.
+        from .enzyme import EnzymeView
+        new.enzymes = EnzymeView(new)
+        return new
 
     def validate_ec(self) -> None:
         """Validate internal consistency of the ec substructure."""

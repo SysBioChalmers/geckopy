@@ -34,6 +34,16 @@ reproduce every value GECKO's own unit-test suite pins down.
 - **`write_dlkcat_input` emits rows in reaction order**, matching MATLAB's
   column-major `find(clearedRedS < 0)`. numpy's `where` is row-major, so
   geckopy grouped the DLKcat input by substrate instead of by reaction.
+- **`EcModel.copy()` clones the `ec` substructure.** `cobra.Model.copy`
+  rebuilds the network but carries every other attribute over by reference,
+  so `model.copy().ec` *was* the same `EcData` object as `model.ec`: writing
+  a kcat, eccode, source, conc or coupling coefficient on the copy silently
+  changed the model it was copied from. The copy's `enzymes` view was
+  likewise still bound to the original model, so reads and writes through
+  `model.enzymes` went to the wrong model. `copy()` now clones `ec` and
+  rebinds `enzymes`, giving the value semantics MATLAB GECKO has throughout.
+  `adapter` stays a shared reference (project configuration, not model
+  state). `copy.deepcopy(model)` was already correct and is unchanged.
 - **Reverse (`_REV`) reactions keep their EC code**, via a fix in
   raven-toolbox's `convert_to_irreversible` (it now copies annotations,
   subsystem and notes onto the reverse reaction, as MATLAB's `convertToIrrev`
