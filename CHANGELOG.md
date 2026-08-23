@@ -4,6 +4,54 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [Unreleased]
+
+Parity pass against the MATLAB GECKO Toolbox: geckopy's core functions now
+reproduce every value GECKO's own unit-test suite pins down.
+
+### Added
+
+- **`tests/test_gecko_matlab_parity.py` — a 1:1 port of GECKO's
+  `test/unit_tests/geckoCoreFunctionTests.m`** (47 tests, MATLAB test cases
+  `tc0001`–`tc0013`), run against the same `ecTestGEM` fixture MATLAB uses.
+  Every expected value is copied verbatim from the MATLAB sources rather than
+  re-derived from geckopy's output, so the file is the executable definition of
+  "geckopy builds the same ecModel as GECKO". It needs no MATLAB to run and
+  covers `makeEcModel` (full and light), `applyComplexData`, `setProtPoolSize`,
+  `getECfromGEM`, `getECfromDatabase`, save/load round-trip,
+  `fuzzyKcatMatching`, `writeDLKcatInput`, `mergeDLKcatAndFuzzyKcats`,
+  `selectKcatValue`, `applyKcatConstraints`, `getKcatAcrossIsozymes`,
+  `applyCustomKcats`, `findMetSmiles` and the proteomics-integration chain.
+
+### Fixed
+
+- **`make_ec_model` sorts identifiers for full models**, as MATLAB
+  `makeEcModel` does (`sortIdentifiers`, line 203, full models only, before the
+  protein pseudoreactions are appended). geckopy kept the input GEM's reaction
+  order, so a full ecModel came out with the same reactions in a different
+  order from MATLAB's — visible in the saved YAML and in every downstream table
+  that follows `ec.rxns` order.
+- **`write_dlkcat_input` emits rows in reaction order**, matching MATLAB's
+  column-major `find(clearedRedS < 0)`. numpy's `where` is row-major, so
+  geckopy grouped the DLKcat input by substrate instead of by reaction.
+- **Reverse (`_REV`) reactions keep their EC code**, via a fix in
+  raven-toolbox's `convert_to_irreversible` (it now copies annotations,
+  subsystem and notes onto the reverse reaction, as MATLAB's `convertToIrrev`
+  copies `eccodes` / `rxnMiriams` / `subSystems` / `rxnNotes`). Without it
+  `fill_eccodes_from_gem` returned `''` for every `_REV` reaction, fuzzy BRENDA
+  matching found no kcat, and reverse directions were left unconstrained.
+  **Requires raven-toolbox at or after that fix.**
+
+### Notes
+
+- `merge_kcats` is n-ary and concatenates surviving rows list by list, so the
+  equivalent of MATLAB's `mergeDLKcatAndFuzzyKcats(dlkcat, fuzzy)` — which
+  always emits fuzzy rows first regardless of argument order — is
+  `merge_kcats(fuzzy, dlkcat, ...)`. The deprecated
+  `merge_dlkcat_and_fuzzy_kcats` alias is `merge_kcats`, so it follows the
+  geckopy convention, not MATLAB's signature. Row order has no numerical
+  effect: `apply_kcat_list` aggregates per reaction.
+
 ## [0.2.1] — 2026-07-16
 
 Bugfix release. `make_ec_model` no longer mutates the GEM it is given.

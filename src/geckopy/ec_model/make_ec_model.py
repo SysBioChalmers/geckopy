@@ -26,6 +26,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 import cobra
+from raven_toolbox.utils.sort import sort_identifiers
 
 from ..databases import UniprotDB, load_uniprot_tsv
 from .ec_model import EcModel
@@ -161,6 +162,12 @@ def make_ec_model(
     convert_to_irreversible(model)
     if not gecko_light:
         expand_model(model)
+        # Sort reactions, so that reversible and isozymic reactions are kept
+        # near each other. MATLAB makeEcModel does this here (full models
+        # only), before the protein pseudoreactions are appended, so the
+        # metabolic block comes out alphabetically and the protein block
+        # follows in enzyme order.
+        sort_identifiers(model)
 
     # Promote to EcModel for stages 6-12.
     ec_model = EcModel.from_cobra(model, adapter, gecko_light=gecko_light)

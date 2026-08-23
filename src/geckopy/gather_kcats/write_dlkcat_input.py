@@ -235,7 +235,13 @@ def extract_enzyme_substrate_pairs(
     sub_matrix = reduced_s[:, selected_cols].toarray()
 
     # (substrate_idx, local_rxn_idx) pairs where coefficient is negative.
-    substrate_idx, local_rxn_idx = np.where(sub_matrix < 0)
+    #
+    # MATLAB's `[substrates, reactions] = find(clearedRedS < 0)` walks a
+    # sparse matrix column-major, so the pairs come out reaction-major
+    # (all substrates of reaction 1, then of reaction 2, ...). numpy's
+    # `where` is row-major, which would group by substrate instead; the
+    # transpose restores MATLAB's row order in the written file.
+    local_rxn_idx, substrate_idx = np.where(sub_matrix.T < 0)
 
     if len(substrate_idx) == 0:
         return pd.DataFrame(columns=_PAIR_COLUMNS)
