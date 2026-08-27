@@ -9,7 +9,7 @@ gr_exp = 0.41
 id = "sce"
 
 [uniprot]
-tax_id = "559292"
+id = "559292"
 reviewed = false
 
 [complex]

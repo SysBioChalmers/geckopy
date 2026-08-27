@@ -6,6 +6,8 @@ from pydantic import ValidationError
 
 from geckopy import ModelAdapter
 
+EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
+
 
 MINIMAL_TOML = """\
 conv_gem = "models/test.xml"
@@ -122,3 +124,19 @@ def test_subclass_from_folder_returns_subclass(tmp_path):
     adapter = CustomAdapter.from_folder(folder)
     assert isinstance(adapter, CustomAdapter)
     assert adapter.get_spontaneous_reactions(model=None) == ["spont_rxn_1"]
+
+
+@pytest.mark.parametrize(
+    "example_dir", [p for p in EXAMPLES_DIR.iterdir() if p.is_dir()],
+    ids=lambda p: p.name,
+)
+def test_shipped_example_adapter_toml_is_valid(example_dir):
+    """Every folder under examples/ must have a model_adapter.toml that
+    actually validates against the current ModelParameters schema.
+
+    examples/yeast-GEM/model_adapter.toml drifted from the schema
+    (`uniprot.tax_id`, rejected by `extra="forbid"`, instead of
+    `uniprot.id`) and nothing caught it until a downstream project tried
+    to load it directly.
+    """
+    ModelAdapter.from_folder(example_dir)
