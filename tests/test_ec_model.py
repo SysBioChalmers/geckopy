@@ -1,4 +1,6 @@
 """Tests for the EcModel class."""
+import copy
+
 import cobra
 import numpy as np
 import pytest
@@ -178,3 +180,26 @@ def test_copy_still_copies_the_network_like_cobra():
     assert copied.reactions.get_by_id("r1") is not original.reactions.get_by_id("r1")
     copied.reactions.get_by_id("r1").upper_bound = 7.0
     assert original.reactions.get_by_id("r1").upper_bound == 1000.0
+
+
+# --------------------------------------------------------------------------- #
+# copy.deepcopy(): must not recurse on the reaction<->metabolite cycle
+#
+# Every reaction holds its metabolites and every metabolite holds the
+# reactions it participates in, so this cycle exists in any real model
+# (not something EcModel introduces) -- cobra<0.31.1's Reaction.__deepcopy__
+# recursed infinitely over it on Python 3.14. Regression test for that,
+# pinned via the cobra>=0.31.1 floor in pyproject.toml.
+# --------------------------------------------------------------------------- #
+
+def test_deepcopy_does_not_recurse_on_reaction_metabolite_cycle():
+    original = _ec_model_with_data()
+    copied = copy.deepcopy(original)
+    assert copied is not original
+    assert copied.ec is not original.ec
+    copied_r1 = copied.reactions.get_by_id("r1")
+    assert copied_r1 is not original.reactions.get_by_id("r1")
+    # the metabolite's back-reference must point at the copied reaction, not the original
+    copied_met = copied.metabolites.get_by_id("A")
+    assert copied_r1 in copied_met.reactions
+    assert original.reactions.get_by_id("r1") not in copied_met.reactions
