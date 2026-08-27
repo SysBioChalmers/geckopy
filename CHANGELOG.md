@@ -51,6 +51,17 @@ reproduce every value GECKO's own unit-test suite pins down.
   `fill_eccodes_from_gem` returned `''` for every `_REV` reaction, fuzzy BRENDA
   matching found no kcat, and reverse directions were left unconstrained.
   **Requires raven-toolbox at or after that fix.**
+- **`copy.deepcopy(ec_model)` (and of any `cobra.Model`) no longer
+  `RecursionError`s on Python 3.14.** The cause was in cobra, not geckopy:
+  `Reaction.__copy__`/`__deepcopy__` delegated to `super()` as a way to avoid
+  infinitely recursing into themselves, but that trick relies on `copy`
+  memoizing an object before recursing into its state, and Python 3.14's
+  `copy` module no longer does so for that code path. Every reaction holds
+  its metabolites and every metabolite holds the reactions it participates
+  in, so the resulting cycle exists in any real model, full ecModels
+  included — deep-copying one recursed until the interpreter's recursion
+  limit gave out. Fixed upstream in cobra 0.31.0 by deleting the
+  overrides; **requires cobra at or after 0.31.1**.
 
 ### Notes
 
