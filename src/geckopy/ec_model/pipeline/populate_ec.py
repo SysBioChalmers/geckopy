@@ -42,16 +42,15 @@ logger = logging.getLogger(__name__)
 def allocate_ec_for_catalyzed_reactions(model: "EcModel") -> list[str]:
     """Stage 6: allocate ec.rxns and per-reaction slots.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 6, full-model branch only). Gecko-light uses a different
-    allocation scheme and is not yet supported.
+    Applies only to full (non-light) ecModels; gecko-light uses
+    :func:`allocate_ec_and_coupling_light` instead.
 
     Walks the model (which must already have been through stages 1-5)
     and selects every reaction that has at least one gene associated.
     Each selected reaction gets an entry in ec.rxns; ec.kcat is
-    initialized to NaN, and ec.source/notes/eccodes to empty strings,
-    ec.concs to NaN. The per-enzyme arrays are left untouched (stage 7
-    populates them).
+    initialized to 0 (0 marks "no kcat assigned"), and
+    ec.source/notes/eccodes to empty strings. The per-enzyme arrays
+    (including ec.concs) are left untouched (stage 7 populates them).
 
     Parameters
     ----------
@@ -92,14 +91,6 @@ def populate_enzyme_data(
 ) -> list[str]:
     """Stage 7: fill per-enzyme fields from UniProt (with optional KEGG fallback).
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 7), extended with a KEGG fallback that MATLAB does not have.
-
-    MATLAB-COMPAT: GECKO MATLAB iterates model.genes in their original
-    model order. geckopy iterates them in alphabetical order so that
-    ec.genes / ec.enzymes / ec.mw / ec.sequence are deterministic
-    regardless of how the SBML was loaded.
-
     For every gene in the model (sorted alphabetically for reproducibility),
     a lookup is performed:
 
@@ -111,22 +102,15 @@ def populate_enzyme_data(
 
     Matched genes are added to ec.genes / ec.enzymes / ec.mw /
     ec.sequence (same length as ec.genes), and ec.concs is allocated as
-    NaN of matching length. Unmatched genes are returned as a list
-    (the equivalent of MATLAB's ``noUniprot``).
+    NaN of matching length. Unmatched genes are returned as a list.
 
     When ``kegg_db`` is supplied, each gene UniProt could not match is
     looked up in the KEGG database via
     ``adapter.get_kegg_compatible_genes``. KEGG hits feed ec.enzymes
     with the UniProt accession stored on the KEGG entry; if that is
     empty, the bare KEGG gene ID (``KeggDB.kegg_genes``) is used as a
-    fallback identifier. The returned ``no_uniprot`` list then names
-    only the genes that neither source could fill.
-
-    MATLAB-COMPAT: GECKO MATLAB only returns the noUniprot list and
-    does not annotate the affected reactions. geckopy additionally
-    writes a note to rxn.notes['geckopy_warning'] for each affected
-    reaction so users can see the issue when inspecting individual
-    reactions. MATLAB GECKO could be updated to do the same.
+    fallback identifier. The returned list then names only the genes
+    that neither source could fill.
 
     Reactions whose GPR references an unmatched gene get a warning note
     added to ``rxn.notes[geckopy_warning]``. If such a reaction has at
@@ -140,6 +124,10 @@ def populate_enzyme_data(
         An EcModel. Must have ``adapter`` set. Mutated in place.
     uniprot_db
         Loaded UniProt database.
+    kegg_db
+        Optional pre-loaded KEGG database, consulted as a fallback for
+        genes UniProt does not match. ``None`` (default) skips the
+        KEGG lookup entirely.
 
     Returns
     -------
@@ -294,9 +282,6 @@ def populate_enzyme_data(
 def build_rxn_enzyme_coupling(model: "EcModel") -> None:
     """Stage 8: populate ec.rxn_enz_mat.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 8, full-model branch only).
-
     For each reaction ID in ec.rxns and each gene in ec.genes, writes
     1.0 at (i, j) if the reaction's GPR contains that gene. After
     stage 5, every reaction has at most one AND-clause, so this is
@@ -345,10 +330,9 @@ _LIGHT_PREFIX_WIDTH = 3
 def allocate_ec_and_coupling_light(model: "EcModel") -> list[str]:
     """Stages 6 + 8 (gecko-light layout): allocate ec.rxns and ec.rxn_enz_mat.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (gecko-light branches of stages 6 and 8). Light models do not split
-    isozyme reactions in the cobra layer (expand_model is skipped), so the
-    per-isozyme bookkeeping moves into ec instead:
+    Light models do not split isozyme reactions in the cobra layer
+    (expand_model is skipped), so the per-isozyme bookkeeping moves
+    into ec instead:
 
     - Each cobra reaction with N isozymes (i.e. ``len(gpr_to_dnf(rxn.gpr))
       == N``) produces N rows in ec.rxns. Row k carries the id

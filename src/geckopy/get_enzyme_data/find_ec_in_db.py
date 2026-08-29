@@ -69,9 +69,8 @@ def _wildcard_intersection(prev: list[str], new: list[str]) -> list[str]:
 
     For each pair (a, b), if one subsumes the other, the more specific
     one (or either, when equal) is added. Disjoint pairs contribute
-    nothing. Mirrors MATLAB GECKO ``intersection``, with one
-    divergence: geckopy lets ``_wildcard_dedupe`` clean up duplicates
-    in the final result, while MATLAB does not.
+    nothing. The result is not deduplicated here; duplicates are
+    cleaned up separately by the caller via ``_wildcard_dedupe``.
     """
     result: list[str] = []
     for a in prev:
@@ -114,23 +113,6 @@ def find_ec_in_db(
     * INTERSECTION over the same, pairwise.
     * Use intersection if non-empty, else union. Final result is
       wildcard-deduped and joined with ``;``.
-
-    MATLAB-COMPAT: GECKO MATLAB returns ``(EC, conflicts)``. geckopy
-    drops the secondary output and emits warnings instead. The
-    upcoming ``getECfromDatabase`` can scan logs for aggregation if
-    needed.
-
-    MATLAB-COMPAT: GECKO MATLAB's ``intersection`` helper does not
-    dedupe its output, so identical subunit ECs can produce
-    ``"1.1.1.1;1.1.1.1"``. geckopy applies a final dedupe pass.
-
-    MATLAB-COMPAT: GECKO MATLAB calls ``getECstring`` to format
-    per-gene strings. ``getECstring`` splits on whitespace, which
-    mangles ``;``-separated multi-EC DB entries (turns
-    ``"1.1.1.1;2.2.2.2"`` into ``"EC1.1.1.12.2.2.2"``). geckopy works
-    with raw ``;``-separated tokens throughout, so the bug does not
-    apply. After this port ``getECstring`` has no remaining callers
-    in MATLAB and should be deleted.
 
     Parameters
     ----------

@@ -370,9 +370,8 @@ def test_origin_6_any_org_sa(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_org_sa_wins_over_any_org_kcat_when_both_present(tmp_path):
-    """MATLAB search order tries org-SA (output 5) BEFORE
-    any-no-subs-kcat (output 4). When both are available, MATLAB
-    returns org-SA (origin 5). geckopy replicates."""
+    """When both an org-SA row (origin 5) and an any-org-no-subs-kcat
+    row (origin 4) are available, the org-SA match wins."""
     adapter = _adapter_with_org(tmp_path, "yeast")
     model = _ec_model(adapter, [("r1", "1.1.1.1", [("alpha", -1.0)])])
     df = fuzzy_kcat_matching(

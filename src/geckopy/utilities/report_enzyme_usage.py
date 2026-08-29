@@ -81,22 +81,15 @@ def report_enzyme_usage(
        flux-carrying reaction get a combined header row plus one
        detail row per reaction, where the detail rows split the
        absolute usage proportionally to ``-S[prot_<enzyme>, rxn] *
-       flux[rxn]``.
+       flux[rxn]``. Combined header rows use the literal ``"==="``
+       placeholder for non-applicable string fields and ``NaN`` for
+       ``kcat``.
     2. **Top absolute**: the top ``top_abs_usage`` enzymes by
        absolute usage, same shape but with ``perc_usage`` (a percent
        of ``prot_pool_exchange`` capacity) replacing ``cap_usage``.
 
     Ported from GECKO MATLAB:
     src/geckomat/utilities/reportEnzymeUsage.m.
-
-    MATLAB-COMPAT: MATLAB returns ``totalUsageFlux = -lb(pool)``
-    because its pool exchange goes reverse; geckopy uses the
-    forward direction so the same magnitude is the (positive)
-    ``upper_bound``.
-
-    MATLAB-COMPAT: MATLAB combined-rows use the literal ``"==="``
-    placeholder for non-applicable string fields and NaN for
-    ``kcat``. geckopy preserves these for output compatibility.
 
     Parameters
     ----------
@@ -105,10 +98,12 @@ def report_enzyme_usage(
     usage_data
         Result from ``enzyme_usage`` on the same model.
     high_cap_usage
-        Capacity-usage threshold for the first report.
+        Capacity-usage threshold for the first report: enzymes whose
+        ``cap_usage`` exceeds this fraction are included. Default
+        0.9 (90% of capacity).
     top_abs_usage
         Number of top enzymes for the second report. ``0`` or
-        ``inf`` returns all enzymes.
+        ``inf`` returns all enzymes. Default 10.
 
     Returns
     -------

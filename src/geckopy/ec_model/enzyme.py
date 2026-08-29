@@ -49,10 +49,6 @@ class Enzyme:
     All reads and writes go through ``model.ec`` and the underlying
     cobra model. Do not cache instances; rebuild via
     ``model.enzymes.get_by_id(uniprot)``.
-
-    Ported from the legacy geckopy package (Carrasco et al., 2023,
-    https://doi.org/10.1128/spectrum.01705-23),
-    geckopy/protein.py:43-454 (Protein class).
     """
 
     __slots__ = ("_model", "_uniprot")
@@ -127,11 +123,7 @@ class Enzyme:
     @mw.setter
     def mw(self, value: float) -> None:
         """Set MW (Da). Re-applies kcat constraints for every reaction
-        that uses this enzyme, because the coefficient depends on MW.
-
-        ``update_rxns`` here uses ec.rxns ids (the prefixed light form
-        in gecko-light models), not cobra reaction ids, because
-        ``apply_kcat_constraints`` indexes ec rows.
+        that uses this enzyme, since the LP coefficient depends on MW.
         """
         from .pipeline.apply_kcat import apply_kcat_constraints
         self._model.ec.mw[self.index] = float(value)
@@ -273,10 +265,6 @@ class Kcats:
     per-enzyme kcats are ambiguous in that case; the user must edit
     ``model.ec.kcat[idx]`` and call ``apply_kcat_constraints``
     themselves.
-
-    Ported from the legacy geckopy package (Carrasco et al., 2023,
-    https://doi.org/10.1128/spectrum.01705-23),
-    geckopy/protein.py:456-558 (Kcats class).
     """
 
     __slots__ = ("_enzyme",)
@@ -379,6 +367,10 @@ class EnzymeView:
 
     def query(self, predicate, attribute: str = "id") -> list[Enzyme]:
         """Filter enzymes by a predicate on the named attribute.
+
+        ``attribute`` selects which per-enzyme value (default ``"id"``)
+        is passed to ``predicate``. Returns the list of ``Enzyme``
+        objects for which the predicate returns true.
 
         Examples
         --------

@@ -29,12 +29,9 @@ def remove_pseudoreaction_gprs(
 ) -> list[str]:
     """Clear gene-protein-reaction rules from pseudoreactions.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 1, inline block). No RAVEN equivalent. A reaction is
-    treated as a pseudoreaction if either:
+    A reaction is treated as a pseudoreaction if either:
 
-    - its name contains the substring ``pseudoreaction`` (case-sensitive,
-      matching MATLAB's default `contains` behavior); or
+    - its name contains the substring ``pseudoreaction`` (case-sensitive); or
     - its ID is listed in the first column of ``data/pseudoRxns.tsv``
       inside the adapter's project folder, if that file exists.
 
@@ -83,10 +80,8 @@ def remove_pseudoreaction_gprs(
 def invert_backwards_only_reactions(model: "cobra.Model") -> list[str]:
     """Flip reactions that are constrained to only carry negative flux.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 2, inline block). No RAVEN equivalent. A reaction
-    with ``lb < 0`` and ``ub == 0`` is physically identical to a
-    forward-only reaction with inverted stoichiometry and bounds
+    A reaction with ``lb < 0`` and ``ub == 0`` is physically identical
+    to a forward-only reaction with inverted stoichiometry and bounds
     ``[0, -lb]``. Rewriting it in that canonical form keeps downstream
     irreversibility handling simple.
 

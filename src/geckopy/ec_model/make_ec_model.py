@@ -135,13 +135,10 @@ def make_ec_model(
         inconsistencies (e.g. genes referenced in GPRs that don't
         exist in the model).
 
-    MATLAB-COMPAT: GECKO MATLAB returns the list of unmatched
-    genes as a second output (``noUniprot``). geckopy logs a
-    warning summary instead and annotates each affected reaction
-    via ``rxn.notes["geckopy_warning"]`` — the annotations are
-    usually more useful for debugging than the flat list.
-
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
+    Genes referenced in the model's GPRs but not found in UniProt are
+    left enzyme-unconstrained: they are reported as a single warning
+    summary, and each affected reaction is annotated via
+    ``rxn.notes["geckopy_warning"]``.
     """
     if isinstance(model, EcModel) and model.ec.n_rxns > 0:
         raise ValueError(

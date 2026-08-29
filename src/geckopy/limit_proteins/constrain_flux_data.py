@@ -48,21 +48,6 @@ def apply_flux_data_constraints(
     Ported from GECKO MATLAB:
     src/geckomat/limit_proteins/constrainFluxData.m.
 
-    MATLAB-COMPAT: MATLAB's `condition` is 1-indexed; geckopy is
-    0-indexed (Python convention).
-
-    MATLAB-COMPAT: MATLAB uses RAVEN's ``setParam('var', ...)`` (a
-    soft slack-variable formulation) when ``looseStrictFlux`` is a
-    percentage. geckopy applies hard ``lb``/``ub`` matching the
-    docstring-stated effect (e.g. ``pct=10`` -> ``lb = val*0.95``,
-    ``ub = val*1.05``); for negative ``val``, ``lb`` and ``ub`` are
-    swapped to keep ``lb <= ub``.
-
-    MATLAB-COMPAT: MATLAB takes a ``modelAdapter`` and an optional
-    ``fluxData`` that defaults to a TSV-loader call. geckopy reads
-    the adapter from ``model.adapter`` and requires pre-loaded
-    ``flux_data``.
-
     A ``+/-1000`` measured flux means unconstrained, regardless of
     ``loose_strict_flux``:
     ``-1000`` -> ``lb=-1000, ub=0`` (free uptake), ``+1000`` ->
@@ -86,9 +71,22 @@ def apply_flux_data_constraints(
     loose_strict_flux
         ``"loose"`` keeps one bound at 0 and the other at the
         measured value (allows zero flux). A numeric percentage
-        ``p`` brackets the measured value: ``lb = val * (1 - p/200)``,
-        ``ub = val * (1 + p/200)``. ``p=10`` allows 10% total
-        variance (i.e. +/-5%).
+        ``p`` brackets the measured value with hard bounds:
+        ``lb = val * (1 - p/200)``, ``ub = val * (1 + p/200)``,
+        swapped as needed to keep ``lb <= ub`` when ``val`` is
+        negative. ``p=10`` allows 10% total variance (i.e. +/-5%).
+    bio_rxn
+        Biomass reaction ID. Defaults to the adapter's configured
+        biomass reaction (``model.adapter.params.bio_rxn``) when
+        ``None``.
+    c_source
+        Reaction ID of the preferred carbon-source uptake reaction;
+        its bounds are set to ``(0, 0)`` before applying the flux
+        data so that the data alone determines the carbon source
+        used. Defaults to ``model.adapter.params.c_source`` (or no
+        blocking if there is no adapter) when ``None``; pass ``""``
+        to skip blocking any reaction. Silently ignored if the
+        reaction id is not found in the model.
 
     Raises
     ------

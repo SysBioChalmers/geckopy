@@ -129,8 +129,8 @@ def test_unknown_extension_raises(tmp_path):
 
 
 def test_sbml_extension_raises_with_helpful_message(tmp_path):
-    """Past versions accepted .xml / .sbml; the new error message points
-    that out so existing callers learn what changed."""
+    """A `.xml`/`.sbml` path raises a specific message naming SBML
+    ecModel I/O as removed, rather than the generic "YAML only" error."""
     with pytest.raises(ValueError, match="SBML ecModel I/O has been removed"):
         load_ec_model("ecModel.xml", adapter=None)
 

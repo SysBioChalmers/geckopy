@@ -101,18 +101,12 @@ class EcModel(cobra.Model):
         change the original. For the same reason the copy's ``enzymes``
         view would still be bound to the model it was copied from.
 
-        This override clones ``ec`` and rebinds ``enzymes``, giving the
-        value semantics MATLAB GECKO has throughout (``ecModel2 =
-        getECfromGEM(ecModel)`` leaves ``ecModel`` untouched).
+        This override clones ``ec`` and rebinds ``enzymes`` to the new
+        model, so the copy is fully independent.
 
         ``adapter`` stays a shared reference: it is immutable project
         configuration, not model state, and copying it would detach the
         copy from the project it belongs to.
-
-        ``copy.deepcopy(model)`` was already correct and is left alone --
-        it is a full deep copy, so overriding ``__deepcopy__`` to delegate
-        here would weaken it (a shared adapter, cobra's partial copy of the
-        network) rather than fix anything.
         """
         new = super().copy()
         # deepcopy rather than a field-by-field clone: EcData holds only
@@ -127,7 +121,13 @@ class EcModel(cobra.Model):
         return new
 
     def validate_ec(self) -> None:
-        """Validate internal consistency of the ec substructure."""
+        """Validate internal consistency of the ec substructure.
+
+        Runs ``EcData.validate`` for the array-shape checks, then
+        confirms every reaction id in ``ec.rxns`` exists in the model;
+        raises ``ValueError`` (listing a few example ids) if any are
+        missing.
+        """
         self.ec.validate()
         unknown = set(self.ec.rxns) - {r.id for r in self.reactions}
         if unknown:

@@ -37,9 +37,6 @@ def fill_kcats_from_isozymes(
 ) -> None:
     """Fill in missing kcats by combining known kcats across sibling isozymes.
 
-    Ported from GECKO MATLAB:
-    src/geckomat/change_model/getKcatAcrossIsozymes.m.
-
     Two reactions are siblings if their ``ec.rxns`` IDs are identical
     after stripping any ``_EXP_<n>`` suffix. The ``_REV`` suffix is
     NOT stripped: forward and reverse reactions share chemistry but
@@ -53,10 +50,7 @@ def fill_kcats_from_isozymes(
     Reactions whose siblings all also lack a kcat stay at 0. Reactions
     with a single isozyme (no siblings beyond themselves) also stay at 0.
 
-    MATLAB-COMPAT: MATLAB names this ``getKcatAcrossIsozymes``;
-    geckopy names it ``fill_kcats_from_isozymes`` since it mutates
-    ``model.ec.kcat`` in place rather than returning a value. The name
-    ``get_kcat_across_isozymes`` is a deprecated alias.
+    ``get_kcat_across_isozymes`` is a deprecated alias for this function.
 
     Parameters
     ----------

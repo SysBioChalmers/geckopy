@@ -49,11 +49,42 @@ def pfba_enzymes(
     flipped one to allow reverse flux, its ``reverse_variable`` is
     included automatically.
 
-    Returns a standard ``cobra.Solution`` over all reactions.
-
     Ported from the legacy geckopy package (Carrasco et al., 2023,
     https://doi.org/10.1128/spectrum.01705-23),
     geckopy/flux_analysis.py:342-386.
+
+    Parameters
+    ----------
+    model
+        Full EcModel (not gecko-light) with ``usage_prot_*``
+        reactions installed.
+    objective
+        Reaction (or reaction id) to optimise before minimising
+        enzyme usage. If ``None``, the model's current objective is
+        used as-is.
+    fraction_of_optimum
+        Fraction of the objective's optimal value to fix as a
+        constraint before minimising enzyme usage. ``1.0`` (default)
+        requires the biomass-optimal solution; a lower value trades
+        some objective value for potentially lower enzyme usage.
+
+    Returns
+    -------
+    cobra.Solution
+        Standard cobra solution over all reactions, at the flux
+        distribution that minimises total (mass-weighted) enzyme
+        usage subject to the objective constraint.
+
+    Raises
+    ------
+    NotImplementedError
+        If ``model.ec.gecko_light`` is True.
+    ValueError
+        If ``model``'s objective is already the internal
+        ``pfba_enzymes`` objective, indicating a nested call.
+    cobra.exceptions.OptimizationError
+        If minimising enzyme usage is infeasible at the requested
+        ``fraction_of_optimum``.
     """
     if model.ec.gecko_light:
         raise NotImplementedError(

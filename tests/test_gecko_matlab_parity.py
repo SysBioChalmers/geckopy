@@ -391,12 +391,9 @@ def test_tc0004_apply_complex_data_light(light_ec_model):
 
 @pytest.mark.parametrize("gecko_light", [False, True], ids=["full", "light"])
 def test_tc0005_set_prot_pool_size(gecko_light):
-    """Adapter defaults give p_tot*f*sigma*1000 = 0.5*4*0.5*1000 = 1000;
-    the explicit (p_tot=1, f=5, sigma=1) call gives 5000.
-
-    MATLAB-COMPAT: MATLAB sets the (negative) lower bound of a backwards
-    pool exchange, geckopy the (positive) upper bound of a forward one --
-    same magnitude.
+    """Sets the protein-pool exchange reaction's upper bound to
+    p_tot*f*sigma*1000: adapter defaults give 0.5*4*0.5*1000 = 1000,
+    and the explicit (p_tot=1, f=5, sigma=1) call gives 5000.
     """
     model = _ec_model(gecko_light)
     pool = model.reactions.get_by_id("prot_pool_exchange")

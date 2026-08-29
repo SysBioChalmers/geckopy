@@ -118,25 +118,14 @@ def fuzzy_kcat_matching(
     for the phylogenetically closest organism(s) (with genus fallback
     for organisms missing from KEGG).
 
-    MATLAB-COMPAT: The MATLAB SEARCH order tries org-SA BEFORE
-    any-no-subs-kcat, but its OUTPUT ranking is the reverse. The
-    consequence is that when both would match, org-SA wins (with
-    output origin 5) even though any-no-subs-kcat (output origin 4)
-    would have been ranked better by the docstring. geckopy
-    replicates this behavior.
+    The six levels are tried in the fixed order listed above, not in
+    order of output rank: org + SA (origin 5) is tried before any
+    organism + any substrate + KCAT (origin 4), so when both would
+    match, org + SA wins even though origin 4 would otherwise be
+    considered the better rank.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and reads
-    the organism via ``adapter.params.org_name``. geckopy reads from
-    ``model.adapter.params.org_name`` directly.
-
-    MATLAB-COMPAT: GECKO MATLAB returns a struct of parallel arrays;
-    geckopy returns a ``pandas.DataFrame`` for compatibility with the
-    downstream ``apply_kcat_list`` and ``merge_dlkcat_and_fuzzy_kcats``
-    functions, both of which are inherently relational operations.
-
-    MATLAB-COMPAT: GECKO MATLAB tracks per-(origin, wildcard) match
-    counts in an internal ``stats.matrix`` that is never returned.
-    geckopy emits an aggregated ``logger.info`` summary instead.
+    Match statistics (counts per origin and per wildcard level) are
+    logged via ``logger.info`` rather than returned.
 
     Parameters
     ----------
@@ -158,10 +147,11 @@ def fuzzy_kcat_matching(
         the iterative escalation begins. Default 0 (no forcing).
     aggregate
         How to collapse the BRENDA rows matched at a search level to one
-        kcat: ``"max"`` (matches MATLAB GECKO) or ``"median"`` (more robust
-        to assay outliers / engineered mutants). ``None`` (default) reads
-        the value from ``model.adapter.params.kcat_aggregate_brenda``,
-        which itself defaults to ``"max"``.
+        kcat: ``"max"`` (the highest reported turnover) or ``"median"``
+        (more robust to assay outliers / engineered mutants). ``None``
+        (default) reads the value from
+        ``model.adapter.params.kcat_aggregate_brenda``, which itself
+        defaults to ``"max"``.
 
         The choice drives both aggregation layers consistently: it picks
         the matching snapshot view (``brenda.kcat_for(aggregate)`` /

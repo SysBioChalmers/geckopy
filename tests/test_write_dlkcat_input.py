@@ -29,6 +29,9 @@ def _ec_model(
     """Build an EcModel with reactions, genes, sequences, and SMILES.
 
     rxn_specs: list of (rxn_id, [(met_id, coeff, met_name), ...]).
+    gecko_light: build the model in gecko-light layout when True.
+    ec_rxn_prefix: prefix prepended to each rxn_id when building
+        model.ec.rxns (e.g. the isozyme-index prefix used in gecko-light).
     genes_per_rxn: {rxn_id: [gene_id, ...]}.
     gene_sequences: {gene_id: sequence}.
     met_smiles: {met_id: smiles}.

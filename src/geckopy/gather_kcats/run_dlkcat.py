@@ -42,20 +42,6 @@ def run_dlkcat(
     to ``output_path``. The temporary directory is cleaned up on exit
     regardless of success or failure.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and resolves
-    the path as ``adapter.params.path/data/DLKcat.tsv``. geckopy takes
-    the file path explicitly; the caller resolves it.
-
-    MATLAB-COMPAT: GECKO MATLAB writes temporary files into the
-    project's ``data/`` folder. geckopy uses a real temp directory
-    (auto-cleaned by ``tempfile.TemporaryDirectory``), so a failed
-    run cannot leave stray files in the project.
-
-    MATLAB-COMPAT: The macOS PATH workaround
-    (``setenv('PATH', '/usr/local/bin:' + PATH)``) needed when MATLAB
-    is launched from Finder is omitted; Python users invoking from a
-    shell already have a sensible PATH.
-
     Parameters
     ----------
     input_path

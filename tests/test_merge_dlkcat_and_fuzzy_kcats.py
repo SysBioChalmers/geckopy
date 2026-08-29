@@ -488,8 +488,8 @@ def test_merge_kcats_exact_db_preferred_over_fuzzy_top():
 
 
 def test_merge_kcats_okp_brenda_beats_dlkcat():
-    """Contrast with the failed-fuzzy NA case: an OKP BRENDA row carries
-    a positive kcat, so it is a real database_exact value and wins."""
+    """An OKP BRENDA row carries a positive kcat, so it is a real
+    database_exact value that outranks a lower-priority DLKcat prediction."""
     out = merge_kcats(
         _okp_df([_okp_row("r1", 7.0, "BRENDA")]),
         _dlkcat_df([_dlkcat_row("r1", 100.0)]),
@@ -581,8 +581,7 @@ def test_merge_kcats_preserves_input_order():
 
 def test_merge_kcats_drops_nonpositive_kcat():
     """An unmatched fuzzy row (kcat 0, NA metadata) is dropped, so a
-    DLKcat row for the same reaction wins -- mirroring the legacy
-    behaviour through the general entry point."""
+    DLKcat row for the same reaction wins."""
     out = merge_kcats(
         _fuzzy_df([_fuzzy_row("r1", 0.0, wildcard_level=pd.NA, origin=pd.NA)]),
         _dlkcat_df([_dlkcat_row("r1", 100.0)]),

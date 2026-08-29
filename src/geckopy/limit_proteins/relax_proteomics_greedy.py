@@ -84,7 +84,8 @@ def relax_proteomics_greedy(
     GreedyRelaxResult
         ``relaxed`` maps uniprot to the original concentration
         (so the caller can restore if desired); ``trace`` records
-        each step; ``converged`` is True iff
+        each step; ``final_growth`` is the objective value reached
+        at the last iteration attempted; ``converged`` is True iff
         ``final_growth >= minimal_growth``.
 
     Ported from the legacy geckopy package (Carrasco et al., 2023,

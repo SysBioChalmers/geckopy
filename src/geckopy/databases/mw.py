@@ -78,20 +78,15 @@ def calculate_mw(sequence: str) -> float:
     once (representing the H + OH at the peptide termini, equivalent to
     one un-eliminated water relative to N residues + N water masses).
 
-    Recognized amino acid codes (case-INsensitive in geckopy):
+    Recognized amino acid codes (the sequence is uppercased first, so
+    matching is case-insensitive):
 
         ACDEFGHIKLMNPQRSTVWY  - the 20 standard residues
         BJOZUX                - non-standard / ambiguous codes
 
-    Characters not in the table (whitespace, digits, punctuation,
-    lowercase letters that are not also recognized) are skipped with
-    a warning.
-
-    MATLAB-COMPAT: MATLAB is case-sensitive (lowercase letters silently
-    skipped). geckopy uppercases first.
-
-    MATLAB-COMPAT: MATLAB silently skips unknown characters. geckopy
-    warns once per call listing the offending character set.
+    Whitespace and digits are skipped silently. Any other unrecognized
+    character is also skipped, but triggers one warning per call
+    listing every distinct offending character.
 
     Parameters
     ----------

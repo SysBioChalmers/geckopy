@@ -162,7 +162,8 @@ def test_missing_stoichiometry_becomes_zero(monkeypatch):
 
 
 def test_only_min_value_parsed(monkeypatch):
-    """The MATLAB takes only minValue from 'minValue: 2, maxValue: 4'."""
+    """Only minValue is parsed from a 'minValue: 2, maxValue: 4' string;
+    maxValue is ignored."""
     responses = {
         "search/*": (200, {"size": 1, "elements": [{"complexAC": "CPX-1"}]}),
         "complex/CPX-1": (200, {

@@ -55,22 +55,17 @@ def calculate_f_factor(
     Ported from GECKO MATLAB:
     src/geckomat/limit_proteins/calculateFfactor.m.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and a
-    ``protData`` that may be a struct OR a path. geckopy splits the
-    file-loading concern out into ``load_pax_db`` and takes a
-    pre-loaded ``ProtData`` here.
-
-    MATLAB-COMPAT: GECKO MATLAB silently returns 0.5 when no
-    proteome data is provided. geckopy requires the caller to handle
-    the missing-data case explicitly.
-
     Parameters
     ----------
     model
         EcModel; only used to default ``enzymes`` to
         ``model.ec.enzymes``.
     prot_data
-        Pre-loaded proteomics data.
+        Pre-loaded proteomics data (typically from ``load_pax_db``).
+        There is no implicit fallback when proteomics data is
+        unavailable -- callers without measurements should use a
+        default value such as ``f = 0.5`` directly instead of calling
+        this function.
     enzymes
         UniProt IDs counted as "in the model". Defaults to
         ``model.ec.enzymes``.
@@ -79,7 +74,8 @@ def calculate_f_factor(
     -------
     float
         The f-factor in [0, 1]. Returns 0.0 if the total proteome
-        abundance is zero.
+        abundance is zero, or if none of the proteomics UniProt IDs
+        match a model enzyme.
     """
     if enzymes is None:
         enzymes = model.ec.enzymes

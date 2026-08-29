@@ -446,9 +446,10 @@ def test_idempotent_re_run_does_not_duplicate_standard(tmp_path):
 
 
 def test_idempotent_resets_source_on_real_enzyme_rxns_when_re_run(tmp_path):
-    """An existing 'standard' source on a row that points to a REAL enzyme
-    (not the standard pseudoenzyme) should have its kcat reset to 0 and
-    source cleared on re-run."""
+    """A zero-kcat reaction tied to a real gene first receives the global
+    standard kcat and source='standard'; once its source is reassigned
+    (e.g. to 'manual'), a second run must leave its kcat and source
+    untouched."""
     adapter = _adapter(tmp_path)
     # r2 has a real kcat so the global standard_kcat is computable;
     # r1 has zero kcat and will be filled with that standard.

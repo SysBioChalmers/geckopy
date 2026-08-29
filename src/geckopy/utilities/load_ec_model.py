@@ -20,10 +20,8 @@ geckopy keeps three application-level concerns:
    clear message if the YAML lacks the ec sections, and attach the
    adapter to ``model.adapter`` so downstream geckopy code finds it.
 
-MATLAB-COMPAT: MATLAB ``loadEcModel`` falls back to
-``ModelAdapterManager.getDefault()`` when no adapter is supplied.
-geckopy has no global default adapter — pass an adapter explicitly, or
-use an absolute filename.
+geckopy has no global default adapter: pass one explicitly, or use an
+absolute filename.
 
 Ported from GECKO MATLAB: src/geckomat/utilities/loadEcModel.m.
 """

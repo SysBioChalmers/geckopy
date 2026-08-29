@@ -107,8 +107,8 @@ def filter_by_substrate(
 def _aggregate_kcats(kcats: np.ndarray, how: str) -> float:
     """Collapse the matched BRENDA kcats to a single value.
 
-    ``"max"`` (default, matches MATLAB GECKO) takes the highest reported
-    turnover; ``"median"`` is more robust to assay outliers and engineered
+    ``"max"`` takes the highest reported turnover across the matched
+    rows; ``"median"`` is more robust to assay outliers and engineered
     mutants.
     """
     if how == "median":
@@ -134,8 +134,15 @@ def match_kcat(
 ) -> tuple[float, int]:
     """One match attempt at one of the six search levels.
 
-    Returns ``(max_kcat_in_1_per_s, num_matched_rows)``.
-    ``num_matched == 0`` means no rows survived the filters.
+    ``substrate_match`` restricts ``table`` to rows whose substrate is
+    in ``substrates`` before the organism filter runs; ``sa`` selects
+    the specific-activity table instead of the kcat table. ``aggregate``
+    (``"max"`` or ``"median"``) controls how the surviving rows are
+    collapsed to one value.
+
+    Returns ``(kcat_in_1_per_s, num_matched_rows)``, where ``kcat`` is
+    the value picked by ``aggregate``. ``num_matched == 0`` means no
+    rows survived the filters.
     """
     rows = find_ec_rows(ec_token, ec_indices)
     if len(rows) == 0:

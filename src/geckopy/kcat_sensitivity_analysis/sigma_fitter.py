@@ -98,16 +98,6 @@ def fit_sigma(
     Ported from GECKO MATLAB:
     src/geckomat/kcat_sensitivity_analysis/sigmaFitter.m.
 
-    MATLAB-COMPAT: GECKO MATLAB leaves the model at the LAST trial
-    (sigma = 1.0) even though its docstring claims to return the
-    model adapted to the optimal sigma. geckopy re-applies the best
-    sigma at the end.
-
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and a
-    ``makePlot`` flag. geckopy reads the adapter from
-    ``model.adapter`` and returns the diagnostic grids in a
-    dataclass; callers plot via matplotlib if wanted.
-
     Parameters
     ----------
     model
@@ -130,9 +120,9 @@ def fit_sigma(
         it caps the number of bisection iterations (the default 100 is far
         more than the ~20 needed to converge). Default 100.
     method
-        ``"grid"`` (default) sweeps the full grid; ``"bisect"`` finds the
-        same best sigma in ~``log2(n)`` solves using the monotonicity of
-        growth in sigma.
+        ``"bisect"`` (default) finds the best sigma in ~``log2(n)``
+        solves using the monotonicity of growth in sigma; ``"grid"``
+        sweeps the full grid.
 
     Returns
     -------

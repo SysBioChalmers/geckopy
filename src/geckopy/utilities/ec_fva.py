@@ -98,20 +98,7 @@ def ec_fva(
     variant across all reactions' solutions and summing.
 
     Ported from GECKO MATLAB:
-    src/geckomat/utilities/ecFVA.m. MATLAB GECKO uses the envelope
-    formulation; geckopy reports the exact diagonal — tighter and never
-    too loose.
-
-    MATLAB-COMPAT: GECKO MATLAB uses ``parfor`` to parallelise the
-    per-conv-rxn LP solves. geckopy now supports parallelism via
-    ``multiprocessing`` with the ``n_proc`` parameter; the default
-    (``None``) resolves to ``cobra.Configuration().processes``. Pass
-    ``n_proc=1`` to force the serial path.
-
-    MATLAB-COMPAT: GECKO MATLAB returns ``(minFlux, maxFlux)``
-    aligned to ``model.rxns``. geckopy returns a ``pd.DataFrame``
-    indexed by reaction id with ``min_flux`` / ``max_flux`` columns
-    (more directly useful in Python).
+    src/geckomat/utilities/ecFVA.m.
 
     Parameters
     ----------

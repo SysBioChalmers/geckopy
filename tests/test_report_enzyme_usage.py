@@ -18,7 +18,9 @@ from geckopy.utilities import (
 # --------------------------------------------------------------------------- #
 
 def _build_single_enzyme_model(*, enzyme_ub: float = 5.0) -> EcModel:
-    """Same shape as in test_enzyme_usage."""
+    """Builds a toy model with one enzyme (E) catalysing A -> B, wired
+    through the protein-pool/usage-reaction machinery, with enzyme_ub
+    capping the usage reaction's flux."""
     model = EcModel("toy")
 
     A_e = cobra.Metabolite("A_e", compartment="e")
