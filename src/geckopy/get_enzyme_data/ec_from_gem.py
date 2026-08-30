@@ -57,24 +57,6 @@ def fill_eccodes_from_gem(
     are replaced with ``""`` and listed in a single
     ``logger.warning``.
 
-    MATLAB-COMPAT: GECKO MATLAB stores EC codes in a top-level
-    ``model.eccodes`` cell array. cobrapy stores them per-reaction in
-    ``reaction.annotation['ec-code']``; geckopy reads from there.
-
-    MATLAB-COMPAT: GECKO MATLAB returns ``(model, invalidEC,
-    invalidECpos)``. geckopy drops both secondary outputs and emits a
-    single warning instead.
-
-    MATLAB-COMPAT: The MATLAB validation regex is broken: substituting
-    ``$3`` on a valid ``"1.2.3.4"`` yields ``"3"``, which is non-empty
-    and therefore flagged as invalid. As written, every non-empty EC
-    string is discarded. geckopy implements the docstring intent.
-
-    MATLAB-COMPAT: ``ecRxns`` in MATLAB is a logical mask of length
-    ``model.ec.rxns``. geckopy follows the cobrapy idiom of an
-    iterable of reaction IDs (see ``model.remove_reactions``,
-    ``flux_variability_analysis(reaction_list=...)``, etc.).
-
     Parameters
     ----------
     model

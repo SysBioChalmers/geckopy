@@ -64,14 +64,7 @@ def write_dlkcat_input(
       SMILES are dropped from the output. Otherwise the SMILES is
       written as the literal string ``"None"``.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and
-    constructs the default output path as
-    ``adapter.params.path/data/DLKcat.tsv``. geckopy requires
-    ``output_path`` explicitly; the caller resolves the path.
-
-    MATLAB-COMPAT: GECKO MATLAB stores SMILES in a top-level
-    ``model.metSmiles`` cell. cobrapy stores them per-metabolite in
-    ``annotation['smiles']``; geckopy reads from there.
+    SMILES are read from each metabolite's ``annotation['smiles']``.
 
     Parameters
     ----------
@@ -280,7 +273,7 @@ def extract_enzyme_substrate_pairs(
 
 
 def _normalize(name: str) -> str:
-    """MATLAB `lower(regexprep(name, '[^0-9a-zA-Z]+', ''))`."""
+    """Lowercase ``name`` with all non-alphanumeric characters removed."""
     return _NORMALIZE_RE.sub("", name).lower()
 
 

@@ -18,10 +18,8 @@ class ComplexPortalEntry:
     The JSON field name ``stochiometry`` (a typo in the original
     ComplexPortal API) is renamed to ``stoichiometry`` here. The
     field ``geneName`` is renamed to ``gene_names`` for Python
-    conventions.
-
-    MATLAB-COMPAT: MATLAB stores the typo verbatim. geckopy renames at
-    load time. The JSON file itself is untouched.
+    conventions. Both renames happen only on this in-memory object;
+    the JSON file itself is untouched.
     """
     complex_id: str
     name: str

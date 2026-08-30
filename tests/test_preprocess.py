@@ -220,8 +220,8 @@ def test_does_not_touch_blocked_reactions():
 
 
 def test_does_not_touch_negative_only_reactions_with_nonzero_ub():
-    """lb < 0, ub < 0 is a strange case that should not be inverted
-    (MATLAB condition is lb < 0 AND ub == 0 exactly)."""
+    """lb < 0 and ub < 0 (both negative) should not be inverted -- only
+    lb < 0 with ub == 0 exactly triggers inversion."""
     model = _build_model_with_bounds([
         ("r1", {"A": -1.0, "B": 1.0}, -1000.0, -100.0),
     ])
@@ -318,8 +318,8 @@ def test_does_not_split_forward_only_reaction():
 
 
 def test_does_not_split_exchange_reaction_even_if_reversible():
-    """Exchange reactions (one metabolite) are explicitly excluded from
-    the irreversibility step in MATLAB, regardless of bounds."""
+    """Exchange reactions (one metabolite) are excluded from the
+    irreversibility step, regardless of bounds."""
     model = _build_model_with_bounds([
         ("EX_A", {"A": -1.0}, -1000.0, 1000.0),
     ])
@@ -362,8 +362,8 @@ def test_reverse_reaction_inherits_gpr():
 
 
 def test_forward_reaction_lb_is_clamped_to_zero():
-    """After splitting, the original reaction should have lb = 0,
-    which is what MATLAB's convertToIrrev does."""
+    """After splitting, the original (forward) reaction's lower bound
+    is clamped to 0."""
     model = _build_model_with_bounds([
         ("r1", {"A": -1.0, "B": 1.0}, -500.0, 1000.0),
     ])

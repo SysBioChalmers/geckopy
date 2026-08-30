@@ -65,7 +65,23 @@ def _resolve_enzyme_compartment_id(model: "EcModel", requested: str) -> str:
 
 def add_protein_pseudometabolites(model: "EcModel") -> list[str]:
     """Stage 9: add ``prot_<enzyme>`` pseudometabolites to the model.
-    ... (docstring unchanged) ...
+
+    Adds one pseudometabolite per unique enzyme in ``model.ec.enzymes``,
+    in the compartment named by ``adapter.params.enzyme_comp``. Enzymes
+    that already have a ``prot_<enzyme>`` metabolite in the model are
+    skipped (idempotent).
+
+    Parameters
+    ----------
+    model
+        An EcModel with ``ec.enzymes`` already populated (stage 7) and
+        ``adapter`` set. Mutated in place.
+
+    Returns
+    -------
+    list of str
+        Sorted IDs of the pseudometabolites actually added (excludes
+        any that already existed).
     """
     from ...adapter import resolve_adapter
     adapter = resolve_adapter(
@@ -110,9 +126,6 @@ def add_protein_pseudometabolites(model: "EcModel") -> list[str]:
 def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
     """Stage 10: add the single ``prot_pool`` pseudometabolite.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 10).
-
     Parameters
     ----------
     model
@@ -148,25 +161,9 @@ def add_protein_pool_pseudometabolite(model: "EcModel") -> None:
 def add_protein_usage_reactions(model: "EcModel") -> list[str]:
     """Stage 11: add ``usage_prot_<enzyme>`` reactions.
 
-    MATLAB-COMPAT: GECKO MATLAB writes these reactions as
-    ``prot_<enzyme> -> prot_pool`` with bounds ``(-1000, 0)``, so flux
-    is negative when the enzyme is being produced. geckopy uses the
-    forward direction ``prot_pool -> prot_<enzyme>`` with bounds
-    ``(0, 1000)``, matching cobrapy convention. To make the two
-    representations interchangeable, MATLAB GECKO should switch to
-    the forward direction in a future release. The model I/O layer
-    (when written) detects and translates the old form on read.
-
-
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 11, full-model branch only).
-
     Each usage reaction has stoichiometry ``prot_pool -> prot_<enzyme>``
-    with bounds ``(0, 1000)``. This differs from the MATLAB convention,
-    where the same reaction was written as ``prot_<enzyme> -> prot_pool``
-    with bounds ``(-1000, 0)``, so that positive flux represents enzyme
-    production in both cases. The two forms are equivalent; the geckopy
-    form is the cobrapy-native forward direction.
+    with bounds ``(0, 1000)``; positive flux represents enzyme
+    production.
 
     The GPR of each usage reaction is set to the single gene whose
     enzyme is the produced pseudometabolite, so that
@@ -222,23 +219,9 @@ def add_protein_usage_reactions(model: "EcModel") -> list[str]:
 def add_protein_pool_exchange_reaction(model: "EcModel") -> None:
     """Stage 12: add the single ``prot_pool_exchange`` reaction.
 
-    MATLAB-COMPAT: GECKO MATLAB writes this as
-    ``prot_pool -> (nothing)`` with bounds ``(-1000, 0)``, so negative
-    flux imports protein. geckopy uses the forward direction
-    ``(nothing) -> prot_pool`` with bounds ``(0, 1000)``. As with the
-    usage reactions, MATLAB GECKO should switch to the forward
-    direction.
-
-
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m
-    (stage 12).
-
     Stoichiometry: ``(nothing) -> prot_pool`` with bounds ``(0, 1000)``.
     Positive flux imports protein into the pool, mirroring how cobrapy
     writes ordinary exchange reactions for extracellular metabolites.
-    This is a direction flip vs the MATLAB convention (which uses
-    ``prot_pool -> (nothing)`` with ``(-1000, 0)``); the two are
-    equivalent.
 
     Parameters
     ----------
@@ -292,14 +275,6 @@ def set_prot_pool_size(
     When called with no arguments, the function reads ``p_tot``,
     ``f``, and ``sigma`` from the adapter. Any of the three can
     be overridden via keyword.
-
-    MATLAB-COMPAT: GECKO MATLAB sets the (negative) lower bound;
-    geckopy sets the (positive) upper bound. Numerically the same
-    in absolute terms. When MATLAB GECKO switches its pool
-    exchange to the forward direction, that MATLAB function will
-    also switch from setting lb to setting ub.
-
-    Ported from GECKO MATLAB: src/geckomat/change_model/setProtPoolSize.m.
 
     Parameters
     ----------

@@ -308,7 +308,7 @@ def _adapter_with_isozyme_aggregate(
 
 def test_aggregate_default_mean_with_adapter_default(tmp_path):
     """Adapter defaults to ``kcat_aggregate_isozymes='mean'``; omitting
-    ``aggregate`` reproduces MATLAB-GECKO mean averaging."""
+    ``aggregate`` falls through to that default."""
     model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
     model.adapter = _adapter_with_isozyme_aggregate(tmp_path)
     fill_kcats_from_isozymes(model, apply=False)
@@ -325,7 +325,7 @@ def test_aggregate_adapter_median_flips_default(tmp_path):
 
 
 def test_aggregate_default_mean_when_no_adapter():
-    """Without an adapter attached, the historical mean default is used."""
+    """Without an adapter attached, the mean default is used."""
     model = _isozyme_model([1.0, 2.0, 100.0, 0.0])
     fill_kcats_from_isozymes(model, apply=False)
     assert model.ec.kcat[3] == pytest.approx((1.0 + 2.0 + 100.0) / 3.0)

@@ -61,9 +61,9 @@ def load_kegg_tsv(
 ) -> KeggDB:
     """Parse a kegg.tsv into a KeggDB.
 
-    Mirrors MATLAB's auto-download convention: if ``path`` does not
-    exist and ``kegg_id`` is given and ``auto_download`` is True,
-    fetches the data via ``download_kegg`` first, then parses.
+    If ``path`` does not exist and ``kegg_id`` is given and
+    ``auto_download`` is True, fetches the data via ``download_kegg``
+    first, then parses.
 
     Parameters
     ----------
@@ -75,8 +75,7 @@ def load_kegg_tsv(
         auto-download; otherwise unused.
     gene_id_field
         KEGG entry field to use as the gene matching key. Default
-        ``"kegg"`` mirrors MATLAB's default behaviour (col 2 holds
-        the bare KEGG gene ID).
+        ``"kegg"`` uses column 2, the bare KEGG gene ID.
     auto_download
         If True (default) and ``path`` is missing, trigger
         ``download_kegg(kegg_id, path, gene_id_field=...)`` before

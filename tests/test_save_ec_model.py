@@ -115,7 +115,7 @@ def test_relative_filename_without_adapter_raises(tmp_path):
 
 
 def test_unknown_extension_raises(tmp_path):
-    """Anything outside YAML is rejected (SBML ecModel I/O was removed)."""
+    """Any extension other than YAML is rejected."""
     adapter = _adapter(tmp_path)
     model = _build_full_ec_model(adapter)
     with pytest.raises(ValueError, match="YAML only"):
@@ -123,8 +123,9 @@ def test_unknown_extension_raises(tmp_path):
 
 
 def test_sbml_extension_raises_with_helpful_message(tmp_path):
-    """Past versions accepted .xml / .sbml; the new error message points
-    that out so existing callers learn what changed."""
+    """A `.xml`/`.sbml` filename raises with a message explaining that
+    SBML ecModel I/O is not supported, not just a generic "YAML only"
+    error."""
     adapter = _adapter(tmp_path)
     model = _build_full_ec_model(adapter)
     with pytest.raises(ValueError, match="SBML ecModel I/O has been removed"):

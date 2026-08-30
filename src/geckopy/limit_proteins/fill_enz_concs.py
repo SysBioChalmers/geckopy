@@ -46,10 +46,6 @@ def fill_enz_concs(
     Ported from GECKO MATLAB:
     src/geckomat/limit_proteins/fillEnzConcs.m.
 
-    MATLAB-COMPAT: MATLAB's ``dataCol`` is 1-indexed and defaults to
-    1. geckopy's ``data_col`` is 0-indexed (Python convention) and
-    defaults to 0.
-
     Parameters
     ----------
     model

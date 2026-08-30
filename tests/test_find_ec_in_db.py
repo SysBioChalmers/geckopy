@@ -335,8 +335,8 @@ def test_all_genes_missing_returns_empty():
 
 def test_intersection_result_is_deduped():
     """Two genes both with EC `1.1.1.1` should yield a SINGLE
-    `1.1.1.1` in the result, not `1.1.1.1;1.1.1.1`. MATLAB would
-    produce duplicates here; geckopy dedupes."""
+    `1.1.1.1` in the result, not `1.1.1.1;1.1.1.1` -- duplicate
+    tokens are deduped."""
     db_eccodes, db_mw, idx = _make_db([
         ("g1", "1.1.1.1", 100.0),
         ("g2", "1.1.1.1", 100.0),

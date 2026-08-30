@@ -107,13 +107,9 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
             give ``[g/mmol]``.
     * Derived kcat in the SA table is ``SA * MW = [1/s]``.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and resolves
-    the path via ``modelAdapter.getBrendaDBFolder()``. geckopy takes
-    a folder path directly; the caller resolves the path.
-
-    MATLAB-COMPAT: GECKO MATLAB only stores per-triple max values.
-    geckopy ships both max and median in the snapshot so a project can
-    opt into median aggregation via
+    Both kcat and SA are loaded as separate max and median views over
+    the raw measurements aggregated per (ec, substrate, organism)
+    triple, so a project can opt into median aggregation via
     ``adapter.params.kcat_aggregate_brenda`` without regenerating the
     snapshot. See ``docs/kcat_aggregation.md`` for the rationale.
 

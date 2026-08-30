@@ -180,8 +180,8 @@ def test_partial_match_above_threshold_logs(caplog):
 
 
 def test_single_enzyme_reaction_not_proposed(caplog):
-    """Per MATLAB, single-enzyme reactions are not eligible for
-    proposed complexes (their stoichiometry is unambiguous)."""
+    """Single-enzyme reactions are not eligible for proposed complexes,
+    since their stoichiometry is already unambiguous."""
     ec_model = _ectestgem_ec_model()
     data = [ComplexPortalEntry(
         complex_id="C_extra",
@@ -241,8 +241,8 @@ def test_apply_false_leaves_kcat_coefficients_stale():
 # --------------------------------------------------------------------------- #
 
 def test_all_zero_stoichiometry_treated_as_all_ones():
-    """MATLAB convention: if a complex has all-zero stoichiometry, treat
-    every entry as 1 (placeholder for unknown true counts)."""
+    """A complex with all-zero stoichiometry has every entry treated as 1,
+    since zero is a placeholder for unknown true counts."""
     ec_model = _ectestgem_ec_model()
     data = [ComplexPortalEntry(
         complex_id="R2Compl",

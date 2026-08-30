@@ -29,8 +29,6 @@ def set_kcat_for_reactions(
 ) -> list[str]:
     """Set kcat values for one or more reactions in ec.kcat.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/setKcatForReactions.m.
-
     Each ID in ``rxn_ids`` is interpreted as follows:
 
     - If the ID ends in ``_EXP_<n>`` (full layout) or starts with
@@ -40,11 +38,6 @@ def set_kcat_for_reactions(
       isozyme marker, equals the base name. So in a full model,
       ``"R2"`` matches ``R2``, ``R2_EXP_1``, ``R2_EXP_2``; in a light
       model, ``"R2"`` matches ``001_R2``, ``002_R2``.
-
-    MATLAB-COMPAT: MATLAB GECKO's setKcatForReactions only strips the
-    ``_EXP_<n>`` suffix, so in a light MATLAB ecModel users must pass
-    the explicit ``001_R2`` form. geckopy strips the light prefix too,
-    so the base-name shorthand works identically in both layouts.
 
     The ``kcat`` argument follows numpy-style broadcasting: a single
     float applies to every matched reaction; a sequence must match the
@@ -57,11 +50,8 @@ def set_kcat_for_reactions(
     different values for different isozymes, pass the suffixed IDs
     explicitly.
 
-    MATLAB-COMPAT: MATLAB allows passing a length-N kcat for an
-    un-suffixed ID that expands to N matches; geckopy forbids this.
-
-    MATLAB-COMPAT: MATLAB writes the source string ``'setKcatForReactions'``
-    to ec.source for changed reactions. geckopy writes ``'manual'``.
+    ``ec.source`` is set to ``"manual"`` for every reaction changed by
+    this call.
 
     Parameters
     ----------

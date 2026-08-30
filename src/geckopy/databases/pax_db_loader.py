@@ -62,11 +62,6 @@ def load_pax_db(
     column-wise to form a 2-D array if they want multi-sample
     averaging.
 
-    MATLAB-COMPAT: GECKO MATLAB's calculateFfactor silently returns
-    ``0.5`` when the paxDB.tsv file is missing. geckopy raises
-    ``FileNotFoundError`` from this loader; the caller decides on a
-    fallback.
-
     Ported from GECKO MATLAB:
     the inline paxDB-parsing block of
     src/geckomat/limit_proteins/calculateFfactor.m.

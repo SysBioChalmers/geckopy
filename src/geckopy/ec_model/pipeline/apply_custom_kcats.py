@@ -31,9 +31,6 @@ def apply_custom_kcats(
 ) -> None:
     """Apply user-curated kcats from a customKcats.tsv file.
 
-    Ported from GECKO MATLAB:
-    src/geckomat/change_model/applyCustomKcats.m.
-
     Reads a tab-separated file with seven columns and one header line:
 
         proteins | genes | gene_name | kcat | rxns | notes | stoicho
@@ -62,25 +59,12 @@ def apply_custom_kcats(
     each updated reaction (separated by ``, `` from any existing note).
     The ``ec.source`` is set to ``"custom"``. The ``stoicho`` column is
     parsed but not applied; a warning is logged if any row has
-    non-trivial stoichiometry.
+    non-trivial stoichiometry. The ``genes`` and ``gene_name`` columns
+    are read but not used.
 
-    MATLAB-COMPAT: GECKO MATLAB defines Mode B in its docstring as
-    "no additional checks", but the implementation actually applies
-    the same full-match gate as Mode C. geckopy follows the
-    implementation behavior. A future cleanup can drop Mode B entirely.
-
-    MATLAB-COMPAT: The MATLAB ``stoicho`` column was intended to update
-    rxn_enz_mat with subunit counts but is dead code in MATLAB GECKO.
-    geckopy does not apply stoichiometry from this column either, but
-    warns if non-trivial values are present. Custom subunit counts will
-    be supported by a separate function in a future release.
-
-    MATLAB-COMPAT: MATLAB returns three outputs (model, rxnUpdated,
-    notMatch). geckopy returns None and logs partial/none/error rows
-    at WARNING level for the user to review.
-
-    MATLAB-COMPAT: The ``genes`` and ``gene_name`` columns are parsed
-    in MATLAB but never used. geckopy skips them entirely.
+    Rows that fail to resolve to any reaction, or whose enzyme match
+    is only partial, are logged at WARNING level for manual review
+    rather than raised as errors.
 
     Parameters
     ----------
@@ -252,7 +236,9 @@ def apply_custom_kcats(
 
 
 def _parse_custom_kcats_tsv(path: Path) -> list[dict]:
-    """Parse the seven-column TSV. Returns a list of dicts."""
+    """Parse the seven-column TSV into a list of row dicts (keys:
+    index, proteins, kcat, rxns, notes, stoicho).
+    """
     rows: list[dict] = []
     with open(path, "r", encoding="utf-8") as f:
         header = f.readline().rstrip("\n").split("\t")

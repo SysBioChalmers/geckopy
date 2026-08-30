@@ -51,15 +51,10 @@ def read_dlkcat_output(
     (``eccode``, ``wildcard_level``, ``origin``) are filled with
     ``""`` / ``<NA>``.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and defaults
-    the path to ``adapter.params.path/data/DLKcat.tsv``. geckopy
-    requires ``file_path`` explicitly; the caller resolves it.
-
-    MATLAB-COMPAT: GECKO MATLAB's substrate-name match against
-    ``model.metNames`` is case-sensitive (``ismember`` default).
-    geckopy uses case-insensitive matching, which is more lenient
-    and avoids false-positive failures when SBML loaders differ in
-    capitalization.
+    Substrate names are matched against ``model.metabolites``
+    case-insensitively, so differences in capitalization between the
+    DLKcat output and the SBML-loaded model do not cause spurious
+    failures.
 
     Parameters
     ----------

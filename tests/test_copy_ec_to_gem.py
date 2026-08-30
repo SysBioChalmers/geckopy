@@ -136,7 +136,8 @@ def test_overwrite_true_replaces_populated_annotations():
 
 
 def test_overwrite_default_is_false():
-    """The MATLAB default is `overwrite=false`. Confirm geckopy matches."""
+    """Default is `overwrite=False`: calling without the kwarg leaves an
+    existing annotation untouched."""
     model = _make_ec_model(
         [("r1", "9.9.9.9")], ec_eccodes=["1.1.1.1"],
     )

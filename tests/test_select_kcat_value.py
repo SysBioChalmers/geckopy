@@ -22,7 +22,9 @@ def _ec_model(
     initial_kcat: list[float] | None = None,
     initial_source: list[str] | None = None,
 ) -> EcModel:
-    """Build an EcModel with the given ec.rxns and starting state."""
+    """Build an EcModel with the given ec.rxns; ``initial_kcat`` and
+    ``initial_source`` default to all-zero and all-empty-string when
+    omitted."""
     n = len(ec_rxns)
     if initial_kcat is None:
         initial_kcat = [0.0] * n
@@ -131,8 +133,8 @@ def test_criteria_median_picks_median_value():
 
 
 def test_criteria_median_attributes_source_to_first_row():
-    """MATLAB-compat: median/mean source comes from the first row of
-    the group, not the median sample itself."""
+    """For median/mean, the recorded source comes from the first row of
+    the group, not from the row whose kcat is the median sample itself."""
     model = _ec_model(["r1"])
     apply_kcat_list(
         model,
@@ -434,8 +436,7 @@ def test_criteria_adapter_median_flips_default(tmp_path):
 
 
 def test_criteria_default_max_when_no_adapter():
-    """Without an adapter attached, the historical ``criteria='max'``
-    default is used."""
+    """Without an adapter attached, ``criteria`` defaults to ``'max'``."""
     model = _ec_model(["r1"])  # no adapter
     apply_kcat_list(model, _kcat_list(_THREE_CAND))
     assert model.ec.kcat[0] == 9.0

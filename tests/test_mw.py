@@ -151,9 +151,8 @@ def test_multiple_unknown_chars_warned_together(caplog):
 # --------------------------------------------------------------------------- #
 
 def test_short_real_protein_mass():
-    """ATP synthase F0 subunit a (~120 kDa estimate from a short snippet).
-    We just check the function returns a sensible positive value for a
-    real-looking sequence."""
+    """A snippet of a real protein sequence should yield a plausible
+    mass in the low-kDa range, not just any positive number."""
     seq = "MENTGTLAGCDVRFGRSGGSGSGSGSAATAACK"
     mw = calculate_mw(seq)
     assert mw > 0
@@ -166,5 +165,5 @@ def test_short_real_protein_mass():
 # --------------------------------------------------------------------------- #
 
 def test_water_mass_is_precise():
-    """geckopy uses 18.01528 (precise average), not MATLAB's 18."""
+    """The water mass used is the precise average, 18.01528 Da."""
     assert _WATER_MASS == pytest.approx(18.01528)

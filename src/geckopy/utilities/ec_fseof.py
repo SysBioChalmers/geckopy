@@ -22,30 +22,13 @@ schema.
 Ported from GECKO MATLAB: ``src/geckomat/utilities/ecFSEOF.m``,
 re-designed around :func:`raven_toolbox.analysis.fseof.fseof`.
 
-MATLAB-COMPAT: GECKO MATLAB uses strict monotonicity + top-25%-by-slope
-to pick targets; geckopy delegates to raven-toolbox's regression-based
-selection (``|correlation|`` against the enforced flux) with pFBA per
-step. Regression is more robust to LP alternative optima — see
-raven-toolbox's IMPROVEMENTS notes FS1-FS4 for the rationale.
-
-MATLAB-COMPAT: GECKO MATLAB classifies targets as ``OE`` / ``KD`` /
-``KO``; raven uses ``amplify`` / ``knockdown`` / ``knockout``. Same
-semantics, different vocabulary.
-
-MATLAB-COMPAT: GECKO MATLAB optionally writes the result tables to
-TSV. geckopy returns the raven ``FSEOFResult``; callers can
-``result.targets.to_csv(...)`` themselves.
-
-MATLAB-COMPAT: GECKO MATLAB computes a per-gene ``essentiality`` column
-by blocking each gene's ``usage_prot_<enzyme>`` reactions and re-solving.
-geckopy drops this column. The same analysis is available via
-:func:`cobra.flux_analysis.single_gene_deletion`, which works on
-ecModels because GPRs already gate the catalysed reactions.
-
-MATLAB-COMPAT: GECKO MATLAB splits targets into ``rxn_targets`` vs
-``transport_targets`` (reactions whose metabolites span compartments).
-geckopy returns one combined ``targets`` table; callers can split it
-themselves via the ``subsystem`` column or by inspecting each reaction.
+Callers who want the result tables on disk can call
+``result.targets.to_csv(...)`` themselves. Per-gene essentiality is
+not computed here; use :func:`cobra.flux_analysis.single_gene_deletion`,
+which works directly on ecModels since GPRs already gate the catalysed
+reactions. Targets come back as one combined table; split it into
+reaction vs. transport subsets yourself via the ``subsystem`` column
+or by inspecting each reaction's metabolites.
 """
 from __future__ import annotations
 
@@ -95,7 +78,7 @@ def ec_fseof(
         biomass-max (a common mis-configuration). ``None`` skips the
         check.
     n_steps
-        Number of enforced-flux levels in the scan.
+        Number of enforced-flux levels in the scan. Default 10.
     bio_rxn
         Biomass reaction id. Defaults to ``adapter.params.bio_rxn`` when
         ``model.adapter`` is set.
@@ -106,7 +89,10 @@ def ec_fseof(
         A reaction is a target when ``|corr(flux, enforced)| >=`` this
         value. Default 0.9.
     flux_eps
-        Numerical floor for flat-flux detection.
+        Minimum ``|slope|`` (flux change per enforced-flux step) for
+        a reaction to count as responsive; below this it is treated
+        as flat regardless of correlation, so it cannot become a
+        target. Default 1e-6.
 
     Returns
     -------
@@ -142,10 +128,9 @@ def _check_cs_consistency(
 ) -> None:
     """Warn when the carbon source can't deliver its biomass-max uptake.
 
-    Matches the MATLAB ecFSEOF safety check: if the carbon-source
-    reaction's lower bound is less negative than its biomass-max flux,
-    the scan will silently flatten at the bound and the slopes mean
-    less than they look.
+    If the carbon-source reaction's lower bound is less negative than
+    its biomass-max flux, the scan will silently flatten at the bound
+    and the slopes mean less than they look.
     """
     cs_rxn_obj = model.reactions.get_by_id(cs_rxn_id)
     with model:

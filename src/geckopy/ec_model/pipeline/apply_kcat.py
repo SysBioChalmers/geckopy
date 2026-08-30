@@ -29,9 +29,6 @@ def apply_kcat_constraints(
 ) -> None:
     """Translate ec.kcat values into stoichiometric coefficients.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/applyKcatConstraints.m
-    (full-model branch only).
-
     For each reaction in ``ec.rxns`` with a valid kcat and at least one
     associated enzyme, writes a negative coefficient at
     ``S[prot_<enzyme>, rxn]`` of magnitude::
@@ -48,11 +45,6 @@ def apply_kcat_constraints(
     Entries with kcat == 0 or kcat == NaN are treated as "no kcat
     assigned"; their stoichiometric coefficients are set to 0 (i.e.,
     the enzyme places no constraint on that reaction).
-
-    MATLAB-COMPAT: GECKO MATLAB clears existing coefficients before
-    checking kcat validity, so flipping a kcat to NaN or 0 and
-    re-applying clears the prior constraint. geckopy matches this
-    semantics exactly.
 
     The function is idempotent: existing non-zero coefficients at
     ``S[prot_<enzyme>, rxn]`` are first cleared for the reactions being
@@ -184,8 +176,7 @@ def _apply_kcat_constraints_light(
     """Write the lowest-cost-isozyme ``prot_pool`` coefficient on each
     affected cobra reaction.
 
-    Ported from GECKO MATLAB: src/geckomat/change_model/applyKcatConstraints.m
-    (gecko-light branch). Light ec.rxns has one row per isozyme of each
+    Light ec.rxns has one row per isozyme of each
     cobra reaction (distinguished by a 3-digit counter prefix). The light
     formulation collapses those rows to a single LP constraint per cobra
     reaction by picking the isozyme with the lowest ``MW_sum / kcat``

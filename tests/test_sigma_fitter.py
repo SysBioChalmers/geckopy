@@ -99,13 +99,9 @@ def test_no_adapter_no_defaults_raises(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_best_sigma_close_to_target_growth(tmp_path):
-    """With p_tot=1, f=1, growth = 1000*sigma. Target growth 0.5 means
-    optimal sigma ~ 0.0005, but we only try sigmas 0.01..1.0, so the
-    smallest tried (0.01 -> growth=10) is still way above target.
-    The best sigma in the grid is 0.01 (closest to target's needed value).
-
-    Actually with growth_rate=10 and p_tot=1, f=1, the optimal sigma
-    is exactly 0.01. Use that as the test target."""
+    """With p_tot=1, f=1, growth = 1000*sigma, so for growth_rate=10 the
+    exactly-optimal sigma is 0.01; the search should land on it with
+    near-zero error."""
     adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
     model = _build_pool_only_model(adapter)
     result = fit_sigma(model)
@@ -148,8 +144,8 @@ def test_growth_grid_scales_linearly_with_sigma(tmp_path):
 
 
 def test_optimal_sigma_applied_to_model_at_end(tmp_path):
-    """geckopy divergence from MATLAB: model is left at the OPTIMAL
-    sigma, not the last tried (1.0)."""
+    """After fitting, the model is left at the optimal sigma found, not
+    the last sigma tried during the search."""
     adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=50.0)
     model = _build_pool_only_model(adapter)
     result = fit_sigma(model)
@@ -233,7 +229,8 @@ def test_sigma_grid_starts_above_zero_ends_at_one(tmp_path):
 
 
 def test_default_method_is_bisect_with_fewer_solves(tmp_path):
-    """Default method is now bisect: same answer, far fewer evaluated sigmas."""
+    """Default method is bisect: same answer as the grid search, with far
+    fewer evaluated sigmas."""
     adapter = _adapter(tmp_path, p_tot=1.0, f=1.0, gr_exp=10.0)
     model = _build_pool_only_model(adapter)
     result = fit_sigma(model)  # default == bisect

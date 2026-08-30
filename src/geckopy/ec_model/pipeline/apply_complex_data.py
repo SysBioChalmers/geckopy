@@ -31,9 +31,6 @@ def apply_complex_data(
 ) -> None:
     """Update ec.rxn_enz_mat with subunit stoichiometries from ComplexPortal.
 
-    Ported from GECKO MATLAB:
-    src/geckomat/change_model/applyComplexData.m.
-
     For each catalyzed reaction in ``ec.rxns``, look up its enzyme set
     in the ComplexPortal data. Three outcomes:
 
@@ -51,13 +48,6 @@ def apply_complex_data(
     No match
         Skipped silently.
 
-    MATLAB-COMPAT: MATLAB returns three outputs (model, foundComplex,
-    proposedComplex). geckopy returns None and logs proposals.
-
-    MATLAB-COMPAT: MATLAB does NOT call applyKcatConstraints; users
-    must remember to do it. geckopy auto-applies (apply=True) since
-    changing rxn_enz_mat invalidates kcat coefficients.
-
     Parameters
     ----------
     model
@@ -69,7 +59,9 @@ def apply_complex_data(
     complex_data
         Pre-loaded list of ComplexPortalEntry. Overrides ``path``.
     apply
-        If True (default), call ``apply_kcat_constraints`` after.
+        If True (default), call ``apply_kcat_constraints`` afterward.
+        Needed because changing ``rxn_enz_mat`` invalidates the
+        existing kcat coefficients.
     min_match_to_propose
         Minimum fraction of model enzymes in a complex for it to be
         reported as a proposal. MATLAB hardcodes 0.75.

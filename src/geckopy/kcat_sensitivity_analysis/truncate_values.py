@@ -21,19 +21,14 @@ def truncate_values(
         order_magn = max(ceil(log10(|v|)), 0)
         result     = round(v, 6 - order_magn)
 
+    Zero, NaN, and infinite values are returned unchanged.
+
     For 2D input, only the columns selected by ``columns`` are
     processed (default: all). Other columns are copied through
     unchanged. The input is never mutated; a new array is returned.
 
     Ported from GECKO MATLAB:
     src/geckomat/kcat_sensitivity_analysis/truncateValues.m.
-
-    MATLAB-COMPAT: GECKO MATLAB mutates the cell array in place.
-    geckopy returns a new array (Python convention).
-
-    MATLAB-COMPAT: MATLAB's ``log10(0)`` is ``-Inf`` and ``ceil(-Inf)``
-    is ``-Inf``; the MATLAB ``max([..., 0])`` then yields 0, so zero
-    falls through correctly. geckopy short-circuits on zero for clarity.
 
     Parameters
     ----------
@@ -72,7 +67,10 @@ def truncate_values(
 
 
 def _truncate_scalar(v: float) -> float:
-    """Round ``v`` to ~6 significant figures per the MATLAB recipe."""
+    """Round ``v`` to ~6 significant figures.
+
+    Zero, NaN, and infinite values are returned unchanged.
+    """
     if v == 0 or np.isnan(v) or np.isinf(v):
         return v
     order_magn = max(int(np.ceil(np.log10(abs(v)))), 0)
