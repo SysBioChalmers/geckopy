@@ -2,11 +2,13 @@
 
 Covers stages 9, 10, 11, and 12 of GECKO MATLAB `makeEcModel.m`.
 
-Reaction directions differ from the MATLAB convention. MATLAB defined
-usage and pool reactions with `lb=-1000, ub=0` (negative-flux
-reactions); geckopy defines them in the natural forward direction
-(`lb=0, ub=1000`). A future I/O layer handles translation between the
-two conventions so models remain compatible.
+Both sides write the same forward-direction convention: `usage_prot_*`
+consumes `prot_pool` and produces `prot_<enzyme>` (bounds `0, 1000`),
+and `prot_pool_exchange` produces `prot_pool` (bounds `0, 1000`),
+matching MATLAB's `makeEcModel.m` exactly. Only pre-GECKO-4 legacy
+files used the reverse-direction convention (`lb=-1000, ub=0`); those
+are normalized to the forward convention on load (see
+`load_ec_model.py`), mirroring MATLAB's `loadEcModel.m`.
 """
 from __future__ import annotations
 
