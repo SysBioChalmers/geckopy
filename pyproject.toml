@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "geckopy"
-version = "0.2.1"
+version = "0.3.0"
 description = "Enzyme-constrained genome-scale metabolic modeling in Python, inspired by the GECKO Toolbox"
 readme = "README.md"
 requires-python = ">=3.11"

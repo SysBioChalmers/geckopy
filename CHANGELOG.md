@@ -4,7 +4,7 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
-## [Unreleased]
+## [0.3.0] — 2026-08-30
 
 Parity pass against the MATLAB GECKO Toolbox: geckopy's core functions now
 reproduce every value GECKO's own unit-test suite pins down.
@@ -62,6 +62,36 @@ reproduce every value GECKO's own unit-test suite pins down.
   included — deep-copying one recursed until the interpreter's recursion
   limit gave out. Fixed upstream in cobra 0.31.0 by deleting the
   overrides; **requires cobra at or after 0.31.1**.
+- **`examples/yeast-GEM`'s adapter config used a rejected pydantic field.**
+  `model_adapter.toml` set `uniprot.tax_id`, but `ModelParameters`'s schema
+  (`additionalProperties=false`) has no such field — it's called `id`, and
+  already defaults to the taxonomy id — so `ModelAdapter.from_folder` raised a
+  validation error on this folder unconditionally. A parametrized regression
+  test now runs over every `examples/` subfolder so schema drift like this is
+  caught for any future adapter config too. (#34)
+
+### Documentation
+
+- Docstrings across geckopy's source and tests reviewed for clarity and
+  accuracy: `MATLAB-COMPAT` comparison paragraphs replaced with plain
+  statements of current behavior, other historical/regression narration
+  dropped, and several docstrings that no longer matched the code corrected.
+  Comment/docstring-only; no functional changes. (#36)
+- **`protein_pool.py`'s module docstring no longer claims `prot_pool_exchange`'s
+  direction diverges from MATLAB pending a "future I/O layer".** GECKO
+  MATLAB's `makeEcModel.m` already writes the same forward (`lb=0`, `ub=1000`)
+  convention as geckopy; the reverse convention only applies to legacy
+  pre-GECKO-4 files, which `load_ec_model.py` already normalizes on load. (#38)
+- **`mw.py`'s stale `MATLAB-COMPAT` comments removed** now that `calculate_mw`
+  matches GECKO MATLAB's current water-mass constant (18.01528) and mean
+  X-residue mass (118.885), closed upstream as GECKO#459. No behavioral
+  change — the code already computed the now-matching values. (#39)
+
+### Internal
+
+- Removed the dead `_run_preprocess` stub from `test_populate_ec`: an empty
+  helper (docstring and comments, no body) that was never called. The
+  preprocessing stages it described are already exercised elsewhere. (#37)
 
 ### Notes
 
@@ -330,6 +360,7 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.
 
+[0.3.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.3.0
 [0.2.1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.1
 [0.2.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.0
 [0.1.0a3]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a3
@@ -358,3 +389,8 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
 [#21]: https://github.com/SysBioChalmers/geckopy/pull/21
 [#31]: https://github.com/SysBioChalmers/geckopy/pull/31
 [#32]: https://github.com/SysBioChalmers/geckopy/pull/32
+[#34]: https://github.com/SysBioChalmers/geckopy/pull/34
+[#36]: https://github.com/SysBioChalmers/geckopy/pull/36
+[#37]: https://github.com/SysBioChalmers/geckopy/pull/37
+[#38]: https://github.com/SysBioChalmers/geckopy/pull/38
+[#39]: https://github.com/SysBioChalmers/geckopy/pull/39
