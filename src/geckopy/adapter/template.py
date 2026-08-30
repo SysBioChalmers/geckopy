@@ -88,7 +88,22 @@ def _is_nested_model(annotation: Any) -> bool:
 def generate_template_toml(
     *, advanced: bool = False, project_name: str = "my-ecmodel",
 ) -> str:
-    """Generate a commented TOML template for a new ecModel project."""
+    """Generate a commented TOML template for a new ecModel project.
+
+    Parameters
+    ----------
+    advanced
+        Include the advanced sections (currently just Bayesian
+        kcat-tuning hyperparameters); omitted by default since most
+        projects never need to touch them.
+    project_name
+        Name written into the template's header comment.
+
+    Returns
+    -------
+    str
+        The full TOML template text, ending in a newline.
+    """
     lines: list[str] = [
         f"# Adapter configuration for: {project_name}",
         "# Uncomment and edit lines below to override defaults.",

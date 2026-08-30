@@ -19,23 +19,6 @@ def get_reactions_from_enzyme(
 ) -> pd.DataFrame:
     """Return all reactions catalyzed by a given enzyme, as a DataFrame.
 
-    Ported from GECKO MATLAB:
-    src/geckomat/change_model/getReactionsFromEnzyme.m.
-
-    MATLAB-COMPAT: MATLAB returns five separate outputs (rxns, kcat,
-    idx, rxnNames, grRules). geckopy returns a single pandas DataFrame
-    with columns ``rxn_id``, ``kcat``, ``name``, ``gpr``. The
-    ``idx`` output is dropped because it is trivially derivable as
-    ``ec.rxns.index(rxn_id)``. To get just the reaction IDs:
-    ``df['rxn_id'].tolist()``. To sort by kcat:
-    ``df.sort_values('kcat')``.
-
-    MATLAB-COMPAT: MATLAB matches case-insensitively. geckopy is
-    case-sensitive throughout.
-
-    MATLAB-COMPAT: MATLAB returns empty outputs when the protein ID is
-    unknown. geckopy raises ValueError.
-
     Parameters
     ----------
     model

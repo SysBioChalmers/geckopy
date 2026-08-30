@@ -7,9 +7,8 @@
 # using yeast-GEM as the starting point. STEP numbers match the
 # MATLAB tutorial and the Nature Protocols paper.
 #
-# This script covers Stages 0-3 (model construction + tuning).
-# Stages 4-5 (proteomics integration and simulation/analysis) will
-# be added in subsequent phases.
+# Covers Stages 0-5: model construction, kcat integration, tuning,
+# proteomics integration, and simulation/analysis.
 #
 # **Do not use the ecModel produced here outside this tutorial.**
 # A maintained ecYeastGEM is distributed via
@@ -112,11 +111,10 @@ save_ec_model(ec_model, "ecYeastGEM_stage1.yml", adapter=adapter)
 # ```
 
 # %% [markdown]
-# **STEP 16-17** Gather EC numbers. First take what's annotated in
-# the GEM, then fill the rest from UniProt. The MATLAB tutorial
-# notes the yeast-GEM EC annotations are not thoroughly curated and
-# overwrites all of them with database-derived values; we do the
-# same.
+# **STEP 16-17** Gather EC numbers via `fill_eccodes_from_database`,
+# which overwrites `ec.eccodes` with UniProt-derived values for
+# every reaction, since yeast-GEM's own EC annotations are not
+# thoroughly curated.
 
 # %%
 fill_eccodes_from_database(ec_model, uniprot_db)
@@ -234,9 +232,8 @@ save_ec_model(ec_model, "ecYeastGEM_stage2.yml", adapter=adapter)
 # ## STAGE 3: Model tuning
 #
 # **STEP 33-38** Test the maximum growth rate with an unconstrained
-# glucose uptake. In MATLAB this uses RAVEN's `setParam` /
-# `solveLP`; in geckopy we set bounds on `cobra.Reaction` directly
-# and use `model.optimize()`.
+# glucose uptake, setting the bound directly on the reaction and
+# solving with `model.optimize()`.
 
 # %%
 ec_model.reactions.get_by_id(params.c_source).lower_bound = -1000

@@ -53,15 +53,6 @@ def get_conc_control_coeffs(
     Ported from GECKO MATLAB:
     src/geckomat/limit_proteins/getConcControlCoeffs.m.
 
-    MATLAB-COMPAT: The MATLAB usage-rxn convention is reverse
-    (constraint as ``lb = -conc``); geckopy uses the forward
-    convention (``ub = conc``). The control coefficient sign is
-    identical either way.
-
-    MATLAB-COMPAT: GECKO MATLAB always uses the 2x finite-difference
-    probe; geckopy's default reads the local LP dual (analytic and
-    direction-unbiased), with the finite-difference kept as a fallback.
-
     Parameters
     ----------
     model
@@ -71,8 +62,8 @@ def get_conc_control_coeffs(
     proteins
         UniProt IDs to analyse. Defaults to ``model.ec.enzymes``.
     fold_change
-        Probe size for the finite-difference fallback (default 2.0,
-        matching MATLAB). Ignored on the shadow-price path.
+        Probe size for the finite-difference fallback (default 2.0).
+        Ignored on the shadow-price path.
     limit
         Skip proteins whose usage flux is at most ``limit`` times
         their upper bound. Default 0.0 includes any protein with
@@ -185,16 +176,15 @@ def _finite_difference_coeffs(
 
 
 def _solution_is_optimal(sol) -> bool:
-    """Guard against solver states that aren't a genuine LP optimum.
+    """True iff ``sol`` is a genuine LP optimum with a usable objective.
 
-    On an infeasible LP some solvers (notably glpk via optlang) gracefully
-    return a non-NaN ``objective_value`` — for our infeasibility-by-binding
-    test, glpk reports ``status='infeasible'`` with ``objective_value=1000.0``
-    (the lower-bound rhs that made it infeasible) and ``fluxes`` populated
-    from the last attempted basis. The previous ``None or isnan`` check
-    accepted that, which then caused enz_mask to be set on a non-existent
-    optimum. Requiring ``status == "optimal"`` rejects every non-optimal
-    state (infeasible, unbounded, suboptimal, ...) cleanly.
+    Requires ``status == "optimal"``; a non-NaN ``objective_value`` on
+    its own is not sufficient, since on an infeasible LP some solvers
+    (notably glpk via optlang) can still report a non-NaN
+    ``objective_value`` (e.g. the bound that made it infeasible) with
+    ``fluxes`` populated from their last attempted basis. Any
+    non-optimal state (infeasible, unbounded, suboptimal, ...) is
+    rejected.
     """
     if sol is None or sol.status != "optimal":
         return False

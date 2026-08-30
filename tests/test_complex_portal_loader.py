@@ -100,9 +100,8 @@ def test_returns_dataclass_instances(tmp_path):
 
 
 def test_scalar_stochiometry_wrapped_to_list(tmp_path):
-    """ComplexPortal exports collapse single-element arrays to scalars
-    (matching MATLAB jsonencode round-trip behaviour); the loader
-    normalises them back to lists."""
+    """ComplexPortal exports collapse single-element arrays to scalars;
+    the loader normalises them back to lists."""
     path = _write(tmp_path / "c.json", [{
         "complexID": "C1", "name": "n", "specie": "s",
         "geneName": ["G1"], "protID": ["P1"], "stochiometry": 0,

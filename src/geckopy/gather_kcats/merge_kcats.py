@@ -123,15 +123,6 @@ def merge_kcats(
     ValueError
         If no list is given, ``source_priority`` is empty, a limit is
         out of range, or any input list is missing required columns.
-
-    MATLAB-COMPAT: MATLAB's scalar ``source = "Merged DLKcat and fuzzy"``
-    field is dropped; the per-row ``source`` column already records each
-    value's provenance.
-
-    MATLAB-COMPAT: where MATLAB fills NA wildcard/origin with ``1000`` so
-    unmatched rows fail every comparison, geckopy drops non-positive
-    ``kcat`` rows up front (the same set of unmatched fuzzy rows) and
-    treats a *remaining* NA-metadata database row as an exact OKP value.
     """
     if not kcat_lists:
         raise ValueError("merge_kcats requires at least one kcat list.")

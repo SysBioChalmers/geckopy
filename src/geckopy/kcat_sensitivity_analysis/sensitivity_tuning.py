@@ -55,7 +55,26 @@ _MAX_TUNED_KCAT = 1e7
 
 @dataclass
 class TunedKcatsResult:
-    """Information about which kcats were tuned and by how much."""
+    """Outcome of a sensitivity-tuning run.
+
+    Attributes
+    ----------
+    rxns
+        IDs of the reactions whose kcat was bumped, in tuning order.
+    rxn_names
+        Reaction names parallel to ``rxns`` (falls back to the
+        reaction ID when it has no name).
+    enzymes
+        For each tuned reaction, the catalysing enzyme ID(s),
+        ``;``-joined when more than one enzyme is involved.
+    old_kcat
+        kcat value before tuning, parallel to ``rxns``.
+    new_kcat
+        kcat value after tuning, parallel to ``rxns``.
+    source
+        Original kcat provenance (``model.ec.source``) before
+        tuning, parallel to ``rxns``.
+    """
 
     rxns: list[str] = field(default_factory=list)
     rxn_names: list[str] = field(default_factory=list)
@@ -100,21 +119,6 @@ def sensitivity_tuning(
 
     Ported from GECKO MATLAB:
     src/geckomat/kcat_sensitivity_analysis/sensitivityTuning.m.
-
-    MATLAB-COMPAT: MATLAB usage rxns go reverse (most production =
-    most negative flux); geckopy uses forward (most production =
-    most positive flux). MATLAB picks ``min(drawFluxes)``, geckopy
-    picks ``max(drawFluxes)``. Same enzyme either way.
-
-    MATLAB-COMPAT: The MATLAB function has a separate gecko-light
-    branch. geckopy does not yet support gecko-light pipelines;
-    calling this on a gecko-light model raises
-    ``NotImplementedError`` (consistent with
-    ``constrain_enz_concs``).
-
-    MATLAB-COMPAT: ``modelAdapter`` is dropped per established
-    convention; ``desired_growth_rate`` defaults to
-    ``model.adapter.params.gr_exp``.
 
     Parameters
     ----------

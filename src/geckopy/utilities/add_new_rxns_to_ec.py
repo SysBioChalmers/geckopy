@@ -52,7 +52,18 @@ class NewEnzyme:
 @dataclass
 class AddNewRxnsResult:
     """IDs of what was actually added (after isozyme/reversibility
-    expansion and the dedupe of already-present enzymes)."""
+    expansion and the dedupe of already-present enzymes).
+
+    Attributes
+    ----------
+    rxns_added
+        IDs of every cobra reaction actually added to the model,
+        after isozyme (``_EXP_<n>``) and reversibility (``_REV``)
+        expansion.
+    enz_added
+        UniProt IDs of the enzymes actually added (enzymes already
+        present in `model.ec.enzymes` are excluded).
+    """
 
     rxns_added: list[str] = field(default_factory=list)
     enz_added: list[str] = field(default_factory=list)
@@ -93,28 +104,17 @@ def add_new_rxns_to_ec(
     Ported from GECKO MATLAB:
     src/geckomat/utilities/addNewRxnsToEC.m.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a `newRxns` struct with parallel
-    `rxns/rxnNames/equations/grRules` lists plus a string-equation
-    parser. geckopy takes pre-built cobra.Reaction objects (with
-    stoichiometry, GPR, lb/ub already set) for cleaner cobra-native
-    usage; equation parsing can be done by the caller via cobra's
-    `Reaction.build_reaction_from_string` if needed.
-
-    MATLAB-COMPAT: usage reactions are forward direction in geckopy
-    (`prot_pool -> prot_<enzyme>`) versus reverse in MATLAB. Same
-    semantics.
-
-    MATLAB-COMPAT: GECKO MATLAB raises on gecko-light models;
-    geckopy raises `NotImplementedError` for the same case.
-
     Parameters
     ----------
     model
         Full EcModel (not gecko-light) with the protein pool /
         usage rxn machinery already installed. Mutated in place.
     new_rxns
-        Reactions to add. Each must have stoichiometry,
-        `gene_reaction_rule`, `lower_bound`, `upper_bound` set.
+        Reactions to add, as pre-built `cobra.Reaction` objects.
+        Each must have stoichiometry, `gene_reaction_rule`,
+        `lower_bound`, `upper_bound` set; build one from a string
+        equation with cobra's `Reaction.build_reaction_from_string`
+        if that's more convenient.
     new_enzymes
         Enzymes to add (one per UniProt ID). Enzymes already in
         `model.ec.enzymes` are silently skipped with a warning.

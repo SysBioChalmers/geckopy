@@ -147,7 +147,8 @@ def test_raises_on_duplicate_entry(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_split_gene_cells_default_is_false(tmp_path):
-    """Without splitting, multi-gene cells are stored verbatim (MATLAB default)."""
+    """Without splitting (the default), multi-gene cells are stored
+    verbatim as a single string."""
     path = _write_tsv(tmp_path / "u.tsv", [
         "P1\tG1 G2\t1.1.1.1\t10000\tMKAL",
     ])

@@ -47,22 +47,6 @@ def copy_ec_to_gem(model: "EcModel", *, overwrite: bool = False) -> None:
     ``None``) are updated. With ``overwrite=True`` any non-empty
     ``ec.eccodes[i]`` replaces the current annotation.
 
-    MATLAB-COMPAT: GECKO MATLAB writes EC codes into a top-level
-    ``model.eccodes`` cell array. cobrapy stores them per-reaction
-    in ``reaction.annotation['ec-code']``; geckopy writes there.
-
-    MATLAB-COMPAT: GECKO MATLAB writes the raw ``;``-joined string
-    into the cell. geckopy splits on ``;`` and writes a ``list[str]``
-    (cobrapy idiom). Round-trip with ``fill_eccodes_from_gem`` is stable
-    because that function's ``_normalize_annotation`` joins lists
-    back to ``;``-separated strings.
-
-    MATLAB-COMPAT: GECKO MATLAB with ``overwrite=true`` overwrites
-    existing entries even when ``ec.eccodes[i]`` is empty (writing an
-    empty cell). geckopy treats empty ``ec.eccodes`` entries as "no
-    info to propagate" and never clobbers an existing annotation
-    with emptiness.
-
     Reactions in the cobra model that are absent from
     ``model.ec.rxns`` are left untouched. Entries of
     ``model.ec.rxns`` that do not match any cobra reaction are

@@ -64,9 +64,8 @@ def load_uniprot_tsv(
 ) -> UniprotDB:
     """Parse a uniprot.tsv file into a UniprotDB.
 
-    Mirrors the KEGG-loader / MATLAB convention: if ``path`` does
-    not exist and ``uniprot_id`` is given and ``auto_download`` is
-    True, ``download_uniprot`` is invoked first.
+    If ``path`` does not exist and ``uniprot_id`` is given and
+    ``auto_download`` is True, ``download_uniprot`` is invoked first.
 
     Parameters
     ----------
@@ -77,18 +76,11 @@ def load_uniprot_tsv(
         If True, rows whose Gene Names cell contains whitespace-separated
         multiple names are expanded into one row per gene name. All other
         fields (Entry, EC, MW, sequence) are duplicated across the
-        expanded rows. This matches how cases like UniProt's
-        `gene_names` field return multiple synonyms per entry.
-
-        MATLAB-COMPAT: GECKO MATLAB does not split multi-gene cells.
-        For organisms where the UniProt gene_oln field returns
-        space-separated multiple ORF names per entry, MATLAB matches
-        on the whole string and silently misses those genes. geckopy
-        provides ``split_gene_cells=True`` as an opt-in fix, but the
-        default mirrors MATLAB.
-
-        If False (the default and MATLAB-equivalent behavior), the cell
-        is stored verbatim, including any embedded whitespace.
+        expanded rows. This matters for organisms where the UniProt
+        ``gene_oln`` field returns multiple space-separated ORF names
+        per entry: with the default of False, the cell is stored
+        verbatim (including any embedded whitespace), so an exact-match
+        lookup against a single ORF name silently misses those genes.
     uniprot_id
         UniProt-side identifier (e.g. NCBI taxonomy ID). Required
         for auto-download; otherwise unused.

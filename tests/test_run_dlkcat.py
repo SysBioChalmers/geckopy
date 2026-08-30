@@ -19,6 +19,8 @@ class _RunSpy:
     `dlkcat_output_text`: content to write to the output file (or None to
         skip writing it, simulating "completed but no output").
     `dlkcat_stderr`: stderr text returned by the docker run.
+    `raise_on_version`: if set, this exception is raised instead of
+        returning a result for the `docker --version` call.
     """
 
     def __init__(

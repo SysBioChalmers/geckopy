@@ -64,14 +64,7 @@ def write_dlkcat_input(
       SMILES are dropped from the output. Otherwise the SMILES is
       written as the literal string ``"None"``.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and
-    constructs the default output path as
-    ``adapter.params.path/data/DLKcat.tsv``. geckopy requires
-    ``output_path`` explicitly; the caller resolves the path.
-
-    MATLAB-COMPAT: GECKO MATLAB stores SMILES in a top-level
-    ``model.metSmiles`` cell. cobrapy stores them per-metabolite in
-    ``annotation['smiles']``; geckopy reads from there.
+    SMILES are read from each metabolite's ``annotation['smiles']``.
 
     Parameters
     ----------
@@ -235,7 +228,13 @@ def extract_enzyme_substrate_pairs(
     sub_matrix = reduced_s[:, selected_cols].toarray()
 
     # (substrate_idx, local_rxn_idx) pairs where coefficient is negative.
-    substrate_idx, local_rxn_idx = np.where(sub_matrix < 0)
+    #
+    # MATLAB's `[substrates, reactions] = find(clearedRedS < 0)` walks a
+    # sparse matrix column-major, so the pairs come out reaction-major
+    # (all substrates of reaction 1, then of reaction 2, ...). numpy's
+    # `where` is row-major, which would group by substrate instead; the
+    # transpose restores MATLAB's row order in the written file.
+    local_rxn_idx, substrate_idx = np.where(sub_matrix.T < 0)
 
     if len(substrate_idx) == 0:
         return pd.DataFrame(columns=_PAIR_COLUMNS)
@@ -274,7 +273,7 @@ def extract_enzyme_substrate_pairs(
 
 
 def _normalize(name: str) -> str:
-    """MATLAB `lower(regexprep(name, '[^0-9a-zA-Z]+', ''))`."""
+    """Lowercase ``name`` with all non-alphanumeric characters removed."""
     return _NORMALIZE_RE.sub("", name).lower()
 
 

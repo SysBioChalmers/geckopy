@@ -61,14 +61,6 @@ def load_prot_data(
     Ported from GECKO MATLAB:
     src/geckomat/utilities/loadProtData.m.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and defaults
-    the path to ``adapter.params.path/data/proteomics.tsv``. geckopy
-    requires the path explicitly.
-
-    MATLAB-COMPAT: GECKO MATLAB returns a struct; geckopy returns a
-    ``ProtData`` dataclass with ``abundances`` always 2-D
-    ``(n_proteins, n_conditions)``.
-
     Parameters
     ----------
     source

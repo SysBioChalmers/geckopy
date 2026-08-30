@@ -70,15 +70,6 @@ def enzyme_usage(
     Ported from GECKO MATLAB:
     src/geckomat/utilities/enzymeUsage.m.
 
-    MATLAB-COMPAT: MATLAB's usage rxns go reverse, so the
-    "available capacity" lives in the (negative) lower bound;
-    MATLAB's struct field is named ``LB``. geckopy uses forward
-    direction, so the field is ``ub``. Same magnitude.
-
-    MATLAB-COMPAT: GECKO MATLAB raises on gecko-light models.
-    geckopy raises ``NotImplementedError`` for the same case
-    (consistent with other geckopy functions on light models).
-
     Parameters
     ----------
     model

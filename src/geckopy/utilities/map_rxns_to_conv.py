@@ -77,9 +77,6 @@ def map_rxns_to_conv(
     Ported from GECKO MATLAB:
     src/geckomat/utilities/mapRxnsToConv.m.
 
-    MATLAB-COMPAT: GECKO MATLAB returns three separate outputs;
-    geckopy returns a ``MapRxnsResult`` dataclass.
-
     Parameters
     ----------
     ec_model

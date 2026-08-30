@@ -86,8 +86,8 @@ def test_rxn_names_populated_from_cobra_model():
 
 
 def test_dataframe_supports_natural_pandas_idioms():
-    """Demonstrates that the DataFrame return is more than a tuple-replacement:
-    it composes naturally with pandas operations the user likely wants."""
+    """The returned DataFrame composes with ordinary pandas operations
+    (e.g. sort_values), not just positional indexing."""
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R2_EXP_1"], 50.0, apply=False)
     set_kcat_for_reactions(ec_model, ["R2_REV_EXP_1"], 25.0, apply=False)

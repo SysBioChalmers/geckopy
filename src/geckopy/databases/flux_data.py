@@ -87,14 +87,6 @@ def load_flux_data(path: str | Path) -> FluxData:
     Ported from GECKO MATLAB:
     src/geckomat/utilities/loadFluxData.m.
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` and defaults
-    the path to ``adapter.params.path/data/fluxData.tsv``. geckopy
-    requires the path explicitly; the caller resolves it.
-
-    MATLAB-COMPAT: GECKO MATLAB stores the optional columns under
-    camelCase keys (``bayesianRMSEweight``, ``source``); geckopy
-    uses snake_case (``bayesian_rmse_weight``, ``source``).
-
     Parameters
     ----------
     path

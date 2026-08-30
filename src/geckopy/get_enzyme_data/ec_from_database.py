@@ -55,6 +55,9 @@ def fill_eccodes_from_database(
     * Store the resulting ``;``-joined EC string in
       ``model.ec.eccodes[i]``.
 
+    The adapter used for gene-ID translation is read from
+    ``model.adapter``.
+
     The gene -> protein-indices map is built once before the loop. It
     tries the adapter's ``uniprotConversion.tsv`` table first: if that
     table changes any gene IDs, each model gene maps to one UniProt ID
@@ -63,25 +66,10 @@ def fill_eccodes_from_database(
     and a single gene may map to several proteins (which is how
     conflicts arise).
 
-    MATLAB-COMPAT: GECKO MATLAB takes a ``modelAdapter`` arg and
-    resolves it via ``ModelAdapterManager.getDefault()``. geckopy
-    reads the adapter from ``model.adapter``.
-
     If ``kegg_db`` is supplied, the KEGG fallback fires for any
     reaction whose UniProt-derived EC is empty or ends with ``-``
     (a wildcard). The KEGG hit replaces the UniProt result when
-    non-empty. Matches MATLAB ``getECfromDatabase.m`` lines 95-104.
-
-    MATLAB-COMPAT: GECKO MATLAB exposes three actions: ``'display'``
-    (raise), ``'ignore'`` (silent), ``'add'`` (commented-out dead
-    code). geckopy drops ``'add'``. ``'display'`` here emits a single
-    aggregated ``logger.warning`` rather than raising, since the
-    individual conflict warnings from ``find_ec_in_db`` already give
-    users enough to act on.
-
-    MATLAB-COMPAT: GECKO MATLAB loops over every reaction even when
-    ``ecRxns`` masks most of them, then subsets at the end. geckopy
-    subsets up front (matching MATLAB's own TODO comment).
+    non-empty.
 
     Parameters
     ----------

@@ -71,31 +71,13 @@ def apply_kcat_list(
     ``wildcard_level`` / ``origin`` columns the source is the bare
     token.
 
-    MATLAB-COMPAT: GECKO MATLAB stores the raw ``kcatSource`` string in
-    ``model.ec.source``. geckopy lowercases it and appends the fuzzy
-    wildcard/origin detail, giving Bayesian sensitivity tuning a direct
-    read on per-kcat uncertainty. (Parity change to mirror in MATLAB.)
-
     Rows with ``kcat == 0`` mark "no match" and are dropped before
-    aggregation, matching MATLAB.
+    aggregation.
 
-    MATLAB-COMPAT: GECKO MATLAB takes the source via
-    ``[v, j] = median(...)`` / ``mean(...)``, which doesn't actually
-    return a meaningful index in standard MATLAB. geckopy attributes
-    the source to the **first row** of each group when ``criteria``
-    is ``"median"`` or ``"mean"``. For ``"max"`` and ``"min"`` the
-    source is unambiguous (the row whose kcat won).
-
-    MATLAB-COMPAT: GECKO MATLAB's ``kcatList`` has both a scalar
-    ``source`` field and an optional per-row ``kcatSource`` cell;
-    geckopy collapses both into a single per-row ``source`` column,
-    matching the schema produced by ``fuzzy_kcat_matching`` and the
-    upcoming DLKcat/manual loaders.
-
-    MATLAB-COMPAT: GECKO MATLAB returns ``(model, rxnIdx)`` where
-    ``rxnIdx`` is a list of integer positions. geckopy returns a
-    list of reaction IDs (strings) which are more directly useful
-    for downstream callers.
+    For ``criteria="median"`` or ``"mean"``, the aggregated value does
+    not come from a single input row, so the recorded source is that
+    of the **first row** in the reaction's group. For ``"max"`` and
+    ``"min"`` the source is unambiguous (the row whose kcat won).
 
     Parameters
     ----------

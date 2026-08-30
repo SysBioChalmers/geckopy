@@ -100,7 +100,8 @@ def test_clean_name_no_parenthetical_unchanged():
 
 
 def test_clean_name_strips_internal_paren_to_end():
-    """Per MATLAB regex `\\s*\\(.*`: strips from the FIRST `(` onwards."""
+    """Strips everything from the first '(' onward, even when more
+    parenthetical groups follow."""
     assert _clean_name("foo (bar) (baz)") == "foo"
 
 
@@ -142,8 +143,8 @@ def test_name_to_index_is_lowercased(tmp_path):
 
 
 def test_name_to_index_first_occurrence_wins_for_duplicates(tmp_path):
-    """Duplicate names should resolve to the first DB row, mirroring
-    MATLAB `find(strcmpi(...), 1)`."""
+    """When a name appears more than once, name_to_index resolves to
+    the first matching row."""
     p = tmp_path / "PhylDist.mat"
     _write_phyl_dist_mat(
         p,

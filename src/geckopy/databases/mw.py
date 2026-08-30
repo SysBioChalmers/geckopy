@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Average mass of water (g/mol). Added once to account for the two
 # H atoms and one OH that remain after peptide bond condensation.
-# MATLAB-COMPAT: GECKO MATLAB uses the rounded value 18. geckopy uses
-# the precise average mass for accuracy. The difference is ~0.015 Da
-# per protein, negligible for ec.mw uses.
+# Matches GECKO MATLAB's calculateMW.m exactly.
 _WATER_MASS = 18.01528
 
 
@@ -27,11 +25,10 @@ _WATER_MASS = 18.01528
 # - U (selenocysteine) = 150.04.
 # - Z = average(E, Q).
 #
-# X (any amino acid): geckopy uses the unweighted mean of the 20
-# standard residues for self-consistency with this exact table.
-# MATLAB-COMPAT: GECKO MATLAB uses 126.50 for X, an unsourced
-# historical value. MW values for sequences containing X will differ
-# from MATLAB by 7.11 Da per X.
+# X (any amino acid): the unweighted mean of the 20 standard residues
+# above, 118.885 -- matches GECKO MATLAB's calculateMW.m exactly, which
+# computes the same live mean of its own table rather than a fixed
+# constant.
 _STANDARD_RESIDUE_MASSES: dict[str, float] = {
     "A": 71.08,
     "C": 103.14,
@@ -78,20 +75,15 @@ def calculate_mw(sequence: str) -> float:
     once (representing the H + OH at the peptide termini, equivalent to
     one un-eliminated water relative to N residues + N water masses).
 
-    Recognized amino acid codes (case-INsensitive in geckopy):
+    Recognized amino acid codes (the sequence is uppercased first, so
+    matching is case-insensitive):
 
         ACDEFGHIKLMNPQRSTVWY  - the 20 standard residues
         BJOZUX                - non-standard / ambiguous codes
 
-    Characters not in the table (whitespace, digits, punctuation,
-    lowercase letters that are not also recognized) are skipped with
-    a warning.
-
-    MATLAB-COMPAT: MATLAB is case-sensitive (lowercase letters silently
-    skipped). geckopy uppercases first.
-
-    MATLAB-COMPAT: MATLAB silently skips unknown characters. geckopy
-    warns once per call listing the offending character set.
+    Whitespace and digits are skipped silently. Any other unrecognized
+    character is also skipped, but triggers one warning per call
+    listing every distinct offending character.
 
     Parameters
     ----------

@@ -46,20 +46,16 @@ def get_complex_data(
     Ported from GECKO MATLAB:
     src/geckomat/change_model/getComplexData.m.
 
-    The taxonomic ID semantics mirror the MATLAB function:
+    Taxonomic ID semantics:
 
     - A positive integer queries that organism only.
     - ``0`` queries all organisms (no species filter).
-    - ``None`` raises ValueError (the MATLAB silently returned; geckopy
-      is stricter).
+    - ``None`` raises ValueError.
 
     The response is post-processed to expand "complexes of complexes":
     when a Complex Portal entry references other complexes as subunits,
     those are flattened into one combined protein list with multiplied
     stoichiometries.
-
-    MATLAB-COMPAT: MATLAB warns and returns silently when taxonomic_id
-    is missing. geckopy raises ValueError instead.
 
     Parameters
     ----------

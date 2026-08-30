@@ -68,13 +68,6 @@ def _synthetic_uniprot(rows: list[tuple[str, str, float, str]]) -> UniprotDB:
     )
 
 
-def _run_preprocess(model: cobra.Model) -> None:
-    """Run stages 1, 2, 4, 5 in order. Stage 1 needs an adapter;
-    we pass one with a path whose data/pseudoRxns.tsv doesn't exist."""
-    # Using a throwaway adapter with no pseudoRxns.tsv, so stage 1 is a no-op
-    # unless a reaction name literally contains "pseudoreaction".
-
-
 # --------------------------------------------------------------------------- #
 # Stage 6: allocate_ec_for_catalyzed_reactions
 # --------------------------------------------------------------------------- #

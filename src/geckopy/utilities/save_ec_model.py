@@ -19,16 +19,11 @@ geckopy keeps three application-level concerns:
    block (date + geckopy version + description) so saved files carry
    provenance information.
 
-MATLAB-COMPAT: MATLAB ``saveEcModel`` mutates the input model
-(``ecModel.description = ['Enzyme-constrained model of ' ecModel.id]``).
-geckopy writes the description into the output ``metaData`` only; the
-caller's model is mutated transiently (provenance stashed on
-``model.notes`` for the duration of the write) and restored afterwards.
-
-MATLAB-COMPAT: MATLAB falls back to ``ModelAdapterManager.getDefault()``
-when no adapter is supplied. geckopy has no global default adapter —
-pass one explicitly, rely on ``model.adapter``, or use an absolute
-filename.
+The provenance/description metadata is written only into the saved
+YAML; the in-memory model's ``notes`` are mutated only transiently for
+the duration of the write (provenance stashed there so raven-toolbox's
+writer emits it) and are restored afterwards, leaving the caller's
+model unchanged.
 
 Ported from GECKO MATLAB: src/geckomat/utilities/saveEcModel.m.
 """
@@ -138,8 +133,8 @@ def _resolve_path(
 def _build_metadata(model: EcModel) -> dict:
     """Provenance block written under the top-level ``metaData`` key.
 
-    Save date, geckopy version, and a description string mirroring
-    MATLAB's ``Enzyme-constrained model of <id>``. Author / email /
+    Save date, geckopy version, and a description string of the form
+    ``"Enzyme-constrained model of <id>"``. Author / email /
     organization / taxonomy could be sourced from ``adapter.params``
     once those fields are added to ``ModelParameters``.
     """

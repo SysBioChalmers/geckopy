@@ -66,14 +66,9 @@ def assign_standard_kcat(
     ``standard_kcat`` and source set to ``"standard"``. They keep
     their original enzyme assignment.
 
-    MATLAB-COMPAT: GECKO MATLAB returns
-    ``(model, rxnsMissingGPR, standardMW, standardKcat, rxnsNoKcat)``.
-    geckopy mutates ``model`` in place and emits the diagnostic info
-    via ``logger.info``. Per the user, no downstream function consumes
-    the return values.
-
-    MATLAB-COMPAT: GECKO MATLAB's ``modelAdapter`` arg is dropped;
-    geckopy reads from ``model.adapter``.
+    The function mutates ``model`` in place and returns ``None``; the
+    standard MW/kcat and the counts of reactions touched are emitted
+    via ``logger.info`` instead.
 
     Parameters
     ----------

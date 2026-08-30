@@ -30,15 +30,6 @@ def find_max_value(
     Ported from GECKO MATLAB:
     src/geckomat/kcat_sensitivity_analysis/findMaxValue.m.
 
-    MATLAB-COMPAT: GECKO MATLAB takes raw cell arrays
-    ``BRENDA = {ec_codes, substrate, organism, kcat}`` and ``SA =
-    {ec_codes, organism, kcat, mw}``. geckopy takes a ``BrendaData``
-    dataclass and uses its DataFrames directly.
-
-    MATLAB-COMPAT: Parameter labels are kept verbatim from MATLAB
-    (``"K_cat"`` and ``"SA*Mw"``) for compatibility with downstream
-    callers / logs.
-
     Parameters
     ----------
     ec_string

@@ -26,6 +26,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 import cobra
+from raven_toolbox.utils.sort import sort_identifiers
 
 from ..databases import UniprotDB, load_uniprot_tsv
 from .ec_model import EcModel
@@ -134,13 +135,10 @@ def make_ec_model(
         inconsistencies (e.g. genes referenced in GPRs that don't
         exist in the model).
 
-    MATLAB-COMPAT: GECKO MATLAB returns the list of unmatched
-    genes as a second output (``noUniprot``). geckopy logs a
-    warning summary instead and annotates each affected reaction
-    via ``rxn.notes["geckopy_warning"]`` — the annotations are
-    usually more useful for debugging than the flat list.
-
-    Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
+    Genes referenced in the model's GPRs but not found in UniProt are
+    left enzyme-unconstrained: they are reported as a single warning
+    summary, and each affected reaction is annotated via
+    ``rxn.notes["geckopy_warning"]``.
     """
     if isinstance(model, EcModel) and model.ec.n_rxns > 0:
         raise ValueError(
@@ -161,6 +159,12 @@ def make_ec_model(
     convert_to_irreversible(model)
     if not gecko_light:
         expand_model(model)
+        # Sort reactions, so that reversible and isozymic reactions are kept
+        # near each other. MATLAB makeEcModel does this here (full models
+        # only), before the protein pseudoreactions are appended, so the
+        # metabolic block comes out alphabetically and the protein block
+        # follows in enzyme order.
+        sort_identifiers(model)
 
     # Promote to EcModel for stages 6-12.
     ec_model = EcModel.from_cobra(model, adapter, gecko_light=gecko_light)

@@ -65,13 +65,10 @@ def get_subset_ec_model(
     Ported from GECKO MATLAB:
     src/geckomat/utilities/getSubsetEcModel.m.
 
-    MATLAB-COMPAT: The MATLAB warning checks
-    ``lb(usage_prot_*) ~= -1000`` because its usage rxns go reverse;
-    geckopy uses forward direction so the equivalent check is
-    ``upper_bound != 1000``.
-
-    MATLAB-COMPAT: GECKO MATLAB uses ``dispEM`` which prints AND
-    raises; geckopy raises ``ValueError`` directly.
+    If any ``usage_prot_*`` reaction's upper bound differs from the
+    default (1000), a warning is logged: protein-concentration
+    constraints on ``big_ec_model`` may not carry over meaningfully
+    to the subset.
 
     Parameters
     ----------

@@ -70,8 +70,10 @@ def test_set_single_kcat_scalar_only_form():
 # --------------------------------------------------------------------------- #
 
 def test_unsuffixed_rxn_expands_to_all_isozymes():
-    """R2 expands to R2_EXP_1 and R2_EXP_2 (and R2_REV_EXP_1 / R2_REV_EXP_2
-    if those count). Let's check what the actual matches are first."""
+    """An un-suffixed base name matches only the ec.rxns entries whose ID
+    reduces to that exact base after stripping a trailing `_EXP_<n>`: "R2"
+    matches "R2_EXP_1"/"R2_EXP_2" but not "R2_REV_EXP_1"/"R2_REV_EXP_2",
+    whose base is "R2_REV"."""
     ec_model = _ectestgem_ec_model()
 
     # Check what ec.rxns contains starting with R2.
@@ -224,8 +226,8 @@ def test_apply_default_is_true():
 
 
 def test_apply_only_updates_passed_reactions():
-    """apply_kcat_constraints is called with update_rxns=updated_ids,
-    not all reactions, so unrelated reactions retain whatever they had."""
+    """Updating one reaction's kcat leaves other reactions' S-matrix
+    coefficients unchanged."""
     ec_model = _ectestgem_ec_model()
     # Pre-set R5 and apply manually.
     ec_model.ec.kcat[ec_model.ec.rxns.index("R5")] = 50.0

@@ -77,10 +77,29 @@ def resolve_param(
     """Return an explicit value, else fall back to ``adapter.params.<attr>``.
 
     Lets a function take the single parameter it needs directly, only
-    requiring a full ``ModelAdapter`` when the value is not supplied. If
-    ``explicit`` is not ``None`` it is returned as-is and no adapter is
-    needed; otherwise the adapter is resolved (from ``adapter`` or
-    ``model.adapter``) and ``params.<attr>`` is read.
+    requiring a full ``ModelAdapter`` when the value is not supplied.
+
+    Parameters
+    ----------
+    model
+        Any object that may have an ``.adapter`` attribute, used as the
+        fallback source when ``adapter`` is not given.
+    explicit
+        The caller-supplied value. If not ``None``, it is returned as-is
+        and no adapter is consulted at all.
+    attr
+        Name of the attribute to read off ``adapter.params`` when
+        ``explicit`` is ``None``.
+    adapter
+        An explicitly-passed adapter, used instead of ``model.adapter``
+        when resolving the fallback value.
+    purpose
+        Short description of why the calling function needs the value;
+        forwarded to :func:`resolve_adapter` for its error message.
+
+    Returns
+    -------
+    ``explicit`` if given, otherwise ``getattr(adapter.params, attr)``.
     """
     if explicit is not None:
         return explicit

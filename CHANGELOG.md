@@ -4,6 +4,105 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [0.3.0] — 2026-08-30
+
+Parity pass against the MATLAB GECKO Toolbox: geckopy's core functions now
+reproduce every value GECKO's own unit-test suite pins down.
+
+### Added
+
+- **`tests/test_gecko_matlab_parity.py` — a 1:1 port of GECKO's
+  `test/unit_tests/geckoCoreFunctionTests.m`** (47 tests, MATLAB test cases
+  `tc0001`–`tc0013`), run against the same `ecTestGEM` fixture MATLAB uses.
+  Every expected value is copied verbatim from the MATLAB sources rather than
+  re-derived from geckopy's output, so the file is the executable definition of
+  "geckopy builds the same ecModel as GECKO". It needs no MATLAB to run and
+  covers `makeEcModel` (full and light), `applyComplexData`, `setProtPoolSize`,
+  `getECfromGEM`, `getECfromDatabase`, save/load round-trip,
+  `fuzzyKcatMatching`, `writeDLKcatInput`, `mergeDLKcatAndFuzzyKcats`,
+  `selectKcatValue`, `applyKcatConstraints`, `getKcatAcrossIsozymes`,
+  `applyCustomKcats`, `findMetSmiles` and the proteomics-integration chain.
+
+### Fixed
+
+- **`make_ec_model` sorts identifiers for full models**, as MATLAB
+  `makeEcModel` does (`sortIdentifiers`, line 203, full models only, before the
+  protein pseudoreactions are appended). geckopy kept the input GEM's reaction
+  order, so a full ecModel came out with the same reactions in a different
+  order from MATLAB's — visible in the saved YAML and in every downstream table
+  that follows `ec.rxns` order.
+- **`write_dlkcat_input` emits rows in reaction order**, matching MATLAB's
+  column-major `find(clearedRedS < 0)`. numpy's `where` is row-major, so
+  geckopy grouped the DLKcat input by substrate instead of by reaction.
+- **`EcModel.copy()` clones the `ec` substructure.** `cobra.Model.copy`
+  rebuilds the network but carries every other attribute over by reference,
+  so `model.copy().ec` *was* the same `EcData` object as `model.ec`: writing
+  a kcat, eccode, source, conc or coupling coefficient on the copy silently
+  changed the model it was copied from. The copy's `enzymes` view was
+  likewise still bound to the original model, so reads and writes through
+  `model.enzymes` went to the wrong model. `copy()` now clones `ec` and
+  rebinds `enzymes`, giving the value semantics MATLAB GECKO has throughout.
+  `adapter` stays a shared reference (project configuration, not model
+  state). `copy.deepcopy(model)` was already correct and is unchanged.
+- **Reverse (`_REV`) reactions keep their EC code**, via a fix in
+  raven-toolbox's `convert_to_irreversible` (it now copies annotations,
+  subsystem and notes onto the reverse reaction, as MATLAB's `convertToIrrev`
+  copies `eccodes` / `rxnMiriams` / `subSystems` / `rxnNotes`). Without it
+  `fill_eccodes_from_gem` returned `''` for every `_REV` reaction, fuzzy BRENDA
+  matching found no kcat, and reverse directions were left unconstrained.
+  **Requires raven-toolbox at or after that fix.**
+- **`copy.deepcopy(ec_model)` (and of any `cobra.Model`) no longer
+  `RecursionError`s on Python 3.14.** The cause was in cobra, not geckopy:
+  `Reaction.__copy__`/`__deepcopy__` delegated to `super()` as a way to avoid
+  infinitely recursing into themselves, but that trick relies on `copy`
+  memoizing an object before recursing into its state, and Python 3.14's
+  `copy` module no longer does so for that code path. Every reaction holds
+  its metabolites and every metabolite holds the reactions it participates
+  in, so the resulting cycle exists in any real model, full ecModels
+  included — deep-copying one recursed until the interpreter's recursion
+  limit gave out. Fixed upstream in cobra 0.31.0 by deleting the
+  overrides; **requires cobra at or after 0.31.1**.
+- **`examples/yeast-GEM`'s adapter config used a rejected pydantic field.**
+  `model_adapter.toml` set `uniprot.tax_id`, but `ModelParameters`'s schema
+  (`additionalProperties=false`) has no such field — it's called `id`, and
+  already defaults to the taxonomy id — so `ModelAdapter.from_folder` raised a
+  validation error on this folder unconditionally. A parametrized regression
+  test now runs over every `examples/` subfolder so schema drift like this is
+  caught for any future adapter config too. (#34)
+
+### Documentation
+
+- Docstrings across geckopy's source and tests reviewed for clarity and
+  accuracy: `MATLAB-COMPAT` comparison paragraphs replaced with plain
+  statements of current behavior, other historical/regression narration
+  dropped, and several docstrings that no longer matched the code corrected.
+  Comment/docstring-only; no functional changes. (#36)
+- **`protein_pool.py`'s module docstring no longer claims `prot_pool_exchange`'s
+  direction diverges from MATLAB pending a "future I/O layer".** GECKO
+  MATLAB's `makeEcModel.m` already writes the same forward (`lb=0`, `ub=1000`)
+  convention as geckopy; the reverse convention only applies to legacy
+  pre-GECKO-4 files, which `load_ec_model.py` already normalizes on load. (#38)
+- **`mw.py`'s stale `MATLAB-COMPAT` comments removed** now that `calculate_mw`
+  matches GECKO MATLAB's current water-mass constant (18.01528) and mean
+  X-residue mass (118.885), closed upstream as GECKO#459. No behavioral
+  change — the code already computed the now-matching values. (#39)
+
+### Internal
+
+- Removed the dead `_run_preprocess` stub from `test_populate_ec`: an empty
+  helper (docstring and comments, no body) that was never called. The
+  preprocessing stages it described are already exercised elsewhere. (#37)
+
+### Notes
+
+- `merge_kcats` is n-ary and concatenates surviving rows list by list, so the
+  equivalent of MATLAB's `mergeDLKcatAndFuzzyKcats(dlkcat, fuzzy)` — which
+  always emits fuzzy rows first regardless of argument order — is
+  `merge_kcats(fuzzy, dlkcat, ...)`. The deprecated
+  `merge_dlkcat_and_fuzzy_kcats` alias is `merge_kcats`, so it follows the
+  geckopy convention, not MATLAB's signature. Row order has no numerical
+  effect: `apply_kcat_list` aggregates per reaction.
+
 ## [0.2.1] — 2026-07-16
 
 Bugfix release. `make_ec_model` no longer mutates the GEM it is given.
@@ -261,6 +360,7 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.
 
+[0.3.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.3.0
 [0.2.1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.1
 [0.2.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.0
 [0.1.0a3]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.1.0a3
@@ -289,3 +389,8 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
 [#21]: https://github.com/SysBioChalmers/geckopy/pull/21
 [#31]: https://github.com/SysBioChalmers/geckopy/pull/31
 [#32]: https://github.com/SysBioChalmers/geckopy/pull/32
+[#34]: https://github.com/SysBioChalmers/geckopy/pull/34
+[#36]: https://github.com/SysBioChalmers/geckopy/pull/36
+[#37]: https://github.com/SysBioChalmers/geckopy/pull/37
+[#38]: https://github.com/SysBioChalmers/geckopy/pull/38
+[#39]: https://github.com/SysBioChalmers/geckopy/pull/39

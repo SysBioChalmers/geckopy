@@ -175,7 +175,8 @@ def test_underscore_separator_rejected(caplog):
 
 
 def test_pipe_separator_for_multi_ec_rejected(caplog):
-    """Per the MATLAB docstring: only `;` is a valid multi-EC separator."""
+    """Only `;` separates multiple EC codes; other separators such as `|`
+    are rejected."""
     model = _make_ec_model([("r1", "1.2.3.4|5.6.7.8")])
     with caplog.at_level(logging.WARNING):
         fill_eccodes_from_gem(model)

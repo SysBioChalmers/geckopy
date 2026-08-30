@@ -61,6 +61,23 @@ class FlexEnzResult:
     All arrays are sorted by ``ratio_incr`` descending. May contain a
     final entry with ``uniprot_ids[-1] == "prot_pool"`` if the protein
     pool exchange itself was relaxed.
+
+    Attributes
+    ----------
+    uniprot_ids
+        UniProt IDs of the flexibilized enzymes (plus ``"prot_pool"``
+        as a final entry when the protein pool itself was relaxed).
+    old_concs
+        Upper bound of each enzyme's usage reaction (or of
+        ``prot_pool_exchange`` for the ``"prot_pool"`` entry) before
+        relaxation.
+    flex_concs
+        Upper bound after relaxation.
+    ratio_incr
+        ``flex_concs / old_concs``; ``inf`` where ``old_concs`` is 0.
+    frequence
+        Number of loop iterations in which each enzyme was picked as
+        the most limiting one.
     """
 
     uniprot_ids: list[str] = field(default_factory=list)
@@ -89,32 +106,17 @@ def flexibilize_enz_concs(
     tries relaxing ``prot_pool_exchange``.
 
     After the loop, a refinement pass solves
-    ``min prot_pool_exchange  s.t. bio_rxn >= exp_growth`` to find
-    the minimal usage that supports growth. For each flexibilized
-    enzyme, if the actual usage at this minimum is less than its
-    original concentration, the original constraint is restored
-    (i.e. that enzyme is dropped from the result). This avoids
-    over-relaxing enzymes that the prior iterative pass increased
-    more than necessary.
+    ``min prot_pool_exchange  s.t. bio_rxn >= exp_growth`` (a hard
+    lower bound, enforced exactly with no slack) to find the minimal
+    usage that supports growth. For each flexibilized enzyme, if the
+    actual usage at this minimum is less than its original
+    concentration, the original constraint is restored (i.e. that
+    enzyme is dropped from the result). This avoids over-relaxing
+    enzymes that the prior iterative pass increased more than
+    necessary.
 
     Ported from GECKO MATLAB:
     src/geckomat/limit_proteins/flexibilizeEnzConcs.m.
-
-    MATLAB-COMPAT: MATLAB's usage rxns go reverse (constraint as
-    ``lb = -conc``); geckopy uses forward direction (``ub = conc``).
-
-    MATLAB-COMPAT: MATLAB uses RAVEN's ``setParam('var', ...)`` soft
-    constraint when refining the result. geckopy uses a hard
-    ``bio_rxn.lower_bound = exp_growth``; if ``exp_growth`` is
-    achievable (which the loop ensured) the two are equivalent.
-
-    MATLAB-COMPAT: MATLAB's ``modelAdapter`` arg is dropped. The
-    organism-specific ``gR_exp`` defaults to
-    ``model.adapter.params.gr_exp``.
-
-    MATLAB-COMPAT: The MATLAB ``var`` constraint with weight 0.5
-    allows the LP to slightly miss ``expGrowth`` if needed. geckopy
-    enforces ``exp_growth`` exactly.
 
     Parameters
     ----------
@@ -128,10 +130,12 @@ def flexibilize_enz_concs(
         Target growth rate. Defaults to
         ``model.adapter.params.gr_exp``.
     fold_change
-        Per-iteration upper-bound multiplier for the limiting enzyme.
+        Controls how much the limiting enzyme's usage upper bound
+        grows each time it is picked: on its ``k``-th pick, the
+        bound is set to ``original_conc * (1 + fold_change * k)``.
     iter_per_enzyme
-        Maximum iterations per enzyme before warning and breaking.
-        ``0`` means no limit (matches MATLAB).
+        Maximum number of times the same enzyme may be picked before
+        warning and breaking. ``0`` means no limit.
     bio_rxn
         Biomass reaction id. Defaults to ``params.bio_rxn`` from the
         adapter; pass it (with ``exp_growth``) to run without an adapter.
