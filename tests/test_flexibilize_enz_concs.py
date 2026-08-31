@@ -126,11 +126,14 @@ def test_limiting_enzyme_relaxed_to_reach_exp_growth(tmp_path):
 
     assert isinstance(result, FlexEnzResult)
     assert result.uniprot_ids == ["E"]
-    # Enzyme UB should be >= 5 to support growth = 5.
-    assert model.reactions.get_by_id("usage_prot_E").upper_bound >= 5.0
-    # Verify model can now reach exp_growth.
+    # The refinement pass calibrates enzyme UBs to the soft band's low
+    # edge (raven-gecko-parity#71: matches MATLAB's setParam('var', ...,
+    # 0.5), a +/-0.25% band), not to exp_growth exactly -- so the UB
+    # only needs to support ~4.9875, not the full 5.0.
+    assert model.reactions.get_by_id("usage_prot_E").upper_bound >= 4.9875
+    # Verify model reaches the band's low edge, not exp_growth exactly.
     sol = model.optimize()
-    assert sol.objective_value == pytest.approx(5.0, rel=1e-6)
+    assert sol.objective_value == pytest.approx(4.9875, rel=1e-6)
 
 
 def test_ec_concs_unchanged_after_flexibilization(tmp_path):
@@ -147,7 +150,8 @@ def test_default_exp_growth_from_adapter(tmp_path):
     model = _build_toy(adapter, enzyme_ub=1.0, measured_conc=1.0)
     flexibilize_enz_concs(model)  # uses gr_exp = 3.0
     sol = model.optimize()
-    assert sol.objective_value == pytest.approx(3.0, rel=1e-6)
+    # Band's low edge (raven-gecko-parity#71), not gr_exp exactly.
+    assert sol.objective_value == pytest.approx(3.0 * 0.9975, rel=1e-6)
 
 
 def test_explicit_exp_growth_overrides_adapter(tmp_path):
@@ -155,7 +159,8 @@ def test_explicit_exp_growth_overrides_adapter(tmp_path):
     model = _build_toy(adapter, enzyme_ub=1.0, measured_conc=1.0)
     flexibilize_enz_concs(model, exp_growth=4.0)
     sol = model.optimize()
-    assert sol.objective_value == pytest.approx(4.0, rel=1e-6)
+    # Band's low edge (raven-gecko-parity#71), not exp_growth exactly.
+    assert sol.objective_value == pytest.approx(4.0 * 0.9975, rel=1e-6)
 
 
 # --------------------------------------------------------------------------- #

@@ -52,6 +52,14 @@ _GROWTH_DELTA_THRESHOLD = 1e-3
 # flagging different enzymes.
 _ABSOLUTE_ITER_CAP_PER_ENZYME = 1000
 _CONTROL_COEFF_LIMIT = 0.75
+# Half-width (as a percentage of exp_growth, RAVEN setParam's 'var' units)
+# of the soft band the post-loop refinement solve allows bio_rxn to land
+# in, rather than pinning it to exp_growth exactly. Matches MATLAB's
+# flexibilizeEnzConcs.m, which calls
+# setParam(model, 'var', bioRxn, expGrowth, 0.5): setParam's 'var' case
+# sets lb/ub to params*(1 -/+ var/200), so var=0.5 is a +/-0.25% band
+# (raven-gecko-parity#71).
+_REFINEMENT_GROWTH_BAND_VAR = 0.5
 
 
 @dataclass
@@ -105,15 +113,19 @@ def flexibilize_enz_concs(
     enzyme is limiting (all control coefficients zero), the function
     tries relaxing ``prot_pool_exchange``.
 
-    After the loop, a refinement pass solves
-    ``min prot_pool_exchange  s.t. bio_rxn >= exp_growth`` (a hard
-    lower bound, enforced exactly with no slack) to find the minimal
-    usage that supports growth. For each flexibilized enzyme, if the
-    actual usage at this minimum is less than its original
-    concentration, the original constraint is restored (i.e. that
-    enzyme is dropped from the result). This avoids over-relaxing
-    enzymes that the prior iterative pass increased more than
-    necessary.
+    After the loop, a refinement pass solves ``min prot_pool_exchange``
+    with ``bio_rxn`` constrained to a soft +/-0.25% band around
+    ``exp_growth`` (matching MATLAB's ``flexibilizeEnzConcs.m``, which
+    uses RAVEN's ``setParam('var', bioRxn, expGrowth, 0.5)`` for the same
+    solve) to find the minimal usage that supports growth. Because
+    minimal protein-pool usage is non-decreasing in growth rate near the
+    optimum, the minimiser typically settles at the band's low edge --
+    growth ends up about 0.25% below ``exp_growth``, not at it exactly.
+    For each flexibilized enzyme, if the actual usage at this minimum is
+    less than its original concentration, the original constraint is
+    restored (i.e. that enzyme is dropped from the result). This avoids
+    over-relaxing enzymes that the prior iterative pass increased more
+    than necessary.
 
     Ported from GECKO MATLAB:
     src/geckomat/limit_proteins/flexibilizeEnzConcs.m.
@@ -348,10 +360,15 @@ def _build_result(
     )
 
     if not flex_break:
-        # Refinement pass: minimize protein pool with bio_rxn at exp_growth,
+        # Refinement pass: minimize protein pool with bio_rxn in a soft
+        # band around exp_growth (matching MATLAB's RAVEN setParam('var',
+        # ...) call rather than pinning bio_rxn to exp_growth exactly),
         # then drop enzymes that don't actually need extra concentration.
         with model:
-            model.reactions.get_by_id(bio_rxn_id).lower_bound = exp_growth
+            rxn = model.reactions.get_by_id(bio_rxn_id)
+            band = _REFINEMENT_GROWTH_BAND_VAR / 200
+            rxn.lower_bound = exp_growth * (1 - band)
+            rxn.upper_bound = exp_growth * (1 + band)
             model.objective = POOL_EXCHANGE_ID
             model.objective_direction = "min"
             sol = model.optimize()
