@@ -286,8 +286,12 @@ def test_returns_empty_list_when_nothing_to_invert():
 #
 # Stage 3 (set `model.rev` based on bounds) is absorbed into this stage,
 # since in MATLAB the `rev` field is only ever consumed by convertToIrrev
-# and never read again. Exchange reactions are excluded here to match
-# MATLAB behavior.
+# and never read again. convert_to_irreversible itself does not special-case
+# exchange reactions (it splits every reversible reaction it's given,
+# matching MATLAB's convertToIrrev). make_ec_model is what excludes
+# exchanges, by passing convert_to_irreversible a rxns= list that leaves
+# them out -- see test_make_ec_model.py for that behavior; these tests
+# exercise the unrestricted function directly.
 # --------------------------------------------------------------------------- #
 
 def test_splits_single_reversible_non_exchange():
@@ -317,33 +321,39 @@ def test_does_not_split_forward_only_reaction():
     assert "r1_REV" not in {r.id for r in model.reactions}
 
 
-def test_does_not_split_exchange_reaction_even_if_reversible():
-    """Exchange reactions (one metabolite) are excluded from the
-    irreversibility step, regardless of bounds."""
+def test_splits_exchange_reaction_when_reversible():
+    """convert_to_irreversible itself does not special-case exchange
+    reactions (one metabolite) -- it splits every reversible reaction
+    it's given, matching MATLAB's convertToIrrev. Keeping exchanges
+    unsplit is make_ec_model's job (it passes a rxns= list that
+    excludes them), not this function's."""
     model = _build_model_with_bounds([
         ("EX_A", {"A": -1.0}, -1000.0, 1000.0),
     ])
     added = convert_to_irreversible(model)
-    assert added == []
+    assert added == ["EX_A_REV"]
     ex = model.reactions.get_by_id("EX_A")
-    assert ex.bounds == (-1000.0, 1000.0)
+    ex_rev = model.reactions.get_by_id("EX_A_REV")
+    assert ex.bounds == (0.0, 1000.0)
+    assert ex_rev.bounds == (0.0, 1000.0)
 
 
 def test_splits_multiple_mixed_reactions():
     model = _build_model_with_bounds([
         ("r1", {"A": -1.0, "B": 1.0}, -500.0, 1000.0),   # split
         ("r2", {"B": -2.0, "C": 3.0}, 0.0, 1000.0),      # forward only
-        ("EX_A", {"A": -1.0}, -1000.0, 1000.0),          # exchange
+        ("EX_A", {"A": -1.0}, -1000.0, 1000.0),          # exchange, split too
         ("r3", {"C": -1.0, "D": 1.0}, -200.0, 200.0),    # split
     ])
 
     added = convert_to_irreversible(model)
-    assert added == ["r1_REV", "r3_REV"]
+    assert added == ["EX_A_REV", "r1_REV", "r3_REV"]
 
     assert model.reactions.get_by_id("r1").bounds == (0.0, 1000.0)
     assert model.reactions.get_by_id("r1_REV").bounds == (0.0, 500.0)
     assert model.reactions.get_by_id("r2").bounds == (0.0, 1000.0)
-    assert model.reactions.get_by_id("EX_A").bounds == (-1000.0, 1000.0)
+    assert model.reactions.get_by_id("EX_A").bounds == (0.0, 1000.0)
+    assert model.reactions.get_by_id("EX_A_REV").bounds == (0.0, 1000.0)
     assert model.reactions.get_by_id("r3").bounds == (0.0, 200.0)
     assert model.reactions.get_by_id("r3_REV").bounds == (0.0, 200.0)
 
@@ -372,8 +382,8 @@ def test_forward_reaction_lb_is_clamped_to_zero():
 
 
 def test_no_reverse_reaction_has_negative_bound():
-    """Check the invariant that after conversion, no reaction in the
-    model is allowed to carry negative flux (except exchanges)."""
+    """Check the invariant that after conversion, no reaction -- exchange
+    or not -- is allowed to carry negative flux."""
     model = _build_model_with_bounds([
         ("r1", {"A": -1.0, "B": 1.0}, -500.0, 1000.0),
         ("r2", {"B": -1.0, "C": 1.0}, -1000.0, 0.0),      # blocked reverse
@@ -381,15 +391,13 @@ def test_no_reverse_reaction_has_negative_bound():
     ])
     convert_to_irreversible(model)
     for rxn in model.reactions:
-        if rxn.boundary:
-            continue
         assert rxn.lower_bound >= 0, f"{rxn.id} still has lb < 0"
 
 
 def test_returns_empty_list_when_nothing_to_split():
     model = _build_model_with_bounds([
         ("r1", {"A": -1.0, "B": 1.0}, 0.0, 1000.0),
-        ("EX_A", {"A": -1.0}, -1000.0, 1000.0),
+        ("EX_A", {"A": -1.0}, 0.0, 1000.0),
     ])
     assert convert_to_irreversible(model) == []
 

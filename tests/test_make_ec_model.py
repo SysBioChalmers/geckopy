@@ -46,6 +46,20 @@ def test_make_ec_model_populates_ec_rxns():
     ])
 
 
+def test_make_ec_model_does_not_split_exchange_reactions():
+    """S1 and S2 are reversible exchanges in ecTestGEM. MATLAB's
+    makeEcModel.m excludes exchanges from convertToIrrev (it passes
+    nonExchRxns), so they stay reversible here too -- only R1 and R2
+    (both internal, catalyzed reactions) get split."""
+    model, adapter = _load_fresh_ectestgem()
+    ec_model = make_ec_model(model, adapter)
+    rxn_ids = {r.id for r in ec_model.reactions}
+    assert "S1_REV" not in rxn_ids
+    assert "S2_REV" not in rxn_ids
+    s1 = ec_model.reactions.get_by_id("S1")
+    assert s1.lower_bound < 0
+
+
 def test_make_ec_model_populates_ec_genes_alphabetically():
     model, adapter = _load_fresh_ectestgem()
     ec_model = make_ec_model(model, adapter)

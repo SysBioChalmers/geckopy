@@ -156,7 +156,11 @@ def make_ec_model(
     # them per-row in ec instead.
     remove_pseudoreaction_gprs(model, adapter)
     invert_backwards_only_reactions(model)
-    convert_to_irreversible(model)
+    # Exchange reactions are left reversible: MATLAB's makeEcModel.m
+    # excludes them here too, passing convertToIrrev only nonExchRxns
+    # (model.rxns minus getExchangeRxns(model)).
+    non_exchange_rxns = [rxn.id for rxn in model.reactions if not rxn.boundary]
+    convert_to_irreversible(model, rxns=non_exchange_rxns)
     if not gecko_light:
         expand_model(model)
         # Sort reactions, so that reversible and isozymic reactions are kept
