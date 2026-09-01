@@ -357,7 +357,7 @@ src/geckopy/kcat_sensitivity_analysis/bayesian/
                             # (per-worker persistent model + incremental apply/revert -- see
                             # "Spike results" below; NOT one EcModel.copy() per particle)
     distance.py              # carbon/condition-weighted RMSE (port of abc_max.m's rmsecal half)
-    priors.py                # per-kcat lognormal priors by source_group; spike-and-slab prior (unwired)
+    priors.py                # per-kcat lognormal priors by source_group
     selection.py              # selection variants: truncation_select / quantile_epsilon_select
     posterior.py              # shrink/force-to-prior/sparsity-snap blend (trace only)
     transition.py              # GeckoTransition(pyabc.transition.Transition): diagonal fit/rvs/pdf
@@ -464,14 +464,18 @@ per-worker reuse instead of per-particle copying.
       acceptance.
     - *Regularization*: MATLAB-faithful shrink-weight/force-to-prior blend
       vs. proper SMC importance weighting (`prior_density / transition_density`,
-      standard SMC-ABC theory) — a tight per-group prior then produces
-      shrinkage-to-prior automatically, no hand-tuned thresholds needed.
-      Sparsity enforcement rides along this axis too: MATLAB's post-hoc
-      snap-to-prior vs. a genuine sparsity-inducing prior (spike-and-slab/
-      horseshoe-style).
+      standard SMC-ABC theory), with sparsity enforcement riding along the
+      same axis (MATLAB's post-hoc snap-to-prior vs. a sparsity-inducing
+      spike-and-slab prior). **Settled**: importance weighting is degenerate
+      at genome scale and quadratic in particle count (see "Why importance
+      weighting was dropped"), so this axis is gone — weights are uniform
+      and the per-source priors carry regularization. The spike-and-slab
+      prior went with it: it existed as that variant's sparsity complement
+      and was never wired into the loop. Should the deferred pruning work
+      want it, it is in the history.
     The comparison design is recorded in the commits that introduced
-    each variant (`selection.py`/`posterior.py`/`importance_weights.py`)
-    and in the Variant comparison section below.
+    each variant (`selection.py`/`posterior.py`) and in the results
+    section above.
 - **Q3 Parallel backend**: multiprocessing, not dask — reuse the
   `multiprocessing.Pool` pattern already in `src/geckopy/utilities/ec_fva.py`
   (known-working precedent for parallel LP-heavy ecModel workloads in this

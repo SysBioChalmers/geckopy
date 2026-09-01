@@ -18,9 +18,7 @@ from .diagnostics import GenerationDiagnostics, GroupDiagnostics, compute_genera
 from .posterior import PosteriorUpdate, update_posterior_shrinkage
 from .priors import (
     UNLABELLED_GROUP,
-    SpikeSlabRV,
     build_kcat_prior,
-    build_kcat_sparsity_prior,
     build_sigma0_log,
     classify_kcat_source,
     classify_kcat_sources,
@@ -47,11 +45,9 @@ __all__ = [
     "GroupDiagnostics",
     "PosteriorUpdate",
     "SelectionResult",
-    "SpikeSlabRV",
     "bayesian_distance",
     "bayesian_kcat_tuning",
     "build_kcat_prior",
-    "build_kcat_sparsity_prior",
     "build_sigma0_log",
     "classify_kcat_source",
     "classify_kcat_sources",

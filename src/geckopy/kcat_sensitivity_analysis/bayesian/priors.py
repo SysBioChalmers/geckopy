@@ -6,17 +6,10 @@ src/geckomat/kcat_sensitivity_analysis/Bayesian/bayesianSensitivityTuning.m
 inline ``lognrnd`` sampling). Verified against ``develop4``'s current
 source.
 
-Two prior builders are provided:
-
-- :func:`build_kcat_prior` -- the plain per-source lognormal prior the
-  tuning loop samples from, and the fixed reference point
-  ``posterior.update_posterior_shrinkage``'s blend measures movement
-  against.
-- :func:`build_kcat_sparsity_prior` -- a sparsity-inducing
-  spike-and-slab mixture per parameter, so an insignificant
-  parameter's posterior concentrates at the prior on its own rather
-  than needing MATLAB's post-hoc "snap negligible changes to prior"
-  step. Not wired into the tuning loop; kept for the pruning work.
+:func:`build_kcat_prior` builds the per-source lognormal prior the
+tuning loop samples from, and the fixed reference point
+``posterior.update_posterior_shrinkage``'s blend measures movement
+against.
 """
 from __future__ import annotations
 
@@ -25,7 +18,6 @@ from typing import Optional
 import numpy as np
 import pyabc
 import scipy.stats
-from pyabc.random_variables.random_variables import RVBase
 
 from ...adapter.params import BayesianParams
 
@@ -189,121 +181,6 @@ def build_kcat_prior(
             "lognorm",
             s=float(sigma0_log[i]),
             scale=_lognorm_scale_at(kcat0[i], sigma0_log[i]),
-        )
-        for i in range(len(kcat0))
-    }
-    return pyabc.Distribution(**rvs)
-
-
-class SpikeSlabRV(RVBase):
-    """Spike-and-slab prior for one kcat.
-
-    With probability ``spike_weight`` the parameter is drawn from a
-    tight "spike" concentrated at ``kcat0`` (log-space std
-    ``spike_sigma_log``, a small fraction of the slab's); otherwise
-    from the ordinary "slab" -- the same lognormal prior
-    :func:`build_kcat_prior` would use. A tight spike lets the
-    posterior concentrate mass at "no real change" for parameters the
-    data doesn't inform: instead of MATLAB's post-hoc
-    "snap negligible changes to prior" step, an insignificant
-    parameter's *posterior* already sits there.
-
-    Not built via ``pyabc.RV`` (which only wraps ``scipy.stats``
-    distributions looked up by name): a genuine two-component mixture
-    has no single named ``scipy.stats`` distribution to delegate to,
-    so this implements pyABC's ``RVBase`` interface directly --
-    exactly the extension point pyABC itself provides for this case.
-    """
-
-    def __init__(
-        self,
-        kcat0: float,
-        sigma_slab_log: float,
-        *,
-        spike_weight: float = 0.5,
-        spike_sigma_log: float = 0.025,
-    ):
-        if not 0.0 <= spike_weight <= 1.0:
-            raise ValueError(f"spike_weight must be in [0, 1]; got {spike_weight}.")
-        if kcat0 <= 0:
-            raise ValueError(f"kcat0 must be strictly positive; got {kcat0}.")
-        self.kcat0 = float(kcat0)
-        self.sigma_slab_log = float(sigma_slab_log)
-        self.spike_weight = float(spike_weight)
-        self.spike_sigma_log = float(spike_sigma_log)
-
-    @property
-    def _spike(self):
-        return _lognorm_mean_at(self.kcat0, self.spike_sigma_log)
-
-    @property
-    def _slab(self):
-        return _lognorm_mean_at(self.kcat0, self.sigma_slab_log)
-
-    def copy(self) -> "SpikeSlabRV":
-        return SpikeSlabRV(
-            self.kcat0, self.sigma_slab_log,
-            spike_weight=self.spike_weight, spike_sigma_log=self.spike_sigma_log,
-        )
-
-    def rvs(self, *args, **kwargs) -> float:  # noqa: ARG002
-        component = self._spike if np.random.rand() < self.spike_weight else self._slab
-        return float(component.rvs())
-
-    def pdf(self, x: float, *args, **kwargs) -> float:  # noqa: ARG002
-        return (
-            self.spike_weight * self._spike.pdf(x)
-            + (1 - self.spike_weight) * self._slab.pdf(x)
-        )
-
-    def pmf(self, x: float, *args, **kwargs) -> float:  # noqa: ARG002
-        return self.pdf(x)
-
-    def cdf(self, x: float, *args, **kwargs) -> float:  # noqa: ARG002
-        return (
-            self.spike_weight * self._spike.cdf(x)
-            + (1 - self.spike_weight) * self._slab.cdf(x)
-        )
-
-    def __repr__(self) -> str:
-        return (
-            f"<SpikeSlabRV kcat0={self.kcat0}, sigma_slab_log={self.sigma_slab_log}, "
-            f"spike_weight={self.spike_weight}, spike_sigma_log={self.spike_sigma_log}>"
-        )
-
-
-def build_kcat_sparsity_prior(
-    kcat0: np.ndarray,
-    sigma0_log: np.ndarray,
-    *,
-    spike_weight: float = 0.5,
-    spike_sigma_frac: float = 0.05,
-) -> pyabc.Distribution:
-    """Independent per-kcat spike-and-slab prior.
-
-    Parameters
-    ----------
-    kcat0, sigma0_log
-        As in :func:`build_kcat_prior`.
-    spike_weight
-        Prior probability of drawing from the "no real change" spike
-        rather than the ordinary slab, per parameter.
-    spike_sigma_frac
-        The spike's log-space std dev, as a fraction of the slab's
-        (``sigma0_log[i]``) -- how tight "no real change" is.
-
-    Returns
-    -------
-    pyabc.Distribution
-        One :class:`SpikeSlabRV` per row, keyed ``"k0"``, ``"k1"``,
-        ... in row order.
-    """
-    _check_shapes(kcat0, sigma0_log)
-    rvs = {
-        f"k{i}": SpikeSlabRV(
-            float(kcat0[i]), float(sigma0_log[i]),
-            spike_weight=spike_weight,
-            spike_sigma_log=float(sigma0_log[i]) * spike_sigma_frac,
         )
         for i in range(len(kcat0))
     }

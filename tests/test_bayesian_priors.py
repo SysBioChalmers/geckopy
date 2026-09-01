@@ -5,9 +5,7 @@ import pytest
 from geckopy.adapter.params import BayesianParams, SourceGroupRule
 from geckopy.kcat_sensitivity_analysis.bayesian.priors import (
     UNLABELLED_GROUP,
-    SpikeSlabRV,
     build_kcat_prior,
-    build_kcat_sparsity_prior,
     build_sigma0_log,
     classify_kcat_source,
     classify_kcat_sources,
@@ -124,45 +122,3 @@ def test_build_kcat_prior_rejects_shape_mismatch():
 
 
 # --------------------------------------------------------------------------- #
-# SpikeSlabRV / build_kcat_sparsity_prior
-# --------------------------------------------------------------------------- #
-
-def test_spike_slab_rv_pdf_is_weighted_mixture():
-    rv = SpikeSlabRV(2.0, sigma_slab_log=0.4, spike_weight=0.7, spike_sigma_log=0.02)
-
-    x = 2.0
-    expected = 0.7 * rv._spike.pdf(x) + 0.3 * rv._slab.pdf(x)
-    assert rv.pdf(x) == pytest.approx(expected)
-
-
-def test_spike_slab_rv_concentrates_near_kcat0_when_spike_dominant():
-    rng_state = np.random.get_state()
-    try:
-        np.random.seed(0)
-        rv = SpikeSlabRV(3.0, sigma_slab_log=0.5, spike_weight=0.95, spike_sigma_log=0.01)
-        samples = np.array([rv.rvs() for _ in range(1000)])
-    finally:
-        np.random.set_state(rng_state)
-
-    # With 95% spike weight and a tight spike, most samples should sit
-    # very close to kcat0=3.0.
-    frac_near = np.mean(np.abs(samples - 3.0) < 0.2)
-    assert frac_near > 0.85
-
-
-def test_spike_slab_rv_rejects_invalid_weight():
-    with pytest.raises(ValueError, match="spike_weight"):
-        SpikeSlabRV(1.0, sigma_slab_log=0.4, spike_weight=1.5)
-
-
-def test_build_kcat_sparsity_prior_shape_and_positivity():
-    kcat0 = np.array([1.0, 2.0, 3.0])
-    sigma0_log = np.array([0.4, 0.3, 0.2])
-
-    prior = build_kcat_sparsity_prior(kcat0, sigma0_log, spike_weight=0.5)
-
-    assert set(prior.keys()) == {"k0", "k1", "k2"}
-    for key in prior.keys():
-        assert isinstance(prior[key], SpikeSlabRV)
-    sample = prior.rvs()
-    assert all(sample[k] > 0 for k in ("k0", "k1", "k2"))
