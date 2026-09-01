@@ -10,8 +10,12 @@ from .truncate_values import truncate_values
 
 try:
     from . import bayesian
-except ImportError as _bayesian_import_error:  # pragma: no cover - exercised
+except ImportError as exc:  # pragma: no cover - exercised
     # only when the optional `pyabc` dependency is absent.
+    # Bound to a module-level name: Python clears an `except ... as`
+    # target when the block exits, so the class below cannot close over
+    # `exc` itself.
+    _bayesian_import_error = exc
 
     class _MissingBayesian:
         """Stand-in for the `bayesian` subpackage when its `pyabc`
