@@ -335,19 +335,23 @@ def bayesian_kcat_tuning(
             ]
             n_new = params.schedule_samples[schedule_idx[-1] if schedule_idx else 0]
 
+            # One draw per particle, read every column out of that single
+            # draw: both samplers return a full parameter vector per call,
+            # and the transition kernel's vector is a single parent
+            # perturbed as a unit. Cost is linear in particles, not in
+            # particles x parameters.
             if generation == 1:
                 prior = build_kcat_prior(kcat0, sigma0_log)
-                new_particles = np.array(
-                    [[prior.rvs()[c] for c in columns] for _ in range(n_new)]
-                ).T
+                draws = [prior.rvs() for _ in range(n_new)]
                 transition: Optional[GeckoTransition] = None
             else:
                 X_df = pd.DataFrame(kcat_top.T, columns=columns)
                 transition = GeckoTransition(sigma0_log)
                 transition.fit(X_df, weights_top)
-                new_particles = np.array(
-                    [[transition.rvs_single()[c] for c in columns] for _ in range(n_new)]
-                ).T
+                draws = [transition.rvs_single() for _ in range(n_new)]
+            new_particles = np.array(
+                [[draw[c] for c in columns] for draw in draws]
+            ).T
             new_particles = np.maximum(new_particles, np.finfo(float).tiny)
             new_rmse = score_batch(new_particles)
 
