@@ -42,6 +42,15 @@ def _format_toml_value(value: Any) -> str | None:
         if any(p is None for p in parts):
             return None
         return "[" + ", ".join(parts) + "]"
+    if isinstance(value, BaseModel):
+        value = value.model_dump()
+    if isinstance(value, dict):
+        formatted_items = [
+            (k, _format_toml_value(v)) for k, v in value.items()
+        ]
+        if any(fv is None for _, fv in formatted_items):
+            return None
+        return "{ " + ", ".join(f"{k} = {fv}" for k, fv in formatted_items) + " }"
     return None
 
 

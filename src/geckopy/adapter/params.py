@@ -48,31 +48,67 @@ class ComplexParams(BaseModel):
     )
 
 
+class SourceGroupRule(BaseModel):
+    """One trust-tier entry in ``BayesianParams.source_groups``.
+
+    ``ec.source`` holds literal strings like ``"dlkcat"``, ``"brenda"``,
+    and -- for OpenKineticsPredictor kcats -- the raw predictor method
+    name (e.g. ``"CataPro"``), not a generic ``"okp"`` tag. A rule
+    matches a given ``ec.source`` value if it's listed in ``sources``,
+    or (when ``match_okp`` is True) if it equals the project's
+    configured OKP method (``OkpParams.method``).
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    sources: list[str] = Field(
+        default_factory=list,
+        description="Literal ec.source strings belonging to this group.",
+    )
+    match_okp: bool = Field(
+        default=False,
+        description=(
+            "Also match ec.source values equal to the project's "
+            "configured OpenKineticsPredictor method (OkpParams.method)."
+        ),
+    )
+
+
 class BayesianParams(BaseModel):
-    """Hyperparameters for Bayesian kcat fitting (ABC-SMC)."""
+    """Hyperparameters for Bayesian kcat fitting (ABC-SMC).
+
+    Sources not matched by any ``source_groups`` entry fall back to the
+    ``*_default`` fields (matching MATLAB's ``noKcatSource`` behaviour:
+    ``sigma0logDefault`` etc. apply to every kcat first, then only ones
+    with a recognised source get overridden by their group's value).
+    """
     model_config = ConfigDict(extra="forbid")
 
     sigma0_log_default: float = 0.5
-    kcat_sources: list[str] = Field(
-        default_factory=lambda: ["dlkcat", "brenda", "custom"]
+    source_groups: dict[str, SourceGroupRule] = Field(
+        default_factory=lambda: {
+            "dlkcat": SourceGroupRule(sources=["dlkcat"]),
+            "brenda": SourceGroupRule(sources=["brenda"]),
+            "custom": SourceGroupRule(sources=["custom"]),
+        }
     )
-    sigma0_log_source: list[float] = Field(default_factory=lambda: [0.4, 0.2, 0.1])
+    sigma0_log_source: dict[str, float] = Field(
+        default_factory=lambda: {"dlkcat": 0.4, "brenda": 0.2, "custom": 0.1}
+    )
 
     shrink_thr_default: float = 1.5
-    shrink_thr_source: list[float] = Field(default_factory=lambda: [1.5, 3.5, 5.5])
-    variance_cap_default: float = 10.0
-    variance_cap_source: list[float] = Field(default_factory=lambda: [10.0, 4.0, 2.0])
+    shrink_thr_source: dict[str, float] = Field(
+        default_factory=lambda: {"dlkcat": 1.5, "brenda": 3.5, "custom": 5.5}
+    )
 
     force_prior_thr_default: float = -1.0
-    force_prior_thr_source: list[float] = Field(
-        default_factory=lambda: [-1.0, 4.0, 8.0]
+    force_prior_thr_source: dict[str, float] = Field(
+        default_factory=lambda: {"dlkcat": -1.0, "brenda": 4.0, "custom": 8.0}
     )
-    sparsity_threshold: float = 0.3
+    sparsity_threshold: float = 0.5
 
     schedule_generations: list[int] = Field(default_factory=lambda: [1, 2, 9, 15])
     schedule_samples: list[int] = Field(default_factory=lambda: [1000, 800, 600, 400])
 
-    target_accept: float = 10.0
     min_keep: float = 0.3
     max_keep: float = 0.6
 
@@ -80,22 +116,22 @@ class BayesianParams(BaseModel):
     max_generations: int = 150
 
     @model_validator(mode="after")
-    def _check_parallel_list_lengths(self) -> "BayesianParams":
-        """The per-source lists must line up with ``kcat_sources``, and the
-        ABC-SMC schedule lists must line up with each other; otherwise a
-        downstream positional zip silently mismatches."""
-        n = len(self.kcat_sources)
+    def _check_group_keys_and_schedule_lengths(self) -> "BayesianParams":
+        """The per-source dicts must have exactly ``source_groups``'
+        keys, and the ABC-SMC schedule lists must line up with each
+        other; otherwise a downstream lookup silently falls back to a
+        default or a positional zip silently mismatches."""
+        group_names = set(self.source_groups)
         for name in (
             "sigma0_log_source",
             "shrink_thr_source",
-            "variance_cap_source",
             "force_prior_thr_source",
         ):
-            length = len(getattr(self, name))
-            if length != n:
+            keys = set(getattr(self, name))
+            if keys != group_names:
                 raise ValueError(
-                    f"BayesianParams.{name} has length {length}, expected "
-                    f"{n} to match kcat_sources."
+                    f"BayesianParams.{name} keys {sorted(keys)} must match "
+                    f"source_groups keys {sorted(group_names)}."
                 )
         if len(self.schedule_generations) != len(self.schedule_samples):
             raise ValueError(
