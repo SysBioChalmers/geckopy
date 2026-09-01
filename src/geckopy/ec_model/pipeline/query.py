@@ -25,7 +25,8 @@ def get_reactions_from_enzyme(
         An EcModel with populated ec.enzymes and ec.rxn_enz_mat.
     protein_id
         UniProt accession (or whatever IDs are in ec.enzymes),
-        case-sensitive.
+        matched case-insensitively (matching MATLAB's
+        ``getReactionsFromEnzyme``, which uses ``strcmpi``).
 
     Returns
     -------
@@ -43,11 +44,19 @@ def get_reactions_from_enzyme(
     Raises
     ------
     ValueError
-        If ``protein_id`` is not found in ec.enzymes.
+        If ``protein_id`` is not found in ec.enzymes (case-insensitive).
+        MATLAB-COMPAT: MATLAB's getReactionsFromEnzyme returns five empty
+        outputs instead of raising on an unmatched proteinId. Raising here
+        is a deliberate Python-API choice, not a parity gap to close --
+        see raven-gecko-parity#70.
     """
+    protein_id_lower = protein_id.lower()
     try:
-        prot_idx = model.ec.enzymes.index(protein_id)
-    except ValueError:
+        prot_idx = next(
+            i for i, enzyme in enumerate(model.ec.enzymes)
+            if enzyme.lower() == protein_id_lower
+        )
+    except StopIteration:
         raise ValueError(
             f"protein_id '{protein_id}' not found in ec.enzymes."
         ) from None
