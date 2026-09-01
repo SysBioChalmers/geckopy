@@ -203,6 +203,62 @@ def test_unknown_substrates_listed_in_warning(tmp_path, caplog):
     assert "phantom" in caplog.text
 
 
+def test_strict_raises_on_unknown_substrate(tmp_path):
+    model = _ec_model(["r1"], ["alpha"])
+    p = _write_dlkcat_output(tmp_path, [
+        ("r1", "g1", "completely_unknown", "CC", "M", "5.0"),
+    ])
+    with pytest.raises(ValueError, match="substrate"):
+        read_dlkcat_output(model, p, strict=True)
+
+
+def test_strict_raises_before_dropping_any_rows(tmp_path):
+    """strict=True aborts the whole read, matching MATLAB -- a good row
+    earlier in the file does not survive either."""
+    model = _ec_model(["r1", "r2"], ["alpha"])
+    p = _write_dlkcat_output(tmp_path, [
+        ("r1", "g1", "alpha", "CC", "M", "5.0"),
+        ("r2", "g2", "completely_unknown", "CN", "M", "7.0"),
+    ])
+    with pytest.raises(ValueError, match="substrate"):
+        read_dlkcat_output(model, p, strict=True)
+
+
+def test_strict_false_is_the_default(tmp_path):
+    model = _ec_model(["r1"], ["alpha"])
+    p = _write_dlkcat_output(tmp_path, [
+        ("r1", "g1", "completely_unknown", "CC", "M", "5.0"),
+    ])
+    df = read_dlkcat_output(model, p)
+    assert len(df) == 0
+
+
+def test_strict_true_does_not_affect_a_clean_file(tmp_path):
+    model = _ec_model(["r1"], ["alpha"])
+    p = _write_dlkcat_output(tmp_path, [
+        ("r1", "g1", "alpha", "CC", "M", "5.0"),
+    ])
+    df = read_dlkcat_output(model, p, strict=True)
+    assert len(df) == 1
+
+
+def test_drop_counts_reported_separately(tmp_path, caplog):
+    """The non-numeric-kcat count and unrecognized-substrate count must
+    be logged as distinct numbers, not conflated into one."""
+    import logging
+    model = _ec_model(["r1", "r2", "r3"], ["alpha"])
+    p = _write_dlkcat_output(tmp_path, [
+        ("r1", "g1", "alpha", "CC", "M1", "5.0"),
+        ("r2", "g2", "alpha", "CN", "M2", "NA"),
+        ("r3", "g3", "unknown_thing", "CO", "M3", "9.0"),
+    ])
+    with caplog.at_level(logging.INFO):
+        df = read_dlkcat_output(model, p)
+    assert len(df) == 1
+    assert "1 row(s) with non-numeric kcat" in caplog.text
+    assert "1 row(s) with an unrecognized substrate" in caplog.text
+
+
 # --------------------------------------------------------------------------- #
 # Reaction ID validation
 # --------------------------------------------------------------------------- #

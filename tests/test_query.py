@@ -73,10 +73,13 @@ def test_unknown_protein_raises():
         get_reactions_from_enzyme(ec_model, "P_UNKNOWN")
 
 
-def test_case_sensitive_match():
+def test_case_insensitive_match():
+    """raven-gecko-parity#70: MATLAB's getReactionsFromEnzyme matches
+    proteinId case-insensitively (strcmpi); geckopy now does too."""
     ec_model = _ectestgem_ec_model()
-    with pytest.raises(ValueError):
-        get_reactions_from_enzyme(ec_model, "p4")
+    lower = get_reactions_from_enzyme(ec_model, "p4")
+    upper = get_reactions_from_enzyme(ec_model, "P4")
+    assert lower["rxn_id"].tolist() == upper["rxn_id"].tolist() == ["R3"]
 
 
 def test_rxn_names_populated_from_cobra_model():
