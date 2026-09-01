@@ -23,7 +23,12 @@ literal source name:
 Anything else in ``source_priority`` is matched against the row's
 ``source`` after normalisation to lowercase ``snake_case`` (so
 ``"DLKcat"`` matches ``"dlkcat"`` and ``"Sabio-RK"`` matches
-``"sabio_rk"``).
+``"sabio_rk"``). A row whose source carries the ``OKP-`` pipeline-stage
+tag (``parse_okp_output``'s output, e.g. ``"OKP-BRENDA"``) is matched
+and tiered by its underlying source with the tag stripped -- an
+``OKP-BRENDA`` row still routes to the database tiers like a bare
+``BRENDA`` row would -- while the merged output keeps the original,
+tagged ``source`` string.
 
 Ported from / generalizes GECKO MATLAB:
 src/geckomat/gather_kcats/mergeDLKcatAndFuzzyKcats.m.
@@ -53,6 +58,11 @@ DATABASE_BOTTOM = "database_bottom"
 #: routed to the ``database_top`` / ``database_bottom`` tiers.
 _DEFAULT_DATABASE_SOURCES = ("brenda", "sabio_rk")
 
+#: Normalised prefix ``parse_okp_output`` tags a row's source with
+#: (``"OKP-BRENDA"`` normalises to ``"okp_brenda"``) to mark it as
+#: having come through the OpenKineticsPredictor pipeline stage.
+_OKP_PREFIX = "okp_"
+
 
 def normalize_source(label: object) -> str:
     """Fold a source label to lowercase ``snake_case``.
@@ -64,6 +74,21 @@ def normalize_source(label: object) -> str:
     """
     s = re.sub(r"[^0-9a-z]+", "_", str(label).strip().lower())
     return s.strip("_")
+
+
+def _strip_okp_prefix(normalized_source: str) -> str:
+    """Strip a leading ``okp_`` from an already-normalised source.
+
+    Tiering and ``source_priority`` matching key off the underlying
+    source (``"okp_brenda"`` must still route to the database tiers
+    like ``"brenda"``; ``"okp_catapro"`` must still match a
+    ``source_priority`` entry for ``"catapro"``); only the row's own
+    ``source`` column, untouched by this function, keeps the ``OKP-``
+    tag through to the merged output.
+    """
+    if normalized_source.startswith(_OKP_PREFIX):
+        return normalized_source[len(_OKP_PREFIX):]
+    return normalized_source
 
 
 def merge_kcats(
@@ -177,9 +202,10 @@ def merge_kcats(
         return _empty()
 
     norm = combined["source"].map(normalize_source)
+    match_key = norm.map(_strip_okp_prefix)
     wc = pd.to_numeric(combined["wildcard_level"], errors="coerce")
     origin = pd.to_numeric(combined["origin"], errors="coerce")
-    is_db = norm.isin(db_sources)
+    is_db = match_key.isin(db_sources)
     meta = wc.notna() & origin.notna()
 
     top = (wc == 0) & (origin <= top_origin_limit)
@@ -191,16 +217,16 @@ def merge_kcats(
     db_top = is_db & meta & top
     db_bottom = is_db & meta & (~db_top) & bottom
 
-    # Non-database rows keep their (normalised) source as the tier; the
-    # database rows are re-tiered, and those passing neither gate stay
-    # NA and are dropped.
-    tier = norm.copy()
+    # Non-database rows keep their (normalised, OKP-prefix-stripped)
+    # source as the tier; the database rows are re-tiered, and those
+    # passing neither gate stay NA and are dropped.
+    tier = match_key.copy()
     tier[is_db] = pd.NA
     tier[db_exact] = DATABASE_EXACT
     tier[db_top] = DATABASE_TOP
     tier[db_bottom] = DATABASE_BOTTOM
 
-    unknown = sorted(s for s in set(norm[~is_db]) if s not in rank)
+    unknown = sorted(s for s in set(match_key[~is_db]) if s not in rank)
     if unknown:
         logger.warning(
             "merge_kcats: %d source(s) not listed in source_priority were "
