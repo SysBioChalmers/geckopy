@@ -3,9 +3,7 @@
 Wires GECKO's proposal-kernel design into pyABC's ``Transition``
 contract (``fit``/``rvs_single``/``pdf``). Ported design intent from
 GECKO MATLAB's ``buildLowRankLogProposal`` (the diagonal, non-PCA path
-that's actually reached, per the resolved decision -- see
-docs/internal/bayesian_tuning_plan.md's "Not building parallel
-variants for: Proposal kernel"): the fitted per-parameter bandwidth
+that is actually reached there): the fitted per-parameter bandwidth
 blends the accepted particles' own observed spread with the prior's
 sigma0_log, floored at a fraction of sigma0_log, exactly matching
 ``adaptFracEarly``/``sigmaFloorFrac`` -- MATLAB's own comments mark
@@ -19,11 +17,8 @@ is also the right shape at genome scale (``ec.kcat`` has thousands of
 entries vs. a few hundred particles per generation, so a full/low-rank
 covariance would be rank-deficient).
 
-``fit()`` is variant-agnostic: it just consumes whatever ``(X, w)`` it
-is given. Axis 2 variant A (``posterior.py``) calls it with uniform
-weights over its blended point estimate; variant B
-(``importance_weights.py``) calls it with the particles' actual
-importance weights.
+``fit()`` consumes whatever ``(X, w)`` it is given; the tuning loop
+passes the accepted particles with uniform weights.
 """
 from __future__ import annotations
 
@@ -116,12 +111,9 @@ class GeckoTransition(Transition):
         return Parameter(dict(zip(self._columns, sample)))
 
     def component_logpdf(self, x: np.ndarray, parent: np.ndarray) -> float:
-        """Log-density of the single component that perturbs
-        ``parent`` to reach ``x`` -- one mixture term of :meth:`pdf`,
-        exposed on its own for Axis 2 variant B's importance-weight
-        formula (``importance_weights.compute_importance_weights``'
-        ``transition_logpdf`` callable takes one parent at a time,
-        summing the weighted mixture itself)."""
+        """Log-density of the single kernel component that perturbs
+        ``parent`` to reach ``x`` -- one term of :meth:`pdf`'s
+        weighted mixture over the fitted particles."""
         if self._log_bandwidth is None:
             raise RuntimeError("GeckoTransition.component_logpdf() called before fit().")
         return float(np.sum([

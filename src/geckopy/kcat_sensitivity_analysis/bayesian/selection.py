@@ -1,9 +1,8 @@
-"""Axis 1: which particles survive each ABC-SMC generation.
+"""Which particles survive each ABC-SMC generation.
 
-Two variants, per the plan's comparison design -- both take a batch of
-already-simulated distances and return which indices survive plus the
-generation's effective epsilon, so ``tuning.py`` can swap between them
-behind one interface:
+Two variants -- both take a batch of already-simulated distances and
+return which indices survive plus the generation's effective epsilon,
+so ``tuning.py`` can swap between them behind one interface:
 
 - :func:`truncation_select` -- MATLAB-faithful. Ported from
   ``bayesianSensitivityTuning.m``'s acceptance step (fixed batch,
@@ -135,9 +134,8 @@ def next_quantile_epsilon(
         The quantile to use; ``0.5`` (the default) reproduces
         ``MedianEpsilon``.
     weights
-        Optional per-particle weights (e.g. from
-        ``importance_weights.py`` under Axis 2 variant B). ``None``
-        weights every accepted particle equally.
+        Optional per-particle weights. ``None`` weights every accepted
+        particle equally.
 
     Returns
     -------

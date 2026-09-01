@@ -6,18 +6,17 @@ src/geckomat/kcat_sensitivity_analysis/Bayesian/bayesianSensitivityTuning.m
 inline ``lognrnd`` sampling). Verified against ``develop4``'s current
 source.
 
-Two prior builders are provided, matching the plan's Axis 2 (how
-trust-tier priors constrain movement):
+Two prior builders are provided:
 
-- :func:`build_kcat_prior` -- the plain per-source lognormal prior,
-  shared by both regularization variants (variant A's shrink-weight
-  blend consumes it as a fixed reference point; variant B's importance
-  weighting consumes it as the actual prior density).
-- :func:`build_kcat_sparsity_prior` -- variant B's natural complement:
-  a genuine sparsity-inducing spike-and-slab mixture per parameter,
-  so an insignificant parameter's *posterior* concentrates at the
-  prior on its own, rather than needing MATLAB's post-hoc "snap
-  negligible changes to prior" step.
+- :func:`build_kcat_prior` -- the plain per-source lognormal prior the
+  tuning loop samples from, and the fixed reference point
+  ``posterior.update_posterior_shrinkage``'s blend measures movement
+  against.
+- :func:`build_kcat_sparsity_prior` -- a sparsity-inducing
+  spike-and-slab mixture per parameter, so an insignificant
+  parameter's posterior concentrates at the prior on its own rather
+  than needing MATLAB's post-hoc "snap negligible changes to prior"
+  step. Not wired into the tuning loop; kept for the pruning work.
 """
 from __future__ import annotations
 
@@ -196,44 +195,8 @@ def build_kcat_prior(
     return pyabc.Distribution(**rvs)
 
 
-def kcat_prior_logpdf(
-    theta: np.ndarray, kcat0: np.ndarray, sigma0_log: np.ndarray,
-) -> float:
-    """Log prior density of a raw kcat vector.
-
-    The same independent per-parameter lognormal prior
-    :func:`build_kcat_prior` constructs, evaluated directly via scipy
-    rather than through ``pyabc.Distribution``'s dict-based interface
-    -- for use as the ``prior_logpdf`` callable in
-    ``importance_weights.compute_importance_weights`` (Axis 2 variant
-    B), which needs a plain array in, scalar out function.
-
-    Parameters
-    ----------
-    theta
-        One kcat vector, shape ``(n_params,)``.
-    kcat0, sigma0_log
-        As in :func:`build_kcat_prior`.
-
-    Returns
-    -------
-    float
-    """
-    _check_shapes(kcat0, sigma0_log)
-    if theta.shape != kcat0.shape:
-        raise ValueError(
-            f"theta shape {theta.shape} must match kcat0 shape {kcat0.shape}."
-        )
-    return float(np.sum([
-        scipy.stats.lognorm.logpdf(
-            theta[i], s=sigma0_log[i], scale=_lognorm_scale_at(kcat0[i], sigma0_log[i]),
-        )
-        for i in range(len(kcat0))
-    ]))
-
-
 class SpikeSlabRV(RVBase):
-    """Spike-and-slab prior for one kcat (Axis 2, variant B).
+    """Spike-and-slab prior for one kcat.
 
     With probability ``spike_weight`` the parameter is drawn from a
     tight "spike" concentrated at ``kcat0`` (log-space std
@@ -241,8 +204,7 @@ class SpikeSlabRV(RVBase):
     from the ordinary "slab" -- the same lognormal prior
     :func:`build_kcat_prior` would use. A tight spike lets the
     posterior concentrate mass at "no real change" for parameters the
-    data doesn't inform, the probabilistic complement to Axis 1
-    variant B's importance weighting: instead of MATLAB's post-hoc
+    data doesn't inform: instead of MATLAB's post-hoc
     "snap negligible changes to prior" step, an insignificant
     parameter's *posterior* already sits there.
 
@@ -317,7 +279,7 @@ def build_kcat_sparsity_prior(
     spike_weight: float = 0.5,
     spike_sigma_frac: float = 0.05,
 ) -> pyabc.Distribution:
-    """Independent per-kcat spike-and-slab prior (Axis 2, variant B).
+    """Independent per-kcat spike-and-slab prior.
 
     Parameters
     ----------

@@ -15,7 +15,6 @@ from .distance import (
     dataset_rmse,
 )
 from .diagnostics import GenerationDiagnostics, GroupDiagnostics, compute_generation_diagnostics
-from .importance_weights import compute_importance_weights
 from .posterior import PosteriorUpdate, update_posterior_shrinkage
 from .priors import (
     UNLABELLED_GROUP,
@@ -25,7 +24,6 @@ from .priors import (
     build_sigma0_log,
     classify_kcat_source,
     classify_kcat_sources,
-    kcat_prior_logpdf,
 )
 from .selection import (
     SelectionResult,
@@ -59,9 +57,7 @@ __all__ = [
     "classify_kcat_sources",
     "compute_excarbon",
     "compute_generation_diagnostics",
-    "compute_importance_weights",
     "dataset_rmse",
-    "kcat_prior_logpdf",
     "load_bayesian_data",
     "next_quantile_epsilon",
     "quantile_epsilon_select",

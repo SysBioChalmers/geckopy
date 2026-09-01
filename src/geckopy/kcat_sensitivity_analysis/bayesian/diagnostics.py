@@ -2,15 +2,13 @@
 
 Ported design intent from GECKO MATLAB's per-source diagnostic block
 in ``bayesianSensitivityTuning.m`` (near-prior counts, mean deviation,
-variance ratio, "active" counts) -- but generalised to compute
-directly from a generation's accepted particle population (``kcat_top``
-+ ``weights``) rather than from Axis-2-variant-A's specific
-``shrink_weight``/``sigma_log`` outputs (``posterior.PosteriorUpdate``),
-since only that variant computes those. This module's whole point is
-producing metrics that are directly comparable across all four Axis-1
-x Axis-2 combinations, so nothing here reads ``PosteriorUpdate`` --
-every combination reaches these diagnostics through the same
-population-level statistics.
+variance ratio, "active" counts) -- but computed directly from a
+generation's accepted particle population (``kcat_top`` + ``weights``)
+rather than from ``posterior.PosteriorUpdate``'s
+``shrink_weight``/``sigma_log`` outputs. Nothing here reads
+``PosteriorUpdate``, so these metrics stay comparable across selection
+variants and remain meaningful even though the shrinkage blend never
+feeds back into sampling.
 """
 from __future__ import annotations
 

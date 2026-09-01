@@ -10,7 +10,7 @@ why: MATLAB's fixed-batch-then-truncate selection and pyABC's
 streaming-until-N-accepted mechanism don't map onto each other without
 fighting one or the other).
 
-Parameterised by two independently swappable axes:
+Parameterised by one swappable axis:
 
 - ``selection="truncation"`` (MATLAB-faithful: combine this
   generation's new proposals with the previous generation's accepted
@@ -18,17 +18,15 @@ Parameterised by two independently swappable axes:
   ``"quantile_epsilon"`` (pyABC-native: draw a fresh batch each
   generation -- no carry-over -- and accept against a fixed,
   prospective epsilon derived from the *previous* generation).
-- ``regularization="shrinkage"`` (MATLAB-faithful: uniform particle
-  weights; ``posterior.update_posterior_shrinkage``'s shrink-weight/
-  force-to-prior/sparsity-snap blend is computed purely for the trace
-  -- tracing MATLAB's own data flow shows that computation never
-  feeds back into sampling *or* the returned model there either: the
-  final ``ecModel.ec.kcat`` comes from the best raw accepted particle,
-  and the next generation samples from the raw accepted particle set,
-  not from the blended point estimate) or ``"importance_weighting"``
-  (proper SMC-ABC: ``importance_weights.compute_importance_weights``'
-  prior/transition-density weights feed both the next generation's
-  resampling, via ``GeckoTransition``, and the weighted diagnostics).
+Particles carry uniform weights, and per-source regularization is
+carried entirely by the priors: each source group's ``sigma0_log``
+sets how far a kcat can drift, and
+``posterior.update_posterior_shrinkage``'s shrink-weight/
+force-to-prior/sparsity-snap blend is computed for the trace only. It
+does not feed back into sampling or into the returned model, matching
+MATLAB: the final ``ecModel.ec.kcat`` is the best raw accepted
+particle, and the next generation samples from the raw accepted
+particle set rather than from the blended point estimate.
 
 One MATLAB quirk is deliberately *not* ported: MATLAB drops any
 proposal whose RMSE is *exactly* 0.0 ("often signals infeasibility").
@@ -91,9 +89,8 @@ from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
 from .data import BayesianData, load_bayesian_data
 from .diagnostics import GenerationDiagnostics, compute_generation_diagnostics
 from .distance import bayesian_distance, compute_excarbon
-from .importance_weights import compute_importance_weights
 from .posterior import PosteriorUpdate, update_posterior_shrinkage
-from .priors import build_kcat_prior, build_sigma0_log, classify_kcat_sources, kcat_prior_logpdf
+from .priors import build_kcat_prior, build_sigma0_log, classify_kcat_sources
 from .selection import next_quantile_epsilon, quantile_epsilon_select, truncation_select
 from .simulate import simulate_bayesian_dataset
 from .transition import GeckoTransition
@@ -106,7 +103,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SelectionVariant = Literal["truncation", "quantile_epsilon"]
-RegularizationVariant = Literal["shrinkage", "importance_weighting"]
 
 
 @dataclass
@@ -132,15 +128,12 @@ class BayesianTuningResult:
     rmse_trace
         Best (lowest) RMSE in the accepted set, per generation.
     posterior_trace
-        ``posterior.PosteriorUpdate`` per generation -- only populated
-        when ``regularization="shrinkage"`` (see module docstring: for
-        ``"importance_weighting"`` there is no equivalent blended
-        point estimate, only the particle population + weights
-        already captured in ``diagnostics_trace``).
+        ``posterior.PosteriorUpdate`` per generation (see the module
+        docstring: recorded for inspection, never fed back into
+        sampling or the returned model).
     diagnostics_trace
-        Per-generation, per-source-group diagnostics -- populated for
-        both regularization variants, and directly comparable between
-        them (see ``diagnostics.py``).
+        Per-generation, per-source-group diagnostics (see
+        ``diagnostics.py``).
     n_generations
         Number of generations actually run.
     converged
@@ -166,7 +159,6 @@ def bayesian_kcat_tuning(
     params: Optional["BayesianParams"] = None,
     bay_data: Optional[BayesianData] = None,
     selection: SelectionVariant = "truncation",
-    regularization: RegularizationVariant = "shrinkage",
     okp_method: Optional[str] = None,
     bio_rxn: Optional[str] = None,
     make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
@@ -192,9 +184,7 @@ def bayesian_kcat_tuning(
     bay_data
         Experimental data. Defaults to ``load_bayesian_data(adapter)``.
     selection
-        Axis 1 variant (see module docstring).
-    regularization
-        Axis 2 variant (see module docstring).
+        Selection variant (see module docstring).
     okp_method
         The project's configured OpenKineticsPredictor method, for
         source classification. Defaults to ``adapter.params.okp.method``
@@ -320,7 +310,6 @@ def bayesian_kcat_tuning(
         rmse_top = score_batch(kcat_top)
         weights_top = np.array([1.0])
         epsilon: Optional[float] = None
-        prior_logpdf = lambda theta: kcat_prior_logpdf(theta, kcat0, sigma0_log)  # noqa: E731
 
         result = BayesianTuningResult(
             rxns=ec_rxn_ids_tunable, old_kcat=kcat0.copy(), groups=list(groups),
@@ -372,27 +361,19 @@ def bayesian_kcat_tuning(
             new_kcat_top = combined_particles[:, sel.accepted_idx]
             new_rmse_top = combined_rmse[sel.accepted_idx]
 
-            if regularization == "shrinkage" or transition is None:
-                new_weights_top = np.full(
-                    len(sel.accepted_idx), 1.0 / len(sel.accepted_idx),
-                )
-            else:
-                new_weights_top = compute_importance_weights(
-                    new_kcat_top, prior_logpdf,
-                    parents=kcat_top, parent_weights=weights_top,
-                    transition_logpdf=transition.component_logpdf,
-                )
+            new_weights_top = np.full(
+                len(sel.accepted_idx), 1.0 / len(sel.accepted_idx),
+            )
 
-            if regularization == "shrinkage":
-                posterior_update = update_posterior_shrinkage(
-                    new_kcat_top, kcat0, sigma0_log, groups,
-                    shrink_thr_default=params.shrink_thr_default,
-                    shrink_thr_source=params.shrink_thr_source,
-                    force_prior_thr_default=params.force_prior_thr_default,
-                    force_prior_thr_source=params.force_prior_thr_source,
-                    sparsity_threshold=params.sparsity_threshold,
-                )
-                result.posterior_trace.append(posterior_update)
+            posterior_update = update_posterior_shrinkage(
+                new_kcat_top, kcat0, sigma0_log, groups,
+                shrink_thr_default=params.shrink_thr_default,
+                shrink_thr_source=params.shrink_thr_source,
+                force_prior_thr_default=params.force_prior_thr_default,
+                force_prior_thr_source=params.force_prior_thr_source,
+                sparsity_threshold=params.sparsity_threshold,
+            )
+            result.posterior_trace.append(posterior_update)
 
             diag = compute_generation_diagnostics(
                 generation, new_kcat_top, new_weights_top, new_rmse_top,
@@ -402,10 +383,7 @@ def bayesian_kcat_tuning(
             result.rmse_trace.append(diag.best_rmse)
 
             if selection == "quantile_epsilon":
-                epsilon = next_quantile_epsilon(
-                    new_rmse_top,
-                    weights=new_weights_top if regularization == "importance_weighting" else None,
-                )
+                epsilon = next_quantile_epsilon(new_rmse_top)
 
             if verbose:
                 logger.info(

@@ -1,4 +1,4 @@
-"""Axis 2, variant A: MATLAB-faithful shrink-weight/force-to-prior/
+"""MATLAB-faithful shrink-weight/force-to-prior/
 sparsity-snap posterior update.
 
 Ported from GECKO MATLAB:
@@ -33,7 +33,7 @@ _UNLABELLED_GROUP = "unlabelled"
 
 @dataclass
 class PosteriorUpdate:
-    """One generation's Axis-2-variant-A posterior update.
+    """One generation's posterior update.
 
     Attributes
     ----------

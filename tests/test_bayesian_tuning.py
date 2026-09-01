@@ -141,20 +141,15 @@ def _bay_data() -> BayesianData:
     return BayesianData(flux_data=None, max_grate=max_grate, zero_flux=[])
 
 
-_COMBINATIONS = [
-    ("truncation", "shrinkage"),
-    ("truncation", "importance_weighting"),
-    ("quantile_epsilon", "shrinkage"),
-    ("quantile_epsilon", "importance_weighting"),
-]
+_SELECTIONS = ["truncation", "quantile_epsilon"]
 
 
 _SEEDS = [0, 1, 2]
 
 
-@pytest.mark.parametrize("selection,regularization", _COMBINATIONS)
+@pytest.mark.parametrize("selection", _SELECTIONS)
 def test_trusted_source_moves_less_than_untrusted_for_every_combination(
-    tmp_path, selection, regularization,
+    tmp_path, selection,
 ):
     params = BayesianParams(
         # Exaggerated trust contrast: what is under test is that
@@ -163,8 +158,8 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
         # contrast is within sampling noise on a 2-parameter toy: the
         # shrink/force-prior blend never feeds back into sampling (see
         # tuning.py's module docstring), so the prior draw and the
-        # transition bandwidth are the only channel. At 0.05/1.0 all
-        # combinations separate well clear of that noise.
+        # transition bandwidth are the only channel. At 0.05/1.0 both
+        # selection variants separate well clear of that noise.
         sigma0_log_source={"brenda": 0.05, "dlkcat": 1.0, "custom": 0.1},
         schedule_generations=[1],
         schedule_samples=[40],
@@ -184,7 +179,7 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
 
         result = bayesian_kcat_tuning(
             model, adapter=adapter, params=params, bay_data=bay_data,
-            selection=selection, regularization=regularization,
+            selection=selection,
             seed=seed, verbose=False,
         )
 
@@ -200,10 +195,7 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
         # Diagnostics/rmse trace present for every generation.
         assert len(result.rmse_trace) == 4
         assert len(result.diagnostics_trace) == 4
-        if regularization == "shrinkage":
-            assert len(result.posterior_trace) == 4
-        else:
-            assert result.posterior_trace == []
+        assert len(result.posterior_trace) == 4
 
         brenda_moves.append(abs(np.log(result.new_kcat[0]) - np.log(_START_KCAT)))
         dlkcat_moves.append(abs(np.log(result.new_kcat[1]) - np.log(_START_KCAT)))
@@ -217,7 +209,7 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
     mean_brenda_move = float(np.mean(brenda_moves))
     mean_dlkcat_move = float(np.mean(dlkcat_moves))
     assert mean_brenda_move < mean_dlkcat_move, (
-        f"[{selection}/{regularization}] expected brenda (trusted) to move "
+        f"[{selection}] expected brenda (trusted) to move "
         f"less than dlkcat (untrusted) in log-space, averaged over seeds "
         f"{_SEEDS}; got mean_brenda_move={mean_brenda_move:.4f}, "
         f"mean_dlkcat_move={mean_dlkcat_move:.4f} "
@@ -225,8 +217,8 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
     )
 
 
-@pytest.mark.parametrize("selection,regularization", _COMBINATIONS)
-def test_parallel_scoring_matches_serial(tmp_path, selection, regularization):
+@pytest.mark.parametrize("selection", _SELECTIONS)
+def test_parallel_scoring_matches_serial(tmp_path, selection):
     """n_proc=2 must reproduce n_proc=1 bit-for-bit for the same seed.
 
     Sampling stays single-threaded in the main process (see tuning.py's
@@ -251,7 +243,7 @@ def test_parallel_scoring_matches_serial(tmp_path, selection, regularization):
         bay_data = _bay_data()
         return bayesian_kcat_tuning(
             model, adapter=adapter, params=params, bay_data=bay_data,
-            selection=selection, regularization=regularization,
+            selection=selection,
             n_proc=n_proc, seed=0, verbose=False,
         )
 
