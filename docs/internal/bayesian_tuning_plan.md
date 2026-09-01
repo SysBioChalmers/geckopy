@@ -117,6 +117,8 @@ src/geckopy/kcat_sensitivity_analysis/bayesian/
     __init__.py            # re-exports; guards pyabc absence (ImportError on call, not import)
     data.py                # load bayesian{FluxData,MaxGrowth,ZeroExch}.tsv
     simulate.py             # kcat vector -> apply_kcat_constraints -> FBA -> per-condition results
+                            # (per-worker persistent model + incremental apply/revert -- see
+                            # "Spike results" below; NOT one EcModel.copy() per particle)
     distance.py              # carbon/condition-weighted RMSE (port of abc_max.m's rmsecal half)
     priors.py                # per-kcat lognormal priors by source_group; sparsity-prior variant
     selection.py              # both selection variants: truncation_select / quantile_epsilon_select
@@ -137,6 +139,47 @@ tests/
     test_bayesian_tuning.py                 # tiny synthetic EcModel, all 4 variant combinations
     test_bayesian_tuning_smoke.py           # @pytest.mark.smoke, real-scale
 ```
+
+## Spike results (Sequencing step 2)
+
+Measured on the real-scale `ecYeastGEM.yml` tutorial model (8001 rxns, 3893
+mets, `ec.n_rxns=4842`, `ec.n_enzymes=1144`; Python 3.12.3, `.venv`):
+
+- **`pyabc>=0.13` installs cleanly** and imports its full needed surface
+  (`Distribution`/`RV`, `transition.Transition`/`MultivariateNormalTransition`,
+  `epsilon.QuantileEpsilon`/`MedianEpsilon`) with no conflicts against
+  geckopy's existing pinned deps (cobra 0.31.1, scipy 1.17.1, numpy 2.4.4).
+  Installed as `geckopy[bayesian]` per the Dependency note below.
+- **`EcModel.copy()` costs ~19.3 s/call; one `model.optimize()` FBA solve
+  costs ~86 ms** — a **~225x** ratio (n=20 each, warmed up). This kills the
+  "`EcModel.copy()` per particle" assumption `simulate.py` was sketched
+  around: a population of even 100 particles/generation would cost >32
+  minutes in copying alone, before any FBA time, and would dwarf the actual
+  simulation cost by two orders of magnitude.
+- **`apply_kcat_constraints` is not safely reversible via `with model:`** —
+  it writes stoichiometric coefficients directly via
+  `rxn.add_metabolites(..., combine=False)`, which cobra's context-manager
+  history does not track/revert (only bound/objective/media changes are).
+  So per-particle mutation cannot rely on `with ec_model:` for cleanup
+  either; reverting means explicitly re-applying the previous kcat values
+  afterward.
+
+**Resulting design for `simulate.py`**: follow `ec_fva.py`'s existing
+worker-pool precedent exactly — one `EcModel.copy()` per **worker process**
+(via a `Pool(initializer=...)` holding the copy in worker-local global
+state), not one per particle. Each particle then: write the new kcat vector
+into the worker's persistent `model.ec.kcat`, call
+`apply_kcat_constraints(model, update_rxns=affected)` scoped to just the
+rows that changed since the last particle solved on that worker, solve,
+read results, then leave the model as-is for the next particle to overwrite
+(no revert-to-baseline needed between particles — only a revert to the
+*previous* particle's state is ever implied, and the next `apply_kcat_constraints`
+call already achieves that by writing fresh values over the affected rows).
+This is exactly the incremental-update contract `apply_kcat_constraints`'s
+docstring already promises ("idempotent... running it twice yields the same
+result as running it once"), so no new capability is needed in that
+function — only `simulate.py`'s call pattern needs designing around
+per-worker reuse instead of per-particle copying.
 
 ## Open decisions (resolved)
 
