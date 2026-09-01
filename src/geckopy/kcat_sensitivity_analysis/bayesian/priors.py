@@ -196,6 +196,42 @@ def build_kcat_prior(
     return pyabc.Distribution(**rvs)
 
 
+def kcat_prior_logpdf(
+    theta: np.ndarray, kcat0: np.ndarray, sigma0_log: np.ndarray,
+) -> float:
+    """Log prior density of a raw kcat vector.
+
+    The same independent per-parameter lognormal prior
+    :func:`build_kcat_prior` constructs, evaluated directly via scipy
+    rather than through ``pyabc.Distribution``'s dict-based interface
+    -- for use as the ``prior_logpdf`` callable in
+    ``importance_weights.compute_importance_weights`` (Axis 2 variant
+    B), which needs a plain array in, scalar out function.
+
+    Parameters
+    ----------
+    theta
+        One kcat vector, shape ``(n_params,)``.
+    kcat0, sigma0_log
+        As in :func:`build_kcat_prior`.
+
+    Returns
+    -------
+    float
+    """
+    _check_shapes(kcat0, sigma0_log)
+    if theta.shape != kcat0.shape:
+        raise ValueError(
+            f"theta shape {theta.shape} must match kcat0 shape {kcat0.shape}."
+        )
+    return float(np.sum([
+        scipy.stats.lognorm.logpdf(
+            theta[i], s=sigma0_log[i], scale=_lognorm_scale_at(kcat0[i], sigma0_log[i]),
+        )
+        for i in range(len(kcat0))
+    ]))
+
+
 class SpikeSlabRV(RVBase):
     """Spike-and-slab prior for one kcat (Axis 2, variant B).
 

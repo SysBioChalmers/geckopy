@@ -145,6 +145,9 @@ def next_quantile_epsilon(
     """
     if len(accepted_distances) == 0:
         raise ValueError("accepted_distances is empty.")
+    if weights is not None:
+        weights = np.asarray(weights, dtype=float)
+        weights = weights / weights.sum()  # weighted_quantile asserts normalisation
     return float(
         weighted_quantile(
             np.asarray(accepted_distances, dtype=float), weights, alpha=alpha,

@@ -1,0 +1,235 @@
+"""Tests for kcat_sensitivity_analysis.bayesian.tuning.
+
+A tiny two-enzyme toy EcModel with one "brenda" (trusted, tight prior)
+and one "dlkcat" (untrusted, loose prior) kcat, each gating its own
+independent branch so each condition's growth depends on exactly one
+of them. Both start equally "wrong" (half the true value) so any
+difference in how far each one moves during tuning is attributable to
+the trust-tier prior/regularization machinery, not to differing
+amounts of initial error.
+
+Run once per combination of the two axes (4 runs total), per the
+plan's Test Strategy #3.
+"""
+from pathlib import Path
+
+import cobra
+import numpy as np
+import pytest
+
+from geckopy import EcModel, ModelAdapter
+from geckopy.adapter.params import BayesianParams
+from geckopy.databases.flux_data import FluxData
+from geckopy.ec_model.ec_data import EcData
+from geckopy.kcat_sensitivity_analysis.bayesian.data import BayesianData
+from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
+    BayesianTuningResult,
+    bayesian_kcat_tuning,
+)
+from scipy import sparse
+
+_TRUE_KCAT = 2.0
+_START_KCAT = 1.0  # both branches start at half the true value
+_MW = 100.0
+# growth = kcat * 3600 / mw (pool size 1 mg/gDW); at the true kcat,
+# growth = 72, matching both the measured growth rate and (1:1
+# stoichiometry) the measured carbon uptake below.
+_TRUE_GROWTH = _TRUE_KCAT * 3600.0 / _MW
+
+
+def _adapter(tmp_path: Path) -> ModelAdapter:
+    (tmp_path / "model_adapter.toml").write_text(
+        'conv_gem = "dummy.xml"\n'
+        'org_name = "test"\n'
+        'bio_rxn = "biomass"\n'
+    )
+    return ModelAdapter.from_folder(tmp_path)
+
+
+def _build_toy(adapter: ModelAdapter) -> EcModel:
+    model = EcModel("toy", adapter=adapter)
+
+    glc_e = cobra.Metabolite("glc_e", compartment="e")
+    eth_e = cobra.Metabolite("eth_e", compartment="e")
+    prot_pool = cobra.Metabolite("prot_pool", compartment="c")
+    prot_glc = cobra.Metabolite("prot_Eglc", compartment="c")
+    prot_eth = cobra.Metabolite("prot_Eeth", compartment="c")
+    bio_met = cobra.Metabolite("bio_met", compartment="c")
+    model.add_metabolites([glc_e, eth_e, prot_pool, prot_glc, prot_eth, bio_met])
+
+    EX_glc = cobra.Reaction("EX_glc")
+    EX_glc.add_metabolites({glc_e: -1.0})
+    EX_glc.bounds = (-1000.0, 0.0)
+
+    EX_eth = cobra.Reaction("EX_eth")
+    EX_eth.add_metabolites({eth_e: -1.0})
+    EX_eth.bounds = (-1000.0, 0.0)
+
+    coeff = _MW / (_START_KCAT * 3600.0)
+    R_glc = cobra.Reaction("R_glc")
+    R_glc.add_metabolites({glc_e: -1.0, prot_glc: -coeff, bio_met: 1.0})
+    R_glc.bounds = (0.0, 1000.0)
+
+    R_eth = cobra.Reaction("R_eth")
+    R_eth.add_metabolites({eth_e: -1.0, prot_eth: -coeff, bio_met: 1.0})
+    R_eth.bounds = (0.0, 1000.0)
+
+    BIO = cobra.Reaction("biomass")
+    BIO.add_metabolites({bio_met: -1.0})
+    BIO.bounds = (0.0, 1000.0)
+
+    pool_ex = cobra.Reaction("prot_pool_exchange")
+    pool_ex.add_metabolites({prot_pool: 1.0})
+    pool_ex.bounds = (0.0, 1.0)
+
+    usage_glc = cobra.Reaction("usage_prot_Eglc")
+    usage_glc.add_metabolites({prot_pool: -1.0, prot_glc: 1.0})
+    usage_glc.bounds = (0.0, 1000.0)
+
+    usage_eth = cobra.Reaction("usage_prot_Eeth")
+    usage_eth.add_metabolites({prot_pool: -1.0, prot_eth: 1.0})
+    usage_eth.bounds = (0.0, 1000.0)
+
+    model.add_reactions(
+        [EX_glc, EX_eth, R_glc, R_eth, BIO, pool_ex, usage_glc, usage_eth]
+    )
+    model.objective = "biomass"
+
+    model.ec = EcData(
+        rxns=["R_glc", "R_eth"],
+        kcat=np.array([_START_KCAT, _START_KCAT]),
+        source=["brenda", "dlkcat"],
+        notes=["", ""],
+        eccodes=["", ""],
+        genes=["g_glc", "g_eth"],
+        enzymes=["Eglc", "Eeth"],
+        mw=np.array([_MW, _MW]),
+        sequence=["", ""],
+        concs=np.array([np.nan, np.nan]),
+        rxn_enz_mat=sparse.csr_matrix(np.eye(2)),
+    )
+    return model
+
+
+def _bay_data() -> BayesianData:
+    # max_grate (constrain=False): uptake is always opened fully
+    # (-1000, ignoring the exch_fluxes values below -- they only
+    # decide *which* exchange is unblocked per condition), so growth
+    # is purely enzyme-limited: 36*kcat, strictly increasing with no
+    # saturation. This keeps the objective unimodal with a single
+    # minimum at kcat=2.0 in both directions -- unlike flux_data
+    # (constrain=True), which would also compare simulated vs.
+    # measured *exchange* flux for the active condition's own column;
+    # since that column doubles as the uptake bound, any measured
+    # value tight enough to be realistic would cap achievable growth
+    # for kcat > true_kcat too, creating a flat "any kcat >= true_kcat
+    # scores 0" plateau with no restoring force -- not what this test
+    # wants to isolate.
+    max_grate = FluxData(
+        conds=["glucose", "ethanol"],
+        p_tot=np.array([np.nan, np.nan]),
+        gr_rate=np.array([_TRUE_GROWTH, _TRUE_GROWTH]),
+        exch_fluxes=np.array(
+            [
+                [-1000.0, np.nan],
+                [np.nan, -1000.0],
+            ]
+        ),
+        exch_mets=["glucose", "ethanol"],
+        exch_rxn_ids=["EX_glc", "EX_eth"],
+    )
+    return BayesianData(flux_data=None, max_grate=max_grate, zero_flux=[])
+
+
+_COMBINATIONS = [
+    ("truncation", "shrinkage"),
+    ("truncation", "importance_weighting"),
+    ("quantile_epsilon", "shrinkage"),
+    ("quantile_epsilon", "importance_weighting"),
+]
+
+
+_SEEDS = [0, 1, 2]
+
+
+@pytest.mark.parametrize("selection,regularization", _COMBINATIONS)
+def test_trusted_source_moves_less_than_untrusted_for_every_combination(
+    tmp_path, selection, regularization,
+):
+    params = BayesianParams(
+        schedule_generations=[1],
+        schedule_samples=[40],
+        min_keep=0.3,
+        max_keep=0.6,
+        rmse_threshold=-1.0,  # unreachable -> always runs exactly max_generations
+        max_generations=4,
+    )
+
+    brenda_moves = []
+    dlkcat_moves = []
+    for seed in _SEEDS:
+        adapter = _adapter(tmp_path)
+        model = _build_toy(adapter)
+        bay_data = _bay_data()
+        apply_kcat_constraints_before = model.ec.kcat.copy()
+
+        result = bayesian_kcat_tuning(
+            model, adapter=adapter, params=params, bay_data=bay_data,
+            selection=selection, regularization=regularization,
+            seed=seed, verbose=False,
+        )
+
+        assert isinstance(result, BayesianTuningResult)
+        assert result.rxns == ["R_glc", "R_eth"]
+        assert result.groups == ["brenda", "dlkcat"]
+        assert np.array_equal(result.old_kcat, apply_kcat_constraints_before)
+        assert result.n_generations == 4
+
+        # model.ec.kcat was actually mutated in place to match the result.
+        assert np.array_equal(model.ec.kcat, result.new_kcat)
+
+        # Diagnostics/rmse trace present for every generation.
+        assert len(result.rmse_trace) == 4
+        assert len(result.diagnostics_trace) == 4
+        if regularization == "shrinkage":
+            assert len(result.posterior_trace) == 4
+        else:
+            assert result.posterior_trace == []
+
+        brenda_moves.append(abs(np.log(result.new_kcat[0]) - np.log(_START_KCAT)))
+        dlkcat_moves.append(abs(np.log(result.new_kcat[1]) - np.log(_START_KCAT)))
+
+    # Primary comparison, averaged over a few seeds to smooth out
+    # single-run sampling noise (especially for selection=
+    # "quantile_epsilon", which redraws fresh each generation with no
+    # elitist carry-over): does the trusted (tight-prior) kcat move
+    # less, in absolute log-space terms, than the untrusted one, given
+    # an identical starting error for both?
+    mean_brenda_move = float(np.mean(brenda_moves))
+    mean_dlkcat_move = float(np.mean(dlkcat_moves))
+    assert mean_brenda_move < mean_dlkcat_move, (
+        f"[{selection}/{regularization}] expected brenda (trusted) to move "
+        f"less than dlkcat (untrusted) in log-space, averaged over seeds "
+        f"{_SEEDS}; got mean_brenda_move={mean_brenda_move:.4f}, "
+        f"mean_dlkcat_move={mean_dlkcat_move:.4f} "
+        f"(per-seed: brenda={brenda_moves}, dlkcat={dlkcat_moves})"
+    )
+
+
+def test_no_tunable_kcats_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    model.ec.kcat[:] = 0.0
+    bay_data = _bay_data()
+
+    with pytest.raises(ValueError, match="No tunable kcats"):
+        bayesian_kcat_tuning(model, adapter=adapter, bay_data=bay_data)
+
+
+def test_missing_bay_data_raises(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    empty = BayesianData(flux_data=None, max_grate=None, zero_flux=[])
+
+    with pytest.raises(ValueError, match="nothing to tune"):
+        bayesian_kcat_tuning(model, adapter=adapter, bay_data=empty)

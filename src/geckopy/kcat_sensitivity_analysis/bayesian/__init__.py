@@ -14,6 +14,7 @@ from .distance import (
     compute_excarbon,
     dataset_rmse,
 )
+from .diagnostics import GenerationDiagnostics, GroupDiagnostics, compute_generation_diagnostics
 from .importance_weights import compute_importance_weights
 from .posterior import PosteriorUpdate, update_posterior_shrinkage
 from .priors import (
@@ -24,6 +25,7 @@ from .priors import (
     build_sigma0_log,
     classify_kcat_source,
     classify_kcat_sources,
+    kcat_prior_logpdf,
 )
 from .selection import (
     SelectionResult,
@@ -33,26 +35,33 @@ from .selection import (
 )
 from .simulate import ConditionSimResult, simulate_bayesian_dataset
 from .transition import GeckoTransition
+from .tuning import BayesianTuningResult, bayesian_kcat_tuning
 
 __all__ = [
     "BIOMASS_CARBON_EQUIV",
     "INFEASIBLE_PENALTY",
     "UNLABELLED_GROUP",
     "BayesianData",
+    "BayesianTuningResult",
     "ConditionSimResult",
     "GeckoTransition",
+    "GenerationDiagnostics",
+    "GroupDiagnostics",
     "PosteriorUpdate",
     "SelectionResult",
     "SpikeSlabRV",
     "bayesian_distance",
+    "bayesian_kcat_tuning",
     "build_kcat_prior",
     "build_kcat_sparsity_prior",
     "build_sigma0_log",
     "classify_kcat_source",
     "classify_kcat_sources",
     "compute_excarbon",
+    "compute_generation_diagnostics",
     "compute_importance_weights",
     "dataset_rmse",
+    "kcat_prior_logpdf",
     "load_bayesian_data",
     "next_quantile_epsilon",
     "quantile_epsilon_select",
