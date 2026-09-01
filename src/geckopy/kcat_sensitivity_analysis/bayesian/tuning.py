@@ -40,15 +40,21 @@ suspicious-looking distance value, so a genuinely perfect-fit proposal
 Parallel scoring (``n_proc``)
 ------------------------------
 Each generation's new particles are scored independently of each
-other, so they parallelise across a ``multiprocessing.Pool`` --
-reusing ``utilities/ec_fva.py``'s exact existing pattern rather than
-inventing a new one: one persistent ``EcModel`` copy per **worker
-process** (pickled once at pool startup), not one per particle and not
-one shared mutable object across processes. Each worker then scores
-every particle it's handed against its own copy via incremental
-``apply_kcat_constraints(update_rxns=...)`` calls, exactly like the
-serial path -- see the "Spike results" section of
-``docs/internal/bayesian_tuning_plan.md`` for why a per-particle
+other, so they parallelise across a process pool -- using
+``cobra.util.process_pool.ProcessPool`` (the same primitive cobrapy's
+own ``single_gene_deletion``/``single_reaction_deletion``/etc. use for
+"repeated FBA on slightly-perturbed model copies", exactly this
+module's shape of problem) rather than driving ``multiprocessing``
+directly: one persistent ``EcModel`` copy per **worker process**
+(deserialised once at pool startup, not once per particle and not one
+shared mutable object across processes), which ``ProcessPool`` also
+gets right on Windows for free (a temp-file-based initarg handoff that
+works around a real performance issue in raw
+``multiprocessing.Pool(initializer=...)`` there -- see its docstring).
+Each worker then scores every particle it's handed against its own
+copy via incremental ``apply_kcat_constraints(update_rxns=...)``
+calls, exactly like the serial path -- see the "Spike results" section
+of ``docs/internal/bayesian_tuning_plan.md`` for why a per-particle
 ``EcModel.copy()`` is not used either way (~225x an FBA solve on a
 real-scale model).
 
@@ -64,24 +70,22 @@ results to one with ``n_proc>1``.
 
 ``make_anaerobic``/``change_protein_biomass``, if supplied, must be
 importable top-level functions (not lambdas/closures) when running
-with ``n_proc>1`` on Windows, where ``multiprocessing`` uses the
-``spawn`` start method and must be able to pickle them into each
-worker; POSIX's ``fork`` (used here whenever available, matching
-``ec_fva.py``) has no such restriction.
+with ``n_proc>1`` on Windows, where ``multiprocessing`` needs to
+pickle them into each worker; POSIX's default start method (typically
+``fork``, inherited via copy-on-write with no pickling involved) has
+no such restriction.
 """
 from __future__ import annotations
 
 import contextlib
 import logging
-import multiprocessing as mp
-import pickle
-import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Literal, Optional
 
 import cobra
 import numpy as np
 import pandas as pd
+from cobra.util import ProcessPool
 
 from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
 from .data import BayesianData, load_bayesian_data
@@ -279,14 +283,14 @@ def bayesian_kcat_tuning(
     if n_proc == 1:
         pool_cm = contextlib.nullcontext(None)
     else:
-        # "fork" is unavailable on Windows (spawn is required there) but
-        # is preferred on POSIX -- same rationale as ec_fva.py.
-        ctx_name = "fork" if sys.platform != "win32" else "spawn"
-        ctx = mp.get_context(ctx_name)
-        pool_cm = ctx.Pool(
+        # ProcessPool (cobra.util.process_pool) handles serialising the
+        # model to each worker -- including a Windows-specific
+        # performance workaround -- so `model` is passed as-is, not
+        # pre-pickled.
+        pool_cm = ProcessPool(
             n_proc, initializer=_init_worker,
             initargs=(
-                pickle.dumps(model), tunable_idx, ec_rxn_ids_tunable, bay_data,
+                model, tunable_idx, ec_rxn_ids_tunable, bay_data,
                 excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
             ),
         )
@@ -496,7 +500,7 @@ _WORKER_CHANGE_PROTEIN_BIOMASS = None
 
 
 def _init_worker(
-    model_pickle_bytes: bytes,
+    model: "EcModel",
     tunable_idx: np.ndarray,
     ec_rxn_ids_tunable: list[str],
     bay_data: BayesianData,
@@ -505,12 +509,13 @@ def _init_worker(
     make_anaerobic,
     change_protein_biomass,
 ) -> None:
-    """Pool initializer: unpickle one EcModel copy for this worker
-    process, and stash everything else needed to score a particle."""
+    """Pool initializer: stash this worker process's own EcModel copy
+    (deserialised by ``ProcessPool``, not by us) and everything else
+    needed to score a particle."""
     global _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE
     global _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
     global _WORKER_MAKE_ANAEROBIC, _WORKER_CHANGE_PROTEIN_BIOMASS
-    _WORKER_MODEL = pickle.loads(model_pickle_bytes)
+    _WORKER_MODEL = model
     _WORKER_TUNABLE_IDX = tunable_idx
     _WORKER_EC_RXN_IDS_TUNABLE = ec_rxn_ids_tunable
     _WORKER_BAY_DATA = bay_data

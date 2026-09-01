@@ -40,25 +40,36 @@ sample from the same raw accepted-particle population and differ only
 in particle weighting.
 
 **Parallelization (`n_proc`) is implemented**, per user request (an HPC
-run was the target deployment), reusing `utilities/ec_fva.py`'s existing
-`multiprocessing.Pool` pattern exactly: one persistent `EcModel` copy per
-**worker process** (pickled once at pool startup, not per particle),
-scoring particles via the same incremental `apply_kcat_constraints`
-approach as the serial path. Sampling itself stays single-threaded in
-the main process, so a run is bit-for-bit reproducible across `n_proc`
-values for the same `seed` — verified directly
-(`test_parallel_scoring_matches_serial`, all 4 combinations). One
+run was the target deployment). First cut reused `utilities/ec_fva.py`'s
+hand-rolled `multiprocessing.Pool` pattern; asked whether cobrapy itself
+already has something for "repeated FBA on slightly-perturbed model
+copies, parallelised" (yes -- it's exactly what
+`single_gene_deletion`/`single_reaction_deletion`/etc. do), so this was
+refactored to use `cobra.util.process_pool.ProcessPool` instead: same
+one-persistent-`EcModel`-copy-per-worker-process shape, but it also
+handles a real Windows-specific `multiprocessing.Pool(initializer=...)`
+performance issue (opencobra/cobrapy#997) for free, and does a proper
+`close()+join()` on exit rather than a bare `Pool`'s `terminate()`. Note
+`ec_fva.py` itself still uses the older hand-rolled pattern -- that's a
+separate, pre-existing, out-of-scope inconsistency, not something this
+branch touched. Sampling itself stays single-threaded in the main
+process, so a run is bit-for-bit reproducible across `n_proc` values for
+the same `seed` — verified directly (`test_parallel_scoring_matches_serial`,
+all 4 combinations, re-verified after the `ProcessPool` refactor). One
 caveat surfaced by that test and worth knowing before an unattended HPC
 run: Python 3.12 emits `DeprecationWarning: This process is
 multi-threaded, use of fork() may lead to deadlocks in the child` under
-`n_proc>1` (fork start method, likely from Gurobi's internal threads) —
-it did not manifest as an actual deadlock in any test run here, and
-`ec_fva.py` already accepts the same trade-off in production, but a long
-unattended multi-generation HPC run is exactly the scenario where a rare
+`n_proc>1` (POSIX's default `fork` start method, likely from Gurobi's
+internal threads) — it did not manifest as an actual deadlock in any
+test run here, and `ec_fva.py` already accepts the same trade-off in
+production, but a long unattended multi-generation HPC run is exactly
+the scenario where a rare
 fork-related hang would actually bite. If that becomes a real problem,
-the fix is switching `tuning.py`'s `ctx_name` selection to always use
-`"spawn"` (slower pool startup, but immune to this class of bug) rather
-than preferring `"fork"` on POSIX.
+the fix is calling `multiprocessing.set_start_method("spawn", force=True)`
+once, early, before any `bayesian_kcat_tuning(..., n_proc>1)` call
+(`ProcessPool` itself doesn't expose a `context=` argument to pick this
+per-call -- it just uses whatever the process-wide default is). Slower
+pool startup, but immune to this class of bug.
 
 ### In progress: Sequencing step 11 (real-scale smoke test)
 
