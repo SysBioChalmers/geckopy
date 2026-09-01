@@ -23,15 +23,13 @@ Ported from GECKO MATLAB: src/geckomat/utilities/ecFVA.m.
 """
 from __future__ import annotations
 
-import multiprocessing as mp
-import pickle
-import sys
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
 
 import cobra
 import numpy as np
 import pandas as pd
+from cobra.util import ProcessPool
 
 from ..ec_model.constants import canonicalize_rxn_id
 
@@ -52,10 +50,16 @@ if TYPE_CHECKING:
 _WORKER_MODEL: "EcModel | None" = None
 
 
-def _init_worker(model_pickle_bytes: bytes) -> None:
-    """Pool initializer: store one EcModel copy per worker process."""
+def _init_worker(model: "EcModel") -> None:
+    """Pool initializer: store one EcModel copy per worker process.
+
+    ``model`` arrives already deserialised -- ``ProcessPool`` handles
+    serialisation itself, including a Windows-specific performance
+    workaround (opencobra/cobrapy#997), so it's passed as-is rather than
+    pre-pickled.
+    """
     global _WORKER_MODEL
-    _WORKER_MODEL = pickle.loads(model_pickle_bytes)
+    _WORKER_MODEL = model
 
 
 def _fva_step(arg):
@@ -114,8 +118,9 @@ def ec_fva(
     n_proc
         Number of worker processes. Defaults to
         ``cobra.Configuration().processes``. Set to 1 to run the
-        original serial path; values >= 2 parallelise with a spawn
-        Pool that pickles ``ec_model`` once per worker.
+        original serial path; values >= 2 parallelise via
+        ``cobra.util.ProcessPool``, the same pool cobrapy's own
+        ``flux_variability_analysis``/``single_reaction_deletion`` use.
 
     Returns
     -------
@@ -158,22 +163,21 @@ def ec_fva(
                 sense="max",
             )
     else:
-        # Parallel path. "fork" is the most efficient context but is
-        # unavailable on Windows; "spawn" is required there and works
-        # on POSIX too at the cost of re-importing modules per worker.
-        # Some WSL kernels deadlock on spawn-context multiprocessing,
-        # so we prefer fork on POSIX where it's available.
-        ctx_name = "fork" if sys.platform != "win32" else "spawn"
-        ctx = mp.get_context(ctx_name)
-        pickled = pickle.dumps(ec_model)
+        # Parallel path via cobra.util.ProcessPool -- the same primitive
+        # cobrapy's own flux_variability_analysis/single_reaction_deletion
+        # use for "repeated FBA on slightly-perturbed model copies, in
+        # parallel". It handles serialising ec_model to each worker
+        # (including the Windows-specific performance workaround from
+        # opencobra/cobrapy#997) and tears the pool down gracefully
+        # (close()+join(), not an abrupt terminate()) on exit.
         tasks = [
             (cid, group_forward[k], group_reverse[k])
             for k, cid in enumerate(canonical_ids)
         ]
         index_by_id = {cid: k for k, cid in enumerate(canonical_ids)}
         chunk = max(1, len(tasks) // (n_proc * 4))
-        with ctx.Pool(
-            n_proc, initializer=_init_worker, initargs=(pickled,),
+        with ProcessPool(
+            n_proc, initializer=_init_worker, initargs=(ec_model,),
         ) as pool:
             iterator = pool.imap_unordered(_fva_step, tasks, chunksize=chunk)
             if progress:
