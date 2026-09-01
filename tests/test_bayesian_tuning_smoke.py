@@ -70,7 +70,11 @@ from geckopy import ModelAdapter
 from geckopy.utilities.load_ec_model import load_ec_model
 from geckopy.adapter.params import BayesianParams, SourceGroupRule
 from geckopy.kcat_sensitivity_analysis.bayesian.data import load_bayesian_data
-from geckopy.kcat_sensitivity_analysis.bayesian.tuning import bayesian_kcat_tuning
+from geckopy.kcat_sensitivity_analysis.bayesian.distance import compute_excarbon
+from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
+    _score_kcat_vector,
+    bayesian_kcat_tuning,
+)
 
 _TUTORIAL_DIR = Path(__file__).resolve().parent.parent / "tutorials" / "full_ecModel"
 _DEFAULT_MODEL = "ecYeastGEM_preTune_GECKOderived.yml"
@@ -190,3 +194,48 @@ def test_bayesian_tuning_runs_at_real_scale(selection):
         )
     )
 
+
+def test_scoring_is_independent_of_previous_particle():
+    """Scoring the same kcat vector must give the same distance.
+
+    These LPs have alternate optima, and a solver resuming from the
+    previous solve's basis can return a different vertex -- and so
+    different exchange fluxes -- for an identical problem. A toy model
+    has no such degeneracy, so this only bites at real scale: it needs
+    the real ecModel to be meaningful.
+    """
+    model, adapter, bay_data = _load_model_and_data()
+    tunable_idx = np.flatnonzero(model.ec.kcat > 0)
+    rxn_ids = [model.ec.rxns[i] for i in tunable_idx]
+    excarbon_rxn_ids = {adapter.params.bio_rxn}
+    for data in (bay_data.flux_data, bay_data.max_grate):
+        if data is not None:
+            excarbon_rxn_ids.update(data.exch_rxn_ids)
+    excarbon_rxn_ids.update(bay_data.zero_flux)
+    excarbon = compute_excarbon(
+        model, excarbon_rxn_ids, bio_rxn_id=adapter.params.bio_rxn,
+    )
+
+    def score(vec):
+        return _score_kcat_vector(
+            model, tunable_idx, rxn_ids, bay_data, excarbon,
+            adapter.params.bio_rxn, vec.copy(),
+            make_anaerobic=None, change_protein_biomass=None,
+        )
+
+    baseline = model.ec.kcat[tunable_idx].astype(float).copy()
+    perturbed = np.maximum(
+        baseline * np.exp(np.random.default_rng(0).normal(0, 0.5, len(baseline))),
+        np.finfo(float).tiny,
+    )
+
+    first = score(baseline)
+    score(perturbed)
+    after_other = score(baseline)
+    again = score(baseline)
+
+    assert first == after_other == again, (
+        f"scoring is not a pure function of the kcat vector: {first!r} "
+        f"first, {after_other!r} after scoring a different particle, "
+        f"{again!r} on a third call."
+    )

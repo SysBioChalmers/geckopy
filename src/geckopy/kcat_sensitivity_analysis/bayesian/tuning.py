@@ -61,10 +61,13 @@ stays single-threaded in the main process -- it's cheap relative to
 FBA and, more importantly, doing it there keeps the *sequence* of
 particles proposed each generation deterministic given ``seed``,
 independent of ``n_proc`` or how work happens to be chunked across
-workers. Only the (pure, order-independent) scoring of an
-already-fixed batch of particles is parallelised, so a run with
-``n_proc=1`` and the same ``seed`` reproduces bit-for-bit identical
-results to one with ``n_proc>1``.
+workers. Only the scoring of an already-fixed batch of particles is
+parallelised, and scoring is a pure function of the kcat vector --
+each particle's solves start from a cold basis
+(:func:`_reset_solver_basis`), so a worker's result does not depend on
+which particle it scored before. A run with ``n_proc=1`` and the same
+``seed`` therefore reproduces bit-for-bit identical results to one
+with ``n_proc>1``.
 
 ``make_anaerobic``/``change_protein_biomass``, if supplied, must be
 importable top-level functions (not lambdas/closures) when running
@@ -414,6 +417,28 @@ def bayesian_kcat_tuning(
 # Scoring core, shared by the serial and parallel paths
 # --------------------------------------------------------------------------- #
 
+def _reset_solver_basis(model: "EcModel") -> None:
+    """Discard the solver's incumbent basis so the solves below start cold.
+
+    The distance must be a function of the kcat vector alone. Solvers
+    warm-start from the previous solve's basis, and these LPs have
+    alternate optima: resuming from a basis that is already optimal
+    for the new problem returns that vertex in zero iterations, so the
+    reported exchange fluxes -- and hence the RMSE -- would otherwise
+    depend on which particle this model scored before. That would make
+    the accepted set depend on ``n_proc`` and on how the pool happened
+    to schedule particles across workers.
+
+    A no-op for solver interfaces whose problem object exposes no
+    ``reset`` (only the model's own state then determines the solve,
+    which is the property this guarantees for the rest).
+    """
+    problem = getattr(model.solver, "problem", None)
+    reset = getattr(problem, "reset", None)
+    if callable(reset):
+        reset()
+
+
 def _score_kcat_vector(
     model: "EcModel",
     tunable_idx: np.ndarray,
@@ -440,6 +465,7 @@ def _score_kcat_vector(
     """
     model.ec.kcat[tunable_idx] = kcat_vec
     apply_kcat_constraints(model, update_rxns=ec_rxn_ids_tunable)
+    _reset_solver_basis(model)
 
     flux_sims = None
     if bay_data.flux_data is not None:
