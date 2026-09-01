@@ -32,6 +32,8 @@ _OUTPUT_COLUMNS = [
 def read_dlkcat_output(
     model: "EcModel",
     file_path: str | Path,
+    *,
+    strict: bool = False,
 ) -> pd.DataFrame:
     """Parse DLKcat's output TSV into a kcat_list DataFrame.
 
@@ -54,7 +56,11 @@ def read_dlkcat_output(
     Substrate names are matched against ``model.metabolites``
     case-insensitively, so differences in capitalization between the
     DLKcat output and the SBML-loaded model do not cause spurious
-    failures.
+    failures. A row whose substrate isn't recognized is dropped (with
+    a warning) rather than aborting the whole read, unless
+    ``strict=True``. Either way, the drop counts for non-numeric kcat
+    and unrecognized substrate are logged separately (a row can be
+    counted under both).
 
     Parameters
     ----------
@@ -62,21 +68,26 @@ def read_dlkcat_output(
         EcModel with populated ``ec.rxns`` and ``metabolites``.
     file_path
         Path to the DLKcat output TSV.
+    strict
+        If True, raise ``ValueError`` on any unrecognized substrate
+        name instead of dropping just that row. Default False.
 
     Returns
     -------
     pandas.DataFrame
-        Rows where the kcat field was numeric, with the columns
-        listed above. ``source`` is ``"DLKcat"`` for every row.
+        Rows where the kcat field was numeric and, unless
+        ``strict=True`` let an unrecognized substrate through, the
+        substrate was recognized. Columns as listed above; ``source``
+        is ``"DLKcat"`` for every row.
 
     Raises
     ------
     FileNotFoundError
         If ``file_path`` does not exist.
     ValueError
-        If the file contains no numeric kcat values; if any
-        substrate name from the file is not in
-        ``model.metabolites.<name>`` (case-insensitive); or if any
+        If the file contains no numeric kcat values; if
+        ``strict=True`` and any substrate name from the file is not
+        in ``model.metabolites.<name>`` (case-insensitive); or if any
         ``rxn_id`` is not in ``model.ec.rxns``.
     """
     file_path = Path(file_path)
@@ -106,6 +117,12 @@ def read_dlkcat_output(
     unknown_subs_mask = ~file_subs_lower.isin(model_met_names_lower)
     if unknown_subs_mask.any():
         unknown = sorted(df.loc[unknown_subs_mask, "substrate"].unique())
+        if strict:
+            raise ValueError(
+                f"DLKcat output references {len(unknown)} substrate "
+                f"name(s) not in model.metabolites (case-insensitive). "
+                f"Examples: {unknown[:5]}."
+            )
         # A few renamed/normalised substrate names should not discard the
         # whole prediction file; drop those rows and keep the rest (mirrors
         # how non-numeric kcats are handled).
@@ -143,12 +160,14 @@ def read_dlkcat_output(
         "origin": pd.array([pd.NA] * n, dtype="Int64"),
     })
 
-    dropped = len(df) - n
-    if dropped > 0:
+    non_numeric_dropped = int((~numeric_kcat.notna()).sum())
+    unknown_subs_dropped = int(unknown_subs_mask.sum())
+    if non_numeric_dropped or unknown_subs_dropped:
         logger.info(
-            "read_dlkcat_output: read %d row(s); dropped %d row(s) with "
-            "non-numeric kcat.",
-            n, dropped,
+            "read_dlkcat_output: read %d row(s) from %s; dropped %d row(s) "
+            "with non-numeric kcat, %d row(s) with an unrecognized "
+            "substrate (a row failing both is counted in each).",
+            n, file_path, non_numeric_dropped, unknown_subs_dropped,
         )
     else:
         logger.info("read_dlkcat_output: read %d row(s) from %s.", n, file_path)
