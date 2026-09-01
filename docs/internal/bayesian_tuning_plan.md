@@ -6,14 +6,11 @@ history and a closer read of pyABC's actual generation-loop mechanics.
 
 ## Handoff (read this first)
 
-This work happened on **`feat/bayesian-kcat-tuning-agent`**, a branch
-forked from `feat/bayesian-kcat-tuning` at commit `fdf8d2c` and developed
-in an isolated worktree (`../geckopy-bayesian-wip`) because another agent
-was concurrently reorganising folders on the main working tree/branch.
-It has **not been merged back into `feat/bayesian-kcat-tuning`** — that
-reconciliation is still pending and is the first thing to sort out
-(check whether `feat/bayesian-kcat-tuning` has moved since `fdf8d2c`; if
-so this branch likely needs a rebase, not a fast-forward merge).
+This work lives on **`feat/bayesian-kcat-tuning-agent`**, forked from
+`feat/bayesian-kcat-tuning` at commit `fdf8d2c`. That parent branch no
+longer exists locally or on `origin`, and `fdf8d2c` is in this branch's
+history, so no reconciliation is outstanding: this branch is the single
+line of work.
 
 ### Done (Sequencing steps 1–10, all committed, all tests green)
 
@@ -84,17 +81,11 @@ anywhere; regenerate it by running `tutorials/full_ecModel/protocol.py`,
 or copy it from the main geckopy checkout's `tutorials/full_ecModel/models/`
 if one has already been built there.
 
-`tests/test_bayesian_tuning_smoke.py` is written and committed
-(`@pytest.mark.smoke`, skips gracefully if `ecYeastGEM.yml` is absent —
-see its docstring). **What's not done**: it has not been confirmed to
-pass. A timing calibration run (`truncation`/`shrinkage` only, the
-cheapest of the 4 combinations, 8 particles x 2 generations) was
-in-flight when this branch was handed off; its result was not captured
-(it ran in a background shell tied to the previous session and is not
-recoverable). Real scale here is substantial — **4842 tunable kcats**,
-**33 flux conditions + 8 max-growth conditions** (confirmed by loading
-the real model), so each particle costs ~41 real FBA solves. Next
-actions, in order:
+`tests/test_bayesian_tuning_smoke.py` runs all four combinations
+against the real model (`@pytest.mark.smoke`, skipped when the model
+file is absent — see its docstring). Real scale here is substantial —
+**4834 tunable kcats**, **33 flux conditions + 8 max-growth
+conditions**, so each particle costs ~41 real FBA solves.
 
 1. Re-run just that one cheapest combination first and note wall-time:
    ```bash
@@ -137,6 +128,118 @@ actions, in order:
 and an opt-in path wiring `GeckoTransition` into a real `pyabc.ABCSMC`
 for massively-parallel runs. Not blocking; do this after step 11's
 comparison data exists and a default variant is picked.
+
+## Real-scale results (Sequencing step 11)
+
+Run against `ecYeastGEM_preTune_GECKOderived.yml` — GECKO MATLAB's own
+`tutorials/full_ecModel/models/ecYeastGEM_beforeBaySens.yml`, the model
+MATLAB feeds to `bayesianSensitivityTuning` (8001 rxns, 3893 mets, 4834
+tunable kcats, 1144 enzymes, growth 0.13 /h). Note that
+`protocol.py`'s own `ecYeastGEM.yml` is **not** a valid input: it is a
+Stage 3 output, already past `sensitivity_tuning` (8 kcats retagged
+`sensitivityTuning`, 1 `manual`, growth lifted 0.0013 → 0.43 /h), i.e.
+already carrying the hand-fix Bayesian tuning is meant to replace.
+
+Smoke schedule throughout: 8 particles x 2 generations, `n_proc=8`,
+`_SMOKE_PARAMS` mirroring `GECKO/tutorials/full_ecModel/YeastGEMAdapter.m`
+(`kcatSources = {'OpenKineticsPredictor','brenda','custom'}`, sigma0
+0.3/0.25/0.2/0.1, shrink 5/3/10/12, force-prior 3.5/2.5/11/13).
+
+| selection | regularization | wall | RMSE trace |
+|---|---|---|---|
+| truncation | shrinkage | 170.9 s | 8.98 → 8.59 |
+| truncation | importance_weighting | 173.7 s | 8.98 → 8.59 |
+| quantile_epsilon | shrinkage | 172.2 s | 8.98 → 8.71 |
+| quantile_epsilon | importance_weighting | 177.3 s | 8.98 → 8.71 |
+
+Per-group `near_prior` under shrinkage orders exactly by prior tightness
+(custom 0.99 > brenda 0.48 > okp 0.35 > unlabelled 0.27), confirming the
+sticky-prior machinery transmits at genome scale.
+
+### Why importance weighting was dropped
+
+- **Degenerate at genome scale.** Measured effective sample size
+  (`1 / sum(w^2)`) is **1.000** for both selection variants — weights
+  `[1.0, 0, 0]` with smallest weight 2.5e-57 (truncation) and 5.2e-91
+  (quantile_epsilon). With 4834 parameters the `prior/transition`
+  density ratio spans tens of orders of magnitude, so one particle
+  takes all the weight and the variant collapses to "keep one
+  particle". Its toy-scale advantage (trusted kcats moving less, 22/24
+  seeds) does not survive to real scale.
+- **Quadratically expensive.** `component_logpdf` is a Python loop over
+  every parameter, called once per particle x parent pair: 0.232 s per
+  pair at 4834 parameters. Per generation, excluding FBA: 0.3 min at 8
+  particles, 39 min at 100, ~10 h at 400, ~64 h at MATLAB's 1000.
+
+Both point the same way, so the regularization axis was removed
+entirely; particle weights are now uniform and per-source
+regularization is carried by the priors alone.
+
+### Sampling cost bug (fixed)
+
+The generation loop drew `prior.rvs()` / `transition.rvs_single()` once
+per *(particle, parameter)* pair rather than once per particle — both
+return a full parameter vector, so this was a 4834-fold multiplier:
+395.6 s for a single generation-1 particle, ~1.75 h/particle from
+generation 2 on. It was also wrong for the transition kernel, which
+samples one parent and perturbs it as a unit: per-column draws spliced a
+different parent into every coordinate.
+
+### The distance function was not deterministic (fixed)
+
+Scoring the *same* kcat vector three times in one process returns
+9.6228, 9.2706, 9.3998. After A→B→A the model is byte-identical (0
+reactions differing in bounds, 0 in stoichiometry), so this is not
+state leaking between particles: the LP has alternate optima and GLPK
+warm-starts from the previous solve's basis, so the reported exchange
+fluxes depend on solve history. MATLAB is not exposed to this because
+RAVEN's `solveLP` builds the problem fresh per call.
+
+Consequences: every generation selected on contaminated distances, so
+this was a correctness problem, not just a reproducibility one; it
+affected the serial path too, so `n_proc=1` was not a workaround; and
+`test_parallel_scoring_matches_serial` cannot catch it because a
+2-parameter toy LP has no meaningful degeneracy. It also explains why
+runs of the same combination differed across processes (8.39 / 8.45 /
+8.59) and across `n_proc` values (`n_proc=4` → 8.587, `n_proc=8` →
+8.450, same seed, same process).
+
+What was ruled out, in order: state leaking between particles (after
+A→B→A the model is byte-identical — 0 reactions differing in bounds, 0
+in stoichiometry); the solver object (`model.solver = "gurobi"` is a
+no-op in cobra when the interface is unchanged, so an apparent
+"rebuild per score" test had in fact rebuilt nothing); and Gurobi's
+concurrent LP (pinning `Method`/`Threads` changes nothing, because a
+solver resuming from an already-optimal basis returns that vertex in
+zero iterations regardless of method).
+
+Measured, same vector scored A, B, A, A on the real model:
+
+| configuration | deterministic | s/score |
+|---|---|---|
+| GLPK, default | no (9.62 / 9.27 / 9.40) | ~60-90 |
+| Gurobi, default | no (spread ~1e-3) | 9.3 |
+| Gurobi, Method=1 Threads=1 | no (spread ~1e-4) | 6.8 |
+| Gurobi, Method=0 Threads=1 | no (spread ~7e-4) | 9.6 |
+| **Gurobi + `problem.reset()`, default** | **yes** | **6.4** |
+| **Gurobi + `problem.reset()`, Method=1 Threads=1** | **yes** | **7.0** |
+
+Fix: `tuning._reset_solver_basis` discards the incumbent basis before
+each particle's solves, so a worker's result cannot depend on which
+particle it scored previously. `reset()` alone is sufficient — no
+solver parameters are imposed by library code — and it is a no-op for
+interfaces whose problem object exposes no `reset`. Guarded by
+`test_scoring_is_independent_of_previous_particle`, which has to be a
+smoke test since the degeneracy only exists at real scale.
+
+### Solver
+
+All FBA runs on Gurobi (WLS licence via `GRB_LICENSE_FILE`).
+`tests/conftest.py` sets `cobra.Configuration().solver = "gurobi"` for
+the session, falling back to GLPK when gurobipy is absent, and pool
+workers inherit the interface with the pickled model. Beyond
+determinism, Gurobi cut the smoke run from ~172 s to ~47 s per
+selection variant.
 
 ## What it is
 
@@ -254,12 +357,11 @@ src/geckopy/kcat_sensitivity_analysis/bayesian/
                             # (per-worker persistent model + incremental apply/revert -- see
                             # "Spike results" below; NOT one EcModel.copy() per particle)
     distance.py              # carbon/condition-weighted RMSE (port of abc_max.m's rmsecal half)
-    priors.py                # per-kcat lognormal priors by source_group; sparsity-prior variant
-    selection.py              # both selection variants: truncation_select / quantile_epsilon_select
-    posterior.py              # regularization variant A: shrink/force-to-prior/sparsity-snap blend
-    importance_weights.py      # regularization variant B: prior/transition-density particle weights
+    priors.py                # per-kcat lognormal priors by source_group; spike-and-slab prior (unwired)
+    selection.py              # selection variants: truncation_select / quantile_epsilon_select
+    posterior.py              # shrink/force-to-prior/sparsity-snap blend (trace only)
     transition.py              # GeckoTransition(pyabc.transition.Transition): diagonal fit/rvs/pdf
-    diagnostics.py              # per-generation/per-group diagnostics, variant-agnostic
+    diagnostics.py              # per-generation/per-group diagnostics
     tuning.py                  # bayesian_kcat_tuning(model, ..., selection=, regularization=)
     pruning.py                  # optional post-run pruner (deferred, see Q5)
     cli.py                      # geckopy bayesian-tune subcommand (deferred, see Q6)
@@ -268,9 +370,8 @@ tests/
     test_bayesian_simulate_distance.py
     test_bayesian_selection.py
     test_bayesian_posterior.py
-    test_bayesian_importance_weights.py
     test_bayesian_transition.py
-    test_bayesian_tuning.py                 # tiny synthetic EcModel, all 4 variant combinations
+    test_bayesian_tuning.py                 # tiny synthetic EcModel, both selection variants
     test_bayesian_tuning_smoke.py           # @pytest.mark.smoke, real-scale
 ```
 
@@ -368,8 +469,9 @@ per-worker reuse instead of per-particle copying.
       Sparsity enforcement rides along this axis too: MATLAB's post-hoc
       snap-to-prior vs. a genuine sparsity-inducing prior (spike-and-slab/
       horseshoe-style).
-    See `~/.claude/plans/encapsulated-kindling-sphinx.md` for the full
-    comparison design (this doc doesn't duplicate it).
+    The comparison design is recorded in the commits that introduced
+    each variant (`selection.py`/`posterior.py`/`importance_weights.py`)
+    and in the Variant comparison section below.
 - **Q3 Parallel backend**: multiprocessing, not dask — reuse the
   `multiprocessing.Pool` pattern already in `src/geckopy/utilities/ec_fva.py`
   (known-working precedent for parallel LP-heavy ecModel workloads in this
