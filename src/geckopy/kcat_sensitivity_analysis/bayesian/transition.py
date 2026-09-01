@@ -104,10 +104,12 @@ class GeckoTransition(Transition):
         w_norm = self.w / self.w.sum()
         parent_idx = np.random.choice(len(self.X), p=w_norm)
         parent = self.X.iloc[parent_idx].to_numpy(dtype=float)
-        sample = np.array([
-            scipy.stats.lognorm(s=h, scale=p).rvs()
-            for h, p in zip(self._log_bandwidth, parent)
-        ])
+        # lognorm(s=h, scale=p) is p * exp(h * Z) with Z ~ N(0, 1), so the
+        # whole parameter vector is one draw. This runs per particle in the
+        # main process, and ec.kcat has thousands of entries.
+        sample = parent * np.exp(
+            self._log_bandwidth * np.random.standard_normal(parent.size)
+        )
         return Parameter(dict(zip(self._columns, sample)))
 
     def component_logpdf(self, x: np.ndarray, parent: np.ndarray) -> float:

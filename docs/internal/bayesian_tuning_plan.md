@@ -232,6 +232,49 @@ interfaces whose problem object exposes no `reset`. Guarded by
 `test_scoring_is_independent_of_previous_particle`, which has to be a
 smoke test since the degeneracy only exists at real scale.
 
+### Parallelism and where the time goes
+
+Measured on the real model (4834 tunable kcats, 33+8 conditions),
+Gurobi, `Threads=1` per worker, 16 particles scored per configuration:
+
+| n_proc | total | per particle | speedup | efficiency |
+|---|---|---|---|---|
+| 1 | 162.4 s | 10.15 s | 1.00x | - |
+| 2 | 82.3 s | 5.14 s | 1.97x | 99% |
+| 4 | 42.1 s | 2.63 s | 3.86x | 97% |
+| 8 | 22.6 s | 1.41 s | 7.19x | 90% |
+| 16 | 14.0 s | 0.87 s | 11.62x | 73% |
+
+Each worker holds its own `EcModel` copy at 0.67 GB resident, so memory
+is not a constraint at these core counts (16 workers ~ 11 GB).
+
+`Threads=1` is deliberate: Gurobi defaults to `Threads=0` ("use what is
+available"), which oversubscribes badly once workers fill the cores.
+Particle-level parallelism is the useful axis; per-solve threading only
+competes with it.
+
+Proposal sampling runs serially in the main process, so it caps the
+achievable speedup. `GeckoTransition.rvs_single` was a per-parameter
+scipy loop costing 1313 ms per particle -- 525 s of serial time for a
+400-particle generation, against 349 s of scoring on 16 cores, i.e. the
+serial part dominated. Vectorised (`lognorm(s=h, scale=p)` is
+`p * exp(h * Z)`, one draw over the whole vector) it costs 1.19 ms, most
+of which is building the `Parameter` dict; a 1000-particle generation's
+proposal cost falls from ~22 min to 1.2 s. Equivalence checked against
+the previous implementation (KS p=0.65; per-coordinate log-ratio mean 0,
+sd = bandwidth) and guarded by
+`test_rvs_single_draws_the_intended_lognormal_around_its_parent`.
+
+With that removed, scoring dominates and cores pay off up to the batch
+size: for a 400-particle generation, 16 cores give ~349 s against ~564 s
+on 8. Efficiency is 73% at 16 cores versus 90% at 8, so 16 is the right
+choice when the cores are already allocated, and 8 is the more
+economical point if they are shared.
+
+Remaining serial cost worth knowing: generation 1 draws from
+`build_kcat_prior`'s pyabc `Distribution` at 82 ms per particle (82 s
+for a 1000-particle first generation). Only generation 1 uses it.
+
 ### Solver
 
 All FBA runs on Gurobi (WLS licence via `GRB_LICENSE_FILE`).

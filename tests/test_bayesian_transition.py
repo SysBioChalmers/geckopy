@@ -126,3 +126,28 @@ def test_component_logpdf_before_fit_raises():
     transition = GeckoTransition(np.array([0.4]))
     with pytest.raises(RuntimeError, match="fit"):
         transition.component_logpdf(np.array([1.0]), np.array([1.0]))
+
+
+def test_rvs_single_draws_the_intended_lognormal_around_its_parent():
+    """Each coordinate is its parent's value scaled by exp(bandwidth * Z).
+
+    Fitting a single particle removes the parent-choice mixture, so the
+    log-ratio to that parent is exactly N(0, log_bandwidth) per
+    coordinate.
+    """
+    sigma0_log = np.array([0.25, 0.6])
+    X = pd.DataFrame({"k0": [2.0], "k1": [5.0]})
+    transition = GeckoTransition(
+        sigma0_log, adapt_frac_early=0.0, sigma_floor_frac=1.0,
+    )
+    transition.fit(X, np.array([1.0]))
+
+    np.random.seed(0)
+    values = np.array(
+        [[s["k0"], s["k1"]] for s in (transition.rvs_single() for _ in range(4000))]
+    )
+    log_ratio = np.log(values / X.to_numpy(dtype=float))
+
+    assert np.all(values > 0)
+    np.testing.assert_allclose(log_ratio.mean(axis=0), [0.0, 0.0], atol=0.03)
+    np.testing.assert_allclose(log_ratio.std(axis=0), sigma0_log, rtol=0.05)
