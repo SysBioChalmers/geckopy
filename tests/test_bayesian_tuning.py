@@ -216,6 +216,45 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
     )
 
 
+@pytest.mark.parametrize("selection,regularization", _COMBINATIONS)
+def test_parallel_scoring_matches_serial(tmp_path, selection, regularization):
+    """n_proc=2 must reproduce n_proc=1 bit-for-bit for the same seed.
+
+    Sampling stays single-threaded in the main process (see tuning.py's
+    module docstring): only the already-fixed batch of particles each
+    generation gets scored in parallel, and scoring is a pure function
+    of the kcat vector -- so the *set* of particles proposed, and every
+    particle's RMSE, must be identical regardless of how many workers
+    scored them or in what order.
+    """
+    params = BayesianParams(
+        schedule_generations=[1],
+        schedule_samples=[20],
+        min_keep=0.3,
+        max_keep=0.6,
+        rmse_threshold=-1.0,
+        max_generations=3,
+    )
+
+    def _run(n_proc):
+        adapter = _adapter(tmp_path)
+        model = _build_toy(adapter)
+        bay_data = _bay_data()
+        return bayesian_kcat_tuning(
+            model, adapter=adapter, params=params, bay_data=bay_data,
+            selection=selection, regularization=regularization,
+            n_proc=n_proc, seed=0, verbose=False,
+        )
+
+    serial = _run(1)
+    parallel = _run(2)
+
+    assert np.array_equal(serial.new_kcat, parallel.new_kcat)
+    assert serial.rmse_trace == parallel.rmse_trace
+    assert serial.n_generations == parallel.n_generations
+    assert serial.converged == parallel.converged
+
+
 def test_no_tunable_kcats_raises(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)

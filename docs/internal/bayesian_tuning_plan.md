@@ -28,8 +28,8 @@ render dict-valued fields. Run the fast suite to confirm:
 pytest tests/test_bayesian_*.py tests/test_params.py -q
 ```
 
-(72 passed as of the last commit on this branch, `09a18a2`.) Three
-commits carry the history; read their messages for the reasoning behind
+(76 passed as of the latest commit on this branch — see `git log`.)
+Commits carry the history; read their messages for the reasoning behind
 each design decision — in particular the "Spike results" section below
 (why `simulate.py` reuses one persistent model per worker instead of
 `EcModel.copy()` per particle) and the discovery, from tracing MATLAB's
@@ -38,6 +38,27 @@ back into sampling or the returned model (documented in `tuning.py`'s
 module docstring) — that finding is why both regularization variants
 sample from the same raw accepted-particle population and differ only
 in particle weighting.
+
+**Parallelization (`n_proc`) is implemented**, per user request (an HPC
+run was the target deployment), reusing `utilities/ec_fva.py`'s existing
+`multiprocessing.Pool` pattern exactly: one persistent `EcModel` copy per
+**worker process** (pickled once at pool startup, not per particle),
+scoring particles via the same incremental `apply_kcat_constraints`
+approach as the serial path. Sampling itself stays single-threaded in
+the main process, so a run is bit-for-bit reproducible across `n_proc`
+values for the same `seed` — verified directly
+(`test_parallel_scoring_matches_serial`, all 4 combinations). One
+caveat surfaced by that test and worth knowing before an unattended HPC
+run: Python 3.12 emits `DeprecationWarning: This process is
+multi-threaded, use of fork() may lead to deadlocks in the child` under
+`n_proc>1` (fork start method, likely from Gurobi's internal threads) —
+it did not manifest as an actual deadlock in any test run here, and
+`ec_fva.py` already accepts the same trade-off in production, but a long
+unattended multi-generation HPC run is exactly the scenario where a rare
+fork-related hang would actually bite. If that becomes a real problem,
+the fix is switching `tuning.py`'s `ctx_name` selection to always use
+`"spawn"` (slower pool startup, but immune to this class of bug) rather
+than preferring `"fork"` on POSIX.
 
 ### In progress: Sequencing step 11 (real-scale smoke test)
 
