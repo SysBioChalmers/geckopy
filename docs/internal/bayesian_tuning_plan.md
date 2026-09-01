@@ -4,6 +4,108 @@ Status: resumed on `feat/bayesian-kcat-tuning`. Open decisions below are
 now resolved (see each item) after a fuller review of MATLAB's tuning
 history and a closer read of pyABC's actual generation-loop mechanics.
 
+## Handoff (read this first)
+
+This work happened on **`feat/bayesian-kcat-tuning-agent`**, a branch
+forked from `feat/bayesian-kcat-tuning` at commit `fdf8d2c` and developed
+in an isolated worktree (`../geckopy-bayesian-wip`) because another agent
+was concurrently reorganising folders on the main working tree/branch.
+It has **not been merged back into `feat/bayesian-kcat-tuning`** — that
+reconciliation is still pending and is the first thing to sort out
+(check whether `feat/bayesian-kcat-tuning` has moved since `fdf8d2c`; if
+so this branch likely needs a rebase, not a fast-forward merge).
+
+### Done (Sequencing steps 1–10, all committed, all tests green)
+
+Everything in the "Module layout" section below is implemented in
+`src/geckopy/kcat_sensitivity_analysis/bayesian/` **except** `pruning.py`
+and `cli.py` (deferred, see Sequencing step 12). `BayesianParams` was
+reworked (`source_groups` dict, dropped `target_accept`/`variance_cap_*`,
+fixed `sparsity_threshold`'s default) and `template.py` extended to
+render dict-valued fields. Run the fast suite to confirm:
+
+```bash
+pytest tests/test_bayesian_*.py tests/test_params.py -q
+```
+
+(72 passed as of the last commit on this branch, `09a18a2`.) Three
+commits carry the history; read their messages for the reasoning behind
+each design decision — in particular the "Spike results" section below
+(why `simulate.py` reuses one persistent model per worker instead of
+`EcModel.copy()` per particle) and the discovery, from tracing MATLAB's
+actual data flow, that its shrink-weight posterior update never feeds
+back into sampling or the returned model (documented in `tuning.py`'s
+module docstring) — that finding is why both regularization variants
+sample from the same raw accepted-particle population and differ only
+in particle weighting.
+
+### In progress: Sequencing step 11 (real-scale smoke test)
+
+Per the user's direction, the three `bayesian*.tsv` files were copied
+**verbatim from the real GECKO MATLAB tutorial data**
+(`GECKO/tutorials/full_ecModel/data/bayesian{FluxData,MaxGrowth,ZeroExch}.tsv`,
+`develop4` branch, real experimental data — not synthetic) into
+`tutorials/full_ecModel/data/` here, and are committed. The real model
+(`ecYeastGEM.yml`) is a **gitignored build output**
+(`tutorials/full_ecModel/models/ecYeastGEM*.yml`) — it is *not* committed
+anywhere; regenerate it by running `tutorials/full_ecModel/protocol.py`,
+or copy it from the main geckopy checkout's `tutorials/full_ecModel/models/`
+if one has already been built there.
+
+`tests/test_bayesian_tuning_smoke.py` is written and committed
+(`@pytest.mark.smoke`, skips gracefully if `ecYeastGEM.yml` is absent —
+see its docstring). **What's not done**: it has not been confirmed to
+pass. A timing calibration run (`truncation`/`shrinkage` only, the
+cheapest of the 4 combinations, 8 particles x 2 generations) was
+in-flight when this branch was handed off; its result was not captured
+(it ran in a background shell tied to the previous session and is not
+recoverable). Real scale here is substantial — **4842 tunable kcats**,
+**33 flux conditions + 8 max-growth conditions** (confirmed by loading
+the real model), so each particle costs ~41 real FBA solves. Next
+actions, in order:
+
+1. Re-run just that one cheapest combination first and note wall-time:
+   ```bash
+   pytest tests/test_bayesian_tuning_smoke.py -m smoke -k 'truncation-shrinkage' -v -s
+   ```
+2. If it completes in a reasonable time (low minutes), run all 4:
+   ```bash
+   pytest tests/test_bayesian_tuning_smoke.py -m smoke -v -s
+   ```
+   Watch the two `importance_weighting` combinations in particular:
+   `importance_weights.compute_importance_weights` and
+   `transition.GeckoTransition.component_logpdf`/`_pdf_single` are
+   **not vectorised** (plain Python loops over every tunable parameter,
+   called once per particle x parent pair) — at ~4800 parameters this is
+   a real, not-yet-measured scaling risk, separate from (but analogous
+   to) the `EcModel.copy()` finding in "Spike results" below. If a
+   combination is prohibitively slow, that is itself the finding to
+   record here (with numbers) rather than something to silently work
+   around — vectorising those two functions (replace the per-parameter
+   Python loop with a single numpy expression over the whole parameter
+   vector) would be the fix, but wasn't attempted since it hadn't been
+   shown necessary yet.
+3. Once all 4 combinations run, compare RMSE trace, wall-time, and
+   per-source-group diagnostics (`frac_active`/`frac_near_prior`/
+   `mean_deviation` — printed by the smoke test) across combinations;
+   record the comparison in this doc and use it to pick a default
+   `selection=`/`regularization=` for the eventual MATLAB port-back, per
+   the plan's Non-goals section (this decision is explicitly deferred
+   until this data exists).
+4. Note: `_SMOKE_PARAMS` in the test uses a tiny schedule (8
+   samples/generation, 2 generations) deliberately, to make "does it
+   run at all" cheap to check. A real validation run should use a
+   larger schedule once the above scaling question is answered — but
+   that's a slow, expensive, non-per-commit check per the plan's
+   Sequencing notes, not something to default to.
+
+### Not started: Sequencing step 12 (deferred/optional)
+
+`pruning.py` (both variants), a `geckopy bayesian-tune` CLI subcommand,
+and an opt-in path wiring `GeckoTransition` into a real `pyabc.ABCSMC`
+for massively-parallel runs. Not blocking; do this after step 11's
+comparison data exists and a default variant is picked.
+
 ## What it is
 
 MATLAB source:
