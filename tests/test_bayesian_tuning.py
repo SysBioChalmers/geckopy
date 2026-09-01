@@ -157,6 +157,15 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
     tmp_path, selection, regularization,
 ):
     params = BayesianParams(
+        # Exaggerated trust contrast: what is under test is that
+        # per-source sigma0_log transmits to how far a kcat moves, not
+        # that the shipped defaults are well chosen. The shipped 0.2/0.4
+        # contrast is within sampling noise on a 2-parameter toy: the
+        # shrink/force-prior blend never feeds back into sampling (see
+        # tuning.py's module docstring), so the prior draw and the
+        # transition bandwidth are the only channel. At 0.05/1.0 all
+        # combinations separate well clear of that noise.
+        sigma0_log_source={"brenda": 0.05, "dlkcat": 1.0, "custom": 0.1},
         schedule_generations=[1],
         schedule_samples=[40],
         min_keep=0.3,

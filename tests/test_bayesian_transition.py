@@ -80,7 +80,6 @@ def test_rvs_single_samples_are_positive_and_near_parents():
 
 
 def test_pdf_matches_hand_computed_mixture_for_series_input():
-    n_params = 1
     X = pd.DataFrame({"k0": [1.0, 3.0]})
     w = np.array([0.25, 0.75])
     sigma0_log = np.array([0.3])
