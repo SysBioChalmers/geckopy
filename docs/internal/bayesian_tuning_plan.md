@@ -367,6 +367,41 @@ MATLAB's 0.93, confirming that a 1e-2 threshold is too aggressive:
 parameters that matter only jointly are excluded by a one-at-a-time
 screen.
 
+### Replicating MATLAB's result
+
+MATLAB's reference run on this model: 9.5544 -> 0.9289 in 31
+generations, plateauing around generation 14.
+
+A first replication at MATLAB's own schedule (1000/800/600/400 samples
+at generations 1/2/9/15, `min_keep` 0.3, `YeastGEMAdapter.m`'s sigma and
+threshold values) reached **1.4849 in 16 generations** -- the right
+shape, but roughly 1.7x behind MATLAB at matched generations. Two
+MATLAB behaviours were missing from the proposal step, and adding them
+closed the gap:
+
+| generation | before | after | MATLAB |
+|---|---|---|---|
+| 1 | 7.4277 | 4.9865 | - |
+| 2 | 6.9314 | 4.3621 | 4.7157 |
+| 3 | 5.9830 | 3.5495 | - |
+| 4 | 5.2505 | 3.3345 | 3.4267 |
+| 5 | 4.9741 | 2.6274 | - |
+| 6 | 4.2706 | 2.0517 | 2.4551 |
+
+The two fixes (`b4c1db3`):
+
+* **Biological bounds on proposals**, 1e-2 to 1e4 1/s (or prior/100 to
+  1e8 above 1e4), ported from `proposeSimple`. Without them a share of
+  every generation's budget went on kcats no organism could have.
+* **Evenly spread parents** via systematic resampling, matching
+  MATLAB's "select parents with minimal duplication". Independent draws
+  leave some accepted particles unused and others repeated, discarding
+  population diversity.
+
+The run was stopped at generation 6 to hand the pipeline to a 64-core
+allocation (see `matlab_replication_handoff.md`); it was tracking at or
+slightly ahead of MATLAB's curve throughout.
+
 ### Two kcat vectors: the best particle and the blend
 
 Each generation produces two different parameter vectors, and only one
