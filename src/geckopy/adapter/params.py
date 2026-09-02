@@ -117,6 +117,14 @@ class BayesianParams(BaseModel):
 
     max_growth_weight: float = 1.0
 
+    # Proposal-width adaptation. Off by default: MATLAB has no such
+    # feedback, so enabling it is a deliberate departure from the
+    # faithful path (see docs/internal/matlab_replication_results.md).
+    adapt_proposal_width: bool = False
+    target_accept_rate: float = 0.15
+    proposal_adaptation_rate: float = 2.0
+    proposal_scale_bounds: tuple[float, float] = (0.02, 2.0)
+
     @model_validator(mode="after")
     def _check_group_keys_and_schedule_lengths(self) -> "BayesianParams":
         """The per-source dicts must have exactly ``source_groups``'
