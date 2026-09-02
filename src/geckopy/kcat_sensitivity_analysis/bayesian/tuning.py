@@ -129,7 +129,13 @@ class BayesianTuningResult:
         Source-group name per tunable row (from
         ``priors.classify_kcat_sources``).
     rmse_trace
-        Best (lowest) RMSE in the accepted set, per generation.
+        Best (lowest) RMSE in the accepted set, per generation. Always
+        the plain RMSE, so runs stay comparable across penalties and
+        against MATLAB even when selection used a penalised objective.
+    objective_trace
+        Best (lowest) value of the quantity selection actually
+        minimised, per generation. Identical to ``rmse_trace`` when
+        ``params.prior_penalty_weight`` is 0.
     posterior_trace
         ``posterior.PosteriorUpdate`` per generation (see the module
         docstring: recorded for inspection, never fed back into
@@ -149,6 +155,7 @@ class BayesianTuningResult:
     new_kcat: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=float))
     groups: list[str] = field(default_factory=list)
     rmse_trace: list[float] = field(default_factory=list)
+    objective_trace: list[float] = field(default_factory=list)
     posterior_trace: list[PosteriorUpdate] = field(default_factory=list)
     diagnostics_trace: list[GenerationDiagnostics] = field(default_factory=list)
     n_generations: int = 0
@@ -286,7 +293,8 @@ def bayesian_kcat_tuning(
             initargs=(
                 model, tunable_idx, ec_rxn_ids_tunable, bay_data,
                 excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
-                params.max_growth_weight,
+                params.max_growth_weight, params.prior_penalty_weight,
+                kcat0, sigma0_log,
             ),
         )
 
@@ -300,6 +308,8 @@ def bayesian_kcat_tuning(
                         make_anaerobic=make_anaerobic,
                         change_protein_biomass=change_protein_biomass,
                         max_growth_weight=params.max_growth_weight,
+                        prior_penalty_weight=params.prior_penalty_weight,
+                        kcat0=kcat0, sigma0_log=sigma0_log,
                     )
                     for j in range(kcat_matrix.shape[1])
                 ])
@@ -313,7 +323,10 @@ def bayesian_kcat_tuning(
         # MATLAB: `kcats = ecModel.ec.kcat; kcat0 = kcats; rmse =
         # abc_max(...); rmseTop = rmse; kcatTop = kcats;`.
         kcat_top = kcat0.reshape(-1, 1)
-        rmse_top = score_batch(kcat_top)
+        # score_batch returns one (objective, rmse) row per particle:
+        # selection runs on the objective, reporting on the plain RMSE.
+        seed_scores = score_batch(kcat_top)
+        obj_top, rmse_top = seed_scores[:, 0], seed_scores[:, 1]
         weights_top = np.array([1.0])
         epsilon: Optional[float] = None
 
@@ -354,26 +367,35 @@ def bayesian_kcat_tuning(
                 transition.fit(X_df, weights_top)
                 new_particles = transition.rvs_batch(n_new)
             new_particles = np.clip(new_particles, kcat_lo[:, None], kcat_hi[:, None])
-            new_rmse = score_batch(new_particles)
+            new_scores = score_batch(new_particles)
+            new_obj, new_rmse = new_scores[:, 0], new_scores[:, 1]
 
             if selection == "truncation":
                 combined_particles = np.concatenate([new_particles, kcat_top], axis=1)
+                combined_obj = np.concatenate([new_obj, obj_top])
                 combined_rmse = np.concatenate([new_rmse, rmse_top])
-                sel = truncation_select(combined_rmse, min_keep=params.min_keep)
+                sel = truncation_select(combined_obj, min_keep=params.min_keep)
             else:
                 combined_particles = new_particles
+                combined_obj = new_obj
                 combined_rmse = new_rmse
                 if epsilon is None:  # generation 1: bootstrap from this batch
-                    epsilon = next_quantile_epsilon(combined_rmse)
-                sel = quantile_epsilon_select(combined_rmse, epsilon=epsilon)
+                    epsilon = next_quantile_epsilon(combined_obj)
+                sel = quantile_epsilon_select(combined_obj, epsilon=epsilon)
                 if sel.accepted_idx.size == 0:
-                    sel.accepted_idx = np.array([int(np.argmin(combined_rmse))])
+                    sel.accepted_idx = np.array([int(np.argmin(combined_obj))])
 
             # Fraction of *this* generation's proposals that survived
-            # selection. Columns 0..n_new-1 of combined_particles are the
-            # new draws; the rest are the carried-over accepted set.
-            proposal_accept_rate = float(
-                np.mean(sel.accepted_idx < new_particles.shape[1])
+            # selection: how many of the n_new draws got in, over n_new.
+            # Columns 0..n_new-1 of combined_particles are the new draws
+            # and the rest are the carried-over accepted set, so the
+            # numerator counts accepted indices below that boundary.
+            # Note this is measured at the min_keep threshold, unlike
+            # MATLAB's propAccRate, which is measured at its
+            # targetAccept percentile before the minKeep clamp -- the
+            # two are not on the same scale.
+            proposal_accept_rate = proposal_acceptance_rate(
+                sel.accepted_idx, new_particles.shape[1]
             )
             if params.adapt_proposal_width:
                 proposal_scale = adapt_proposal_scale(
@@ -383,6 +405,7 @@ def bayesian_kcat_tuning(
             n_total_this_gen = len(combined_rmse)
             new_kcat_top = combined_particles[:, sel.accepted_idx]
             new_rmse_top = combined_rmse[sel.accepted_idx]
+            new_obj_top = combined_obj[sel.accepted_idx]
 
             new_weights_top = np.full(
                 len(sel.accepted_idx), 1.0 / len(sel.accepted_idx),
@@ -405,8 +428,10 @@ def bayesian_kcat_tuning(
             result.diagnostics_trace.append(diag)
             result.rmse_trace.append(diag.best_rmse)
 
+            result.objective_trace.append(float(new_obj_top.min()))
+
             if selection == "quantile_epsilon":
-                epsilon = next_quantile_epsilon(new_rmse_top)
+                epsilon = next_quantile_epsilon(new_obj_top)
 
             if verbose:
                 logger.info(
@@ -417,6 +442,7 @@ def bayesian_kcat_tuning(
                 )
 
             kcat_top, rmse_top, weights_top = new_kcat_top, new_rmse_top, new_weights_top
+            obj_top = new_obj_top
 
             if diag.best_rmse <= params.rmse_threshold:
                 result.converged = True
@@ -426,7 +452,9 @@ def bayesian_kcat_tuning(
                 break
 
     result.n_generations = generation
-    best_idx = int(np.argmin(rmse_top))
+    # Consistent with what selection optimised: at prior_penalty_weight
+    # 0 the objective is the RMSE and this is unchanged.
+    best_idx = int(np.argmin(obj_top))
     result.new_kcat = kcat_top[:, best_idx].copy()
     model.ec.kcat[tunable_idx] = result.new_kcat
     apply_kcat_constraints(model, update_rxns=ec_rxn_ids_tunable)
@@ -488,6 +516,26 @@ def _reset_solver_basis(model: "EcModel") -> None:
         reset()
 
 
+def proposal_acceptance_rate(accepted_idx: np.ndarray, n_new: int) -> float:
+    """Fraction of a generation's *new* proposals that survived selection.
+
+    The selection step ranks ``[new_particles, kcat_top]`` as one pool,
+    so accepted indices below ``n_new`` are the new draws and the rest
+    are carried-over particles. The denominator is ``n_new`` -- the
+    number of proposals made -- not the size of the accepted set, which
+    would instead measure the accepted set's composition and sits near
+    1.0 in early generations whatever the proposals are worth.
+
+    Measured at the ``min_keep`` truncation threshold. MATLAB's
+    ``propAccRate`` is measured at its ``targetAccept`` percentile
+    before the ``minKeep`` clamp, so the two are not on the same scale
+    and their targets are not interchangeable.
+    """
+    if n_new <= 0:
+        return 0.0
+    return float(np.count_nonzero(np.asarray(accepted_idx) < n_new) / n_new)
+
+
 def adapt_proposal_scale(
     scale: float, accept_rate: float, params: "BayesianParams",
 ) -> float:
@@ -530,7 +578,10 @@ def _score_kcat_vector(
     make_anaerobic,
     change_protein_biomass,
     max_growth_weight: float = 1.0,
-) -> float:
+    prior_penalty_weight: float = 0.0,
+    kcat0: Optional[np.ndarray] = None,
+    sigma0_log: Optional[np.ndarray] = None,
+) -> tuple[float, float]:
     """Score one kcat vector against ``model`` (mutated in place).
 
     Writes the candidate kcat vector into ``model.ec.kcat`` and
@@ -570,7 +621,14 @@ def _score_kcat_vector(
         excarbon=excarbon, bio_rxn_id=bio_rxn_id,
         max_growth_weight=max_growth_weight,
     )
-    return rmse
+    # Selection may run on a penalised objective, but the plain RMSE is
+    # always carried alongside it so a run stays comparable to MATLAB's
+    # and to runs at other penalties.
+    objective = rmse
+    if prior_penalty_weight and kcat0 is not None and sigma0_log is not None:
+        dev = np.log(np.asarray(kcat_vec, dtype=float) / kcat0) / sigma0_log
+        objective = rmse + prior_penalty_weight * float(np.mean(dev ** 2))
+    return objective, rmse
 
 
 # --------------------------------------------------------------------------- #
@@ -587,6 +645,9 @@ _WORKER_BIO_RXN: Optional[str] = None
 _WORKER_MAKE_ANAEROBIC = None
 _WORKER_CHANGE_PROTEIN_BIOMASS = None
 _WORKER_MAX_GROWTH_WEIGHT: float = 1.0
+_WORKER_PRIOR_PENALTY_WEIGHT: float = 0.0
+_WORKER_KCAT0: Optional[np.ndarray] = None
+_WORKER_SIGMA0_LOG: Optional[np.ndarray] = None
 
 
 def _init_worker(
@@ -599,6 +660,9 @@ def _init_worker(
     make_anaerobic,
     change_protein_biomass,
     max_growth_weight: float = 1.0,
+    prior_penalty_weight: float = 0.0,
+    kcat0: Optional[np.ndarray] = None,
+    sigma0_log: Optional[np.ndarray] = None,
 ) -> None:
     """Pool initializer: stash this worker process's own EcModel copy
     (deserialised by ``ProcessPool``, not by us) and everything else
@@ -606,7 +670,8 @@ def _init_worker(
     global _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE
     global _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
     global _WORKER_MAKE_ANAEROBIC, _WORKER_CHANGE_PROTEIN_BIOMASS
-    global _WORKER_MAX_GROWTH_WEIGHT
+    global _WORKER_MAX_GROWTH_WEIGHT, _WORKER_PRIOR_PENALTY_WEIGHT
+    global _WORKER_KCAT0, _WORKER_SIGMA0_LOG
     _WORKER_MODEL = model
     _WORKER_TUNABLE_IDX = tunable_idx
     _WORKER_EC_RXN_IDS_TUNABLE = ec_rxn_ids_tunable
@@ -616,9 +681,12 @@ def _init_worker(
     _WORKER_MAKE_ANAEROBIC = make_anaerobic
     _WORKER_CHANGE_PROTEIN_BIOMASS = change_protein_biomass
     _WORKER_MAX_GROWTH_WEIGHT = max_growth_weight
+    _WORKER_PRIOR_PENALTY_WEIGHT = prior_penalty_weight
+    _WORKER_KCAT0 = kcat0
+    _WORKER_SIGMA0_LOG = sigma0_log
 
 
-def _score_worker(kcat_vec: np.ndarray) -> float:
+def _score_worker(kcat_vec: np.ndarray) -> tuple[float, float]:
     assert _WORKER_MODEL is not None, "_score_worker called before _init_worker"
     return _score_kcat_vector(
         _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE,
@@ -626,4 +694,6 @@ def _score_worker(kcat_vec: np.ndarray) -> float:
         make_anaerobic=_WORKER_MAKE_ANAEROBIC,
         change_protein_biomass=_WORKER_CHANGE_PROTEIN_BIOMASS,
         max_growth_weight=_WORKER_MAX_GROWTH_WEIGHT,
+        prior_penalty_weight=_WORKER_PRIOR_PENALTY_WEIGHT,
+        kcat0=_WORKER_KCAT0, sigma0_log=_WORKER_SIGMA0_LOG,
     )
