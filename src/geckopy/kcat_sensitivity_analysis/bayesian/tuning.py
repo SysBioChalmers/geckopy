@@ -173,6 +173,7 @@ def bayesian_kcat_tuning(
     bio_rxn: Optional[str] = None,
     make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
     change_protein_biomass: Optional[Callable[["EcModel", float], None]] = None,
+    tunable_mask: Optional[np.ndarray] = None,
     n_proc: Optional[int] = None,
     seed: Optional[int] = None,
     verbose: bool = True,
@@ -207,6 +208,17 @@ def bayesian_kcat_tuning(
         implementation of these yet. See the module docstring's
         "Parallel scoring" section for a picklability caveat when
         ``n_proc>1``.
+    tunable_mask
+        Boolean array over ``model.ec.rxns`` selecting which kcats to
+        tune; the rest are held at their prior values and reported as
+        unchanged. Use it to exclude parameters the data cannot speak
+        to -- reactions that carry no flux in any condition, or whose
+        kcat does not measurably move the distance. On the full
+        ecYeastGEM dataset 879 of 4834 kcats can never carry flux, and
+        an unrestricted run changes essentially all of them, which no
+        weighting of the objective can justify. Restricting also
+        shrinks the proposal's step length, which grows with the square
+        root of the dimension.
     n_proc
         Number of worker processes for scoring each generation's
         particles. Defaults to ``cobra.Configuration().processes``.
@@ -258,9 +270,22 @@ def bayesian_kcat_tuning(
     if okp_method is None and adapter is not None:
         okp_method = adapter.params.okp.method
 
-    tunable_idx = np.flatnonzero(model.ec.kcat > 0)
+    is_tunable = model.ec.kcat > 0
+    if tunable_mask is not None:
+        tunable_mask = np.asarray(tunable_mask, dtype=bool)
+        if tunable_mask.shape != is_tunable.shape:
+            raise ValueError(
+                f"tunable_mask has shape {tunable_mask.shape}; expected "
+                f"{is_tunable.shape} to match model.ec.rxns."
+            )
+        is_tunable = is_tunable & tunable_mask
+    tunable_idx = np.flatnonzero(is_tunable)
     if tunable_idx.size == 0:
-        raise ValueError("No tunable kcats: model.ec.kcat is all <= 0.")
+        raise ValueError(
+            "No tunable kcats: model.ec.kcat is all <= 0"
+            + (", or tunable_mask excludes every one with a kcat."
+               if tunable_mask is not None else ".")
+        )
     ec_rxn_ids_tunable = [model.ec.rxns[i] for i in tunable_idx]
     kcat0 = model.ec.kcat[tunable_idx].astype(float).copy()
     sources = [model.ec.source[i] for i in tunable_idx]
