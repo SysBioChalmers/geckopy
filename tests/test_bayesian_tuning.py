@@ -320,3 +320,86 @@ def test_adapt_proposal_scale_follows_the_acceptance_rate():
 
 def test_adapt_proposal_width_is_off_by_default():
     assert BayesianParams().adapt_proposal_width is False
+
+
+def test_proposal_acceptance_rate_divides_by_the_number_proposed():
+    """The denominator is the proposals made, not the accepted set: the
+    latter measures the accepted set's composition and sits near 1.0 in
+    early generations however poor the proposals are."""
+    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
+        proposal_acceptance_rate,
+    )
+
+    # 1000 proposals, 300 accepted, every one of them new.
+    accepted = np.arange(300)
+    assert proposal_acceptance_rate(accepted, 1000) == pytest.approx(0.30)
+
+    # Half the accepted set carried over from previous generations.
+    accepted = np.concatenate([np.arange(150), 1000 + np.arange(150)])
+    assert proposal_acceptance_rate(accepted, 1000) == pytest.approx(0.15)
+
+    # Nothing new survived.
+    assert proposal_acceptance_rate(np.array([1000, 1001]), 1000) == 0.0
+    assert proposal_acceptance_rate(np.array([]), 0) == 0.0
+
+
+def test_prior_penalty_leaves_the_reported_rmse_plain(tmp_path):
+    """Selection may run on a penalised objective, but rmse_trace must
+    stay the plain RMSE so runs remain comparable across penalties and
+    against MATLAB."""
+    def _params(weight):
+        return BayesianParams(
+            schedule_generations=[1], schedule_samples=[20],
+            min_keep=0.3, max_keep=0.6, rmse_threshold=-1.0,
+            max_generations=3, prior_penalty_weight=weight,
+        )
+
+    def _run(weight):
+        adapter = _adapter(tmp_path)
+        model = _build_toy(adapter)
+        return bayesian_kcat_tuning(
+            model, adapter=adapter, params=_params(weight),
+            bay_data=_bay_data(), selection="truncation",
+            n_proc=1, seed=0, verbose=False,
+        )
+
+    unpenalised = _run(0.0)
+    # With no penalty the objective *is* the RMSE.
+    assert unpenalised.objective_trace == pytest.approx(unpenalised.rmse_trace)
+
+    # The toy's RMSE is ~700, so the weight has to be on that scale to
+    # bite at all; on the full ecModel (RMSE ~1) it would be ~1.
+    penalised = _run(5.0e3)
+    assert len(penalised.objective_trace) == len(penalised.rmse_trace)
+    # The penalty is non-negative and vanishes only at the prior, so the
+    # objective sits at or above the RMSE it is built from.
+    assert all(
+        o >= r - 1e-9
+        for o, r in zip(penalised.objective_trace, penalised.rmse_trace)
+    )
+    # And it changed the search: a penalty that altered nothing would be
+    # a silently dead knob.
+    assert penalised.rmse_trace != unpenalised.rmse_trace
+
+
+def test_penalised_search_moves_kcats_less(tmp_path):
+    """The point of the penalty: fewer/smaller departures from prior."""
+    def _run(weight):
+        adapter = _adapter(tmp_path)
+        model = _build_toy(adapter)
+        return bayesian_kcat_tuning(
+            model, adapter=adapter,
+            params=BayesianParams(
+                schedule_generations=[1], schedule_samples=[30],
+                min_keep=0.3, max_keep=0.6, rmse_threshold=-1.0,
+                max_generations=4, prior_penalty_weight=weight,
+            ),
+            bay_data=_bay_data(), selection="truncation",
+            n_proc=1, seed=0, verbose=False,
+        )
+
+    free = _run(0.0)
+    penalised = _run(5.0e4)
+    free_move = np.abs(np.log(free.new_kcat / free.old_kcat)).mean()
+    pen_move = np.abs(np.log(penalised.new_kcat / penalised.old_kcat)).mean()
+    assert pen_move < free_move

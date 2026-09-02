@@ -120,8 +120,20 @@ class BayesianParams(BaseModel):
     # Proposal-width adaptation. Off by default: MATLAB has no such
     # feedback, so enabling it is a deliberate departure from the
     # faithful path (see docs/internal/matlab_replication_results.md).
+    # Weight on a Gaussian prior term in the selection objective:
+    # rmse + w * mean((log(k/k0) / sigma0_log)**2). Because sigma0_log
+    # already encodes per-source confidence, this charges more for
+    # moving a trusted kcat than an unlabelled one, making parsimony
+    # part of what the search optimises rather than something applied
+    # afterwards. 0 reproduces MATLAB, which has no prior term.
+    prior_penalty_weight: float = 0.0
+
     adapt_proposal_width: bool = False
-    target_accept_rate: float = 0.15
+    # Measured at the min_keep truncation threshold: with min_keep 0.3,
+    # a generation whose proposals are neither better nor worse than the
+    # carried set accepts about 0.3 of them, so this sits just below
+    # neutral -- narrow when proposals stop landing, widen when they do.
+    target_accept_rate: float = 0.25
     proposal_adaptation_rate: float = 2.0
     proposal_scale_bounds: tuple[float, float] = (0.02, 2.0)
 
