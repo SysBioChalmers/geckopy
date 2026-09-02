@@ -370,10 +370,16 @@ def bayesian_kcat_tuning(
                     sel.accepted_idx = np.array([int(np.argmin(combined_rmse))])
 
             # Fraction of *this* generation's proposals that survived
-            # selection. Columns 0..n_new-1 of combined_particles are the
-            # new draws; the rest are the carried-over accepted set.
-            proposal_accept_rate = float(
-                np.mean(sel.accepted_idx < new_particles.shape[1])
+            # selection: how many of the n_new draws got in, over n_new.
+            # Columns 0..n_new-1 of combined_particles are the new draws
+            # and the rest are the carried-over accepted set, so the
+            # numerator counts accepted indices below that boundary.
+            # Note this is measured at the min_keep threshold, unlike
+            # MATLAB's propAccRate, which is measured at its
+            # targetAccept percentile before the minKeep clamp -- the
+            # two are not on the same scale.
+            proposal_accept_rate = proposal_acceptance_rate(
+                sel.accepted_idx, new_particles.shape[1]
             )
             if params.adapt_proposal_width:
                 proposal_scale = adapt_proposal_scale(
@@ -486,6 +492,26 @@ def _reset_solver_basis(model: "EcModel") -> None:
     reset = getattr(problem, "reset", None)
     if callable(reset):
         reset()
+
+
+def proposal_acceptance_rate(accepted_idx: np.ndarray, n_new: int) -> float:
+    """Fraction of a generation's *new* proposals that survived selection.
+
+    The selection step ranks ``[new_particles, kcat_top]`` as one pool,
+    so accepted indices below ``n_new`` are the new draws and the rest
+    are carried-over particles. The denominator is ``n_new`` -- the
+    number of proposals made -- not the size of the accepted set, which
+    would instead measure the accepted set's composition and sits near
+    1.0 in early generations whatever the proposals are worth.
+
+    Measured at the ``min_keep`` truncation threshold. MATLAB's
+    ``propAccRate`` is measured at its ``targetAccept`` percentile
+    before the ``minKeep`` clamp, so the two are not on the same scale
+    and their targets are not interchangeable.
+    """
+    if n_new <= 0:
+        return 0.0
+    return float(np.count_nonzero(np.asarray(accepted_idx) < n_new) / n_new)
 
 
 def adapt_proposal_scale(

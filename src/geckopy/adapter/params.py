@@ -121,7 +121,11 @@ class BayesianParams(BaseModel):
     # feedback, so enabling it is a deliberate departure from the
     # faithful path (see docs/internal/matlab_replication_results.md).
     adapt_proposal_width: bool = False
-    target_accept_rate: float = 0.15
+    # Measured at the min_keep truncation threshold: with min_keep 0.3,
+    # a generation whose proposals are neither better nor worse than the
+    # carried set accepts about 0.3 of them, so this sits just below
+    # neutral -- narrow when proposals stop landing, widen when they do.
+    target_accept_rate: float = 0.25
     proposal_adaptation_rate: float = 2.0
     proposal_scale_bounds: tuple[float, float] = (0.02, 2.0)
 
