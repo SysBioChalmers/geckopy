@@ -115,6 +115,8 @@ class BayesianParams(BaseModel):
     rmse_threshold: float = 0.2
     max_generations: int = 150
 
+    max_growth_weight: float = 1.0
+
     @model_validator(mode="after")
     def _check_group_keys_and_schedule_lengths(self) -> "BayesianParams":
         """The per-source dicts must have exactly ``source_groups``'

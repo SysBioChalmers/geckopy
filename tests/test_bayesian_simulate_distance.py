@@ -396,6 +396,55 @@ def test_bayesian_distance_combines_both_datasets(tmp_path):
     assert "flux_data" in detail and "max_grate" in detail
 
 
+def test_bayesian_distance_max_growth_weight_scales_the_flux_term(tmp_path):
+    """MATLAB's ``abc_max.m`` applies ``weights = [maxGrowthWeight, 1]``
+    to ``values = [rmse_flux, rmse_maxGrate]``, so the weight scales the
+    *flux* term despite its name."""
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    flux_data = _flux_data(ethanol_grrate=20.0)
+    max_grate = _max_grate_data()
+    bay_data = BayesianData(flux_data=flux_data, max_grate=max_grate, zero_flux=["EX_byp"])
+
+    flux_sims = simulate_bayesian_dataset(
+        model, flux_data,
+        constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
+    )
+    max_grate_sims = simulate_bayesian_dataset(
+        model, max_grate,
+        constrain=False, zero_flux_rxns=[], bio_rxn_id="biomass",
+    )
+    excarbon = compute_excarbon(
+        model, ["EX_glc", "EX_eth", "EX_byp", "biomass"], bio_rxn_id="biomass",
+    )
+
+    expected_flux_rmse, _ = dataset_rmse(
+        flux_data, flux_sims, constrain=True, excarbon=excarbon, bio_rxn_id="biomass",
+    )
+    expected_max_grate_rmse, _ = dataset_rmse(
+        max_grate, max_grate_sims, constrain=False, excarbon=excarbon,
+        bio_rxn_id="biomass",
+    )
+
+    rmse, _ = bayesian_distance(
+        bay_data,
+        flux_sims=flux_sims, max_grate_sims=max_grate_sims,
+        excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=2.0,
+    )
+    assert rmse == pytest.approx(
+        (2.0 * expected_flux_rmse + expected_max_grate_rmse) / 3.0
+    )
+
+    # A lone dataset carries the whole score whatever the weight.
+    solo = BayesianData(flux_data=flux_data, max_grate=None, zero_flux=["EX_byp"])
+    rmse_solo, _ = bayesian_distance(
+        solo,
+        flux_sims=flux_sims, max_grate_sims=None,
+        excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=2.0,
+    )
+    assert rmse_solo == pytest.approx(expected_flux_rmse)
+
+
 def test_bayesian_distance_missing_dataset_contributes_nothing(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
