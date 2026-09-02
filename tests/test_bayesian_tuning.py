@@ -320,3 +320,24 @@ def test_adapt_proposal_scale_follows_the_acceptance_rate():
 
 def test_adapt_proposal_width_is_off_by_default():
     assert BayesianParams().adapt_proposal_width is False
+
+
+def test_proposal_acceptance_rate_divides_by_the_number_proposed():
+    """The denominator is the proposals made, not the accepted set: the
+    latter measures the accepted set's composition and sits near 1.0 in
+    early generations however poor the proposals are."""
+    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
+        proposal_acceptance_rate,
+    )
+
+    # 1000 proposals, 300 accepted, every one of them new.
+    accepted = np.arange(300)
+    assert proposal_acceptance_rate(accepted, 1000) == pytest.approx(0.30)
+
+    # Half the accepted set carried over from previous generations.
+    accepted = np.concatenate([np.arange(150), 1000 + np.arange(150)])
+    assert proposal_acceptance_rate(accepted, 1000) == pytest.approx(0.15)
+
+    # Nothing new survived.
+    assert proposal_acceptance_rate(np.array([1000, 1001]), 1000) == 0.0
+    assert proposal_acceptance_rate(np.array([]), 0) == 0.0
