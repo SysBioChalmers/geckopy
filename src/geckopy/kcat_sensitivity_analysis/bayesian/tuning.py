@@ -286,6 +286,7 @@ def bayesian_kcat_tuning(
             initargs=(
                 model, tunable_idx, ec_rxn_ids_tunable, bay_data,
                 excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
+                params.max_growth_weight,
             ),
         )
 
@@ -298,6 +299,7 @@ def bayesian_kcat_tuning(
                         excarbon, bio_rxn, kcat_matrix[:, j],
                         make_anaerobic=make_anaerobic,
                         change_protein_biomass=change_protein_biomass,
+                        max_growth_weight=params.max_growth_weight,
                     )
                     for j in range(kcat_matrix.shape[1])
                 ])
@@ -479,6 +481,7 @@ def _score_kcat_vector(
     *,
     make_anaerobic,
     change_protein_biomass,
+    max_growth_weight: float = 1.0,
 ) -> float:
     """Score one kcat vector against ``model`` (mutated in place).
 
@@ -517,6 +520,7 @@ def _score_kcat_vector(
     rmse, _ = bayesian_distance(
         bay_data, flux_sims=flux_sims, max_grate_sims=max_grate_sims,
         excarbon=excarbon, bio_rxn_id=bio_rxn_id,
+        max_growth_weight=max_growth_weight,
     )
     return rmse
 
@@ -534,6 +538,7 @@ _WORKER_EXCARBON: Optional[dict[str, float]] = None
 _WORKER_BIO_RXN: Optional[str] = None
 _WORKER_MAKE_ANAEROBIC = None
 _WORKER_CHANGE_PROTEIN_BIOMASS = None
+_WORKER_MAX_GROWTH_WEIGHT: float = 1.0
 
 
 def _init_worker(
@@ -545,6 +550,7 @@ def _init_worker(
     bio_rxn_id: str,
     make_anaerobic,
     change_protein_biomass,
+    max_growth_weight: float = 1.0,
 ) -> None:
     """Pool initializer: stash this worker process's own EcModel copy
     (deserialised by ``ProcessPool``, not by us) and everything else
@@ -552,6 +558,7 @@ def _init_worker(
     global _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE
     global _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
     global _WORKER_MAKE_ANAEROBIC, _WORKER_CHANGE_PROTEIN_BIOMASS
+    global _WORKER_MAX_GROWTH_WEIGHT
     _WORKER_MODEL = model
     _WORKER_TUNABLE_IDX = tunable_idx
     _WORKER_EC_RXN_IDS_TUNABLE = ec_rxn_ids_tunable
@@ -560,6 +567,7 @@ def _init_worker(
     _WORKER_BIO_RXN = bio_rxn_id
     _WORKER_MAKE_ANAEROBIC = make_anaerobic
     _WORKER_CHANGE_PROTEIN_BIOMASS = change_protein_biomass
+    _WORKER_MAX_GROWTH_WEIGHT = max_growth_weight
 
 
 def _score_worker(kcat_vec: np.ndarray) -> float:
@@ -569,4 +577,5 @@ def _score_worker(kcat_vec: np.ndarray) -> float:
         _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN, kcat_vec,
         make_anaerobic=_WORKER_MAKE_ANAEROBIC,
         change_protein_biomass=_WORKER_CHANGE_PROTEIN_BIOMASS,
+        max_growth_weight=_WORKER_MAX_GROWTH_WEIGHT,
     )
