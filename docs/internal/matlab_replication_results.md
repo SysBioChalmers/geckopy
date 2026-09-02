@@ -167,16 +167,125 @@ not the difference in level.
 Annealing the proposal width is the obvious lever, and it is a
 deliberate departure from MATLAB rather than a fidelity fix.
 
-## Open items
+## Two diagnostics on the distance function
 
-1. Reconcile the prior RMSE (9.6229 here, 8.6001 and 9.5544 in the two
-   MATLAB references) before treating any final RMSE as a target.
-2. Establish the seed-to-seed spread of the port's final RMSE. This
-   run is a single seed; the same seed at `n_proc` 16 and 63 reproduces
-   identically, so within-seed determinism holds, but across-seed
-   variance is unmeasured and bounds how much of any gap is real.
-3. Decide whether to implement `max_growth_weight` in `BayesianParams`
-   for fidelity to current GECKO, knowing it moves the numbers away
-   from both references.
-4. Investigate OKP's blend movement (50.5% here vs MATLAB's 15.4%),
-   the one per-source figure that does not match.
+**The objective is carried by a handful of conditions.** Per-condition
+prior RMSE across the 33 flux conditions spans 0.04 to 39.01 -- three
+orders of magnitude. Six conditions (39.0, 28.3, 26.0, 25.8, 22.5,
+21.5) supply over half the mean; the ten best supply under 2% of it.
+Because the datasets are combined as plain means of raw RMSEs, the
+search is effectively fitting those six conditions, and any small
+implementation difference in how *they* simulate moves the reported
+score a lot. Condition 10 alone contributes 0.59 to the 9.6229 total.
+This is the first place to look for the 11% prior disagreement.
+
+**The missing anaerobic switch is a real defect but not the
+explanation.** `abc_max.m:81-84` calls
+`modelAdapter.makeModelAnaerobic` for every condition whose oxygen
+exchange is 0; 9 of the 33 flux conditions qualify, and the port runs
+all 9 aerobically. That is 27% of the flux dataset simulated under the
+wrong physiology. It does not, however, show up as inflated RMSE:
+those 9 average **10.50** against the aerobic conditions' **11.24**,
+and excluding them *raises* the combined score from 9.6229 to 9.7229.
+Three of them (0.72, 1.05, 1.25) score suspiciously well, which is
+what an unconstrained oxygen supply would produce. So the hook must be
+implemented for fidelity, but it cannot be assumed to close the gap.
+
+`changeProteinBiomass` (`abc_max.m:87-88`) stays inert: `Ptot` is
+`NaN` for every condition in this dataset.
+
+## Where to go from here
+
+Two tracks. They are not exclusive, but only the first can be measured
+against MATLAB, and the second cannot be evaluated at all until the
+first has fixed a trustworthy score.
+
+### Track A -- finish the replication (fidelity)
+
+**A1. Localise the prior-RMSE disagreement, per condition. Do this
+first; it blocks everything else.** `abc_max` already builds a named
+`rmseList` (`fluxData_1..33`, `maxGrowth_1..8`) and throws it away.
+Instrument it to dump that list for the prior kcat vector, run it once
+-- a single evaluation, seconds, no tuning loop -- and diff against the
+port's vector, which is reproduced by `percond.py` in the run scratch.
+Given the spread above, the disagreement will localise to a few
+conditions, and each one is then a concrete simulation question
+(bounds, carbon normalisation, blocked-flux handling) rather than a
+diffuse 11%. Until this lands, no final RMSE from either
+implementation is interpretable, and the ranking of any method change
+is unreliable.
+
+**A2. Implement the anaerobic hook.** Needed for correctness whatever
+A1 finds: 9 conditions are currently scored under the wrong
+physiology. It belongs on the tutorial adapter rather than in
+`geckopy`, which is where its organism-specific knowledge lives.
+
+**A3. Settle which MATLAB reference is authoritative.** Re-run
+`bayesianSensitivityTuning` once with the committed
+`YeastGEMAdapter.m` and export the trace, so the target is one number
+with known provenance instead of two that differ by 11%.
+
+**A4. Implement `max_growth_weight`** in `BayesianParams`, defaulting
+to 1, for fidelity to current GECKO. Cheap, but note it moves the
+numbers *away* from both references, so land it after A1 and A3 or it
+will confound them.
+
+### Track B -- improve the method (performance)
+
+The port is faithful; the algorithm it faithfully reproduces is the
+weak part. In descending order of expected value:
+
+**B1. Anneal the proposal width.** This is the single largest lever.
+`updateProposalWidth` is `0.5*std_obs + 0.5*sigma0log`, so the width
+is pinned above `0.5*sigma0log` and, because `std_obs` grows as the
+accepted set spreads, it *inflates*: MATLAB's own
+`proposalWidthTrace` goes 0.213 -> 1.037 while `diversityTrace` goes
+1.23 -> 9.08. The sampler diffuses rather than converges, which is why
+both implementations plateau and why late generations produce
+identical best particles for eight generations at a stretch. Replace
+the fixed 50/50 blend with a schedule that decays toward `std_obs`, or
+scale it adaptively against `proposalAcceptRate` -- MATLAB records
+that signal (0.10 at generation 1, 0.14 at generation 2) and never
+uses it.
+
+**B2. Rebalance the per-condition contributions.** With per-condition
+RMSE spanning 0.04 to 39.0, a plain mean spends nearly the whole
+budget on six conditions. Normalising each condition -- relative
+rather than absolute error, or the existing per-condition
+`bayesianRMSEweight` column set to the inverse of each condition's
+prior scale -- would let the remaining 35 conditions influence the
+result. The column is already parsed and applied faithfully; it is
+uniformly 1.0 today, so this needs only data. Note this changes what
+"RMSE" means and breaks comparability with MATLAB, so it belongs to
+Track B, not Track A.
+
+**B3. Cut the dimensionality.** 4834 parameters against 400 samples
+per generation, with every proposal displacing all of them at once,
+gives no credit assignment: a good move in one kcat is masked by
+thousands of simultaneous bad ones. The identifiability screens
+already computed in the shared scratch (`sensitivity.npy`,
+`reachable.npy`) can restrict tuning to parameters that can affect
+the objective at all.
+
+**B4. Reconsider what is returned.** The best particle fits far better
+(1.2038) than the blend (4.1822) but moves ~99% of all kcats, which is
+not a defensible posterior. Neither vector is satisfactory; see "Two
+kcat vectors" in `bayesian_tuning_plan.md`.
+
+### Recommendation
+
+A1, then A2, then B1. A1 is a day's work at most and decides whether
+there is a scoring bug to fix or a genuine 25% method shortfall to
+close. A2 is required for correctness regardless. B1 is where the
+performance actually is, but it is unmeasurable before A1 and it
+deliberately departs from MATLAB, so it should be a named variant
+rather than a change to the faithful path.
+
+Also outstanding: the seed-to-seed spread of the port's final RMSE is
+unmeasured. The same seed at `n_proc` 16 and 63 reproduces identically,
+so within-seed determinism holds, but a single seed cannot say how much
+of a 25% gap is noise. Three or four seeds at reduced
+`max_generations` would bound it cheaply. And OKP's blend movement
+(50.5% here against MATLAB's 15.4%) is the one per-source figure that
+does not match, which points at source classification rather than the
+sampler.
