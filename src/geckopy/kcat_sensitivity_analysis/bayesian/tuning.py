@@ -321,6 +321,10 @@ def bayesian_kcat_tuning(
             rxns=ec_rxn_ids_tunable, old_kcat=kcat0.copy(), groups=list(groups),
         )
 
+        # Persistent multiplier on the fitted proposal bandwidth. Stays
+        # at 1.0 (a no-op) unless params.adapt_proposal_width is set.
+        proposal_scale = 1.0
+
         generation = 0
         while True:
             generation += 1
@@ -344,7 +348,9 @@ def bayesian_kcat_tuning(
                 transition: Optional[GeckoTransition] = None
             else:
                 X_df = pd.DataFrame(kcat_top.T, columns=columns)
-                transition = GeckoTransition(sigma0_log)
+                transition = GeckoTransition(
+                    sigma0_log, bandwidth_scale=proposal_scale,
+                )
                 transition.fit(X_df, weights_top)
                 new_particles = transition.rvs_batch(n_new)
             new_particles = np.clip(new_particles, kcat_lo[:, None], kcat_hi[:, None])
@@ -362,6 +368,17 @@ def bayesian_kcat_tuning(
                 sel = quantile_epsilon_select(combined_rmse, epsilon=epsilon)
                 if sel.accepted_idx.size == 0:
                     sel.accepted_idx = np.array([int(np.argmin(combined_rmse))])
+
+            # Fraction of *this* generation's proposals that survived
+            # selection. Columns 0..n_new-1 of combined_particles are the
+            # new draws; the rest are the carried-over accepted set.
+            proposal_accept_rate = float(
+                np.mean(sel.accepted_idx < new_particles.shape[1])
+            )
+            if params.adapt_proposal_width:
+                proposal_scale = adapt_proposal_scale(
+                    proposal_scale, proposal_accept_rate, params,
+                )
 
             n_total_this_gen = len(combined_rmse)
             new_kcat_top = combined_particles[:, sel.accepted_idx]
@@ -394,8 +411,9 @@ def bayesian_kcat_tuning(
             if verbose:
                 logger.info(
                     "bayesian_kcat_tuning: generation %d, best RMSE = %g, "
-                    "accepted %d/%d",
+                    "accepted %d/%d, proposal accept %.4f, scale %.4f",
                     generation, diag.best_rmse, diag.n_accepted, diag.n_total,
+                    proposal_accept_rate, proposal_scale,
                 )
 
             kcat_top, rmse_top, weights_top = new_kcat_top, new_rmse_top, new_weights_top
@@ -468,6 +486,36 @@ def _reset_solver_basis(model: "EcModel") -> None:
     reset = getattr(problem, "reset", None)
     if callable(reset):
         reset()
+
+
+def adapt_proposal_scale(
+    scale: float, accept_rate: float, params: "BayesianParams",
+) -> float:
+    """Steer the proposal bandwidth by how many proposals survive.
+
+    MATLAB's proposal width is ``0.5 * std_obs + 0.5 * sigma0_log``,
+    which cannot fall below half the prior width and grows as the
+    accepted set spreads. Its own diagnostics show the consequence: on
+    the full ecYeastGEM run the width climbs 0.213 -> 1.037 while the
+    proposal acceptance rate collapses 0.10 -> 0.005, so the sampler
+    widens exactly when its steps are already too large and the last
+    third of the run makes no progress.
+
+    This multiplies the fitted bandwidth by a scale that follows the
+    acceptance rate instead, in the usual adaptive-MCMC form:
+    ``scale *= exp(rate_param * (accept_rate - target))``, clamped to
+    ``params.proposal_scale_bounds``. Below target the steps shrink;
+    above it they grow back.
+
+    MATLAB has no such feedback, so this is a deliberate departure from
+    the faithful path and is off unless ``params.adapt_proposal_width``
+    is set.
+    """
+    lo, hi = params.proposal_scale_bounds
+    adjusted = scale * float(np.exp(
+        params.proposal_adaptation_rate * (accept_rate - params.target_accept_rate)
+    ))
+    return float(np.clip(adjusted, lo, hi))
 
 
 def _score_kcat_vector(
