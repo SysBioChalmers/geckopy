@@ -2,8 +2,14 @@
 
 Goal: run the ported `bayesian_kcat_tuning` as close to GECKO MATLAB's
 `bayesianSensitivityTuning` as the port allows, and report how close the
-result gets. MATLAB's reference run on this model went **RMSE 9.5544 ->
-0.9289 in 31 generations**.
+result gets. MATLAB's reference for this model went **RMSE 8.6001 ->
+0.8715 in 31 generations**
+(`GECKO/tutorials/full_ecModel/output/rmse_trace.tsv`).
+
+The **9.5544 -> 0.9289** figures quoted below and elsewhere are stale:
+they come from a report generated 2026-05-20, before the model was
+updated in `cce743ee` (2026-06-09), so they describe a different model.
+Results are in `matlab_replication_results.md`.
 
 This is a measurement task, not a development task: run it, record the
 trace, compare against the numbers below, and report deviations. Change
@@ -12,19 +18,18 @@ what you changed and why.
 
 ## What is already known
 
-Results of the full 31-generation run are in
-`matlab_replication_results.md`: **9.6229 -> 1.2038**, with the search
-machinery reproducing MATLAB's samples/accepted sequence generation
-for generation.
+The scoring gap is closed: with the anaerobic switch and
+`max_growth_weight = 2` the port reproduces MATLAB's exported prior
+RMSE to **0.002%** and its accepted particles to 0.02%. Scoring the
+untuned model gives 8.6002 against MATLAB's 8.60005. Both pieces are
+needed together -- each one alone makes agreement worse. See
+`matlab_replication_results.md`.
 
-That run retracts what this section used to claim. Scoring the untuned
-model gives **9.6229** here, which is 0.7% from the **9.5544** quoted
-below but 12% from the **8.6001** in GECKO's own exported run
-(`tutorials/full_ecModel/output/rmse_trace.tsv`). Those two MATLAB
-figures describe the same deterministic quantity and disagree by 11%,
-so the distance function is *not* established as faithful, and a
-shortfall in the final RMSE is not safely attributable to the search.
-Reconcile the prior RMSE before treating any final number as a target.
+Report **parsimony alongside RMSE** for anything new. Changes should be
+few and concentrated in low-confidence kcats; `parsimony.py` in the run
+scratch measures movement in units of each kcat's own prior sigma. A
+variant that lowers RMSE while moving more kcats -- or while disturbing
+`custom`/`brenda` -- has not improved anything.
 
 A first replication (before two fixes landed) reached **1.4849 in 16
 generations**, trace:
