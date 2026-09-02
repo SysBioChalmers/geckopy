@@ -12,10 +12,19 @@ what you changed and why.
 
 ## What is already known
 
-The port's distance function is faithful: scoring the untuned model
-gives **9.6229** here against MATLAB's reported prior RMSE of **9.5544**
-(0.7% apart, same model). So a shortfall in the final RMSE is a search
-problem, not a scoring problem.
+Results of the full 31-generation run are in
+`matlab_replication_results.md`: **9.6229 -> 1.2038**, with the search
+machinery reproducing MATLAB's samples/accepted sequence generation
+for generation.
+
+That run retracts what this section used to claim. Scoring the untuned
+model gives **9.6229** here, which is 0.7% from the **9.5544** quoted
+below but 12% from the **8.6001** in GECKO's own exported run
+(`tutorials/full_ecModel/output/rmse_trace.tsv`). Those two MATLAB
+figures describe the same deterministic quantity and disagree by 11%,
+so the distance function is *not* established as faithful, and a
+shortfall in the final RMSE is not safely attributable to the search.
+Reconcile the prior RMSE before treating any final number as a target.
 
 A first replication (before two fixes landed) reached **1.4849 in 16
 generations**, trace:
