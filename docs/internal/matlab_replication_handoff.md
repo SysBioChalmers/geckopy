@@ -55,6 +55,28 @@ Report results in the light of these; do not silently "fix" them.
   abandoned upstream; the committed MATLAB code uses the same diagonal
   proposal this port implements.
 
+## Isolation: another run may be in progress
+
+A replication on a 16-core allocation may be running concurrently from
+`/cephyr/NOBACKUP/groups/compmeteng/geckopy-bayesian-scratch/`. Do not
+write into that directory: its logs (`logs/matlab_replication*.log`) and
+saved arrays (`matlab_repl_kcat.npy`, `matlab_repl_blend.npy`,
+`sensitivity.npy`, `reachable*.npy`) would be overwritten and both sets
+of results lost.
+
+Use your own scratch directory and your own git worktree, e.g.
+
+```bash
+mkdir -p /cephyr/NOBACKUP/groups/compmeteng/geckopy-matlab-repl-64
+git worktree add ../geckopy-matlab-repl feat/bayesian-kcat-tuning-agent
+```
+
+You may *read* the shared directory -- `sensitivity.npy` and
+`reachable.npy` are reusable screen outputs -- but write only to your
+own. Project storage has a 100k file-count quota shared by the group,
+so keep the venv off it (see below) and do not leave large scratch
+trees behind.
+
 ## Environment
 
 Cluster: C3SE Vera. Nodes are 64-core; an allocation is whatever SLURM
@@ -105,6 +127,21 @@ memory as `0.67 GB x n_proc`.
 Rough cost: one particle is 41 FBA solves, ~0.87 s wall at 16 cores.
 MATLAB's schedule is ~10k evaluations to generation 16, which took
 178 min on 16 cores.
+
+On a 64-core allocation, expect roughly 3-4x that throughput -- the
+scaling above is still climbing at 16, though efficiency falls (73% at
+16, so do not expect a clean 4x). Two things to check at that width:
+
+* **Memory**: each worker holds its own `EcModel` copy at ~0.67 GB, so
+  64 workers is ~43 GB resident. Fine on a 256 GB node, but confirm
+  against what SLURM gave you.
+* **Licence checkout**: each worker checks out a Gurobi WLS token over
+  the network at pool startup (~1.1 s each, and 8 concurrent checkouts
+  measured at ~1.1 s wall total, so they parallelise). 64 at once has
+  not been measured here; if pool startup stalls, switch
+  `GRB_LICENSE_FILE` to the LAN token server given above.
+* `n_proc` still wants capping at the per-generation sample count, but
+  MATLAB's schedule starts at 1000 samples so 64 workers are all used.
 
 ## Inputs
 
