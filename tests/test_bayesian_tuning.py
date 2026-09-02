@@ -403,3 +403,49 @@ def test_penalised_search_moves_kcats_less(tmp_path):
     free_move = np.abs(np.log(free.new_kcat / free.old_kcat)).mean()
     pen_move = np.abs(np.log(penalised.new_kcat / penalised.old_kcat)).mean()
     assert pen_move < free_move
+
+
+def test_tunable_mask_holds_excluded_kcats_at_their_prior(tmp_path):
+    """Parameters the data cannot speak to should not be edited at all."""
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    before = model.ec.kcat.copy()
+
+    mask = np.ones(len(model.ec.rxns), dtype=bool)
+    mask[0] = False                       # exclude the first tunable kcat
+
+    result = bayesian_kcat_tuning(
+        model, adapter=adapter,
+        params=BayesianParams(
+            schedule_generations=[1], schedule_samples=[20],
+            min_keep=0.3, max_keep=0.6, rmse_threshold=-1.0, max_generations=2,
+        ),
+        bay_data=_bay_data(), selection="truncation",
+        tunable_mask=mask, n_proc=1, seed=0, verbose=False,
+    )
+
+    # Excluded row untouched in the model, and absent from the result.
+    assert model.ec.kcat[0] == pytest.approx(before[0])
+    assert len(result.rxns) == int(mask.sum())
+    assert model.ec.rxns[0] not in result.rxns
+    assert len(result.new_kcat) == len(result.old_kcat) == int(mask.sum())
+
+
+def test_tunable_mask_rejects_a_wrong_shape_and_an_empty_selection(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    params = BayesianParams(
+        schedule_generations=[1], schedule_samples=[5],
+        min_keep=0.3, max_keep=0.6, rmse_threshold=-1.0, max_generations=1,
+    )
+    with pytest.raises(ValueError, match="tunable_mask has shape"):
+        bayesian_kcat_tuning(
+            model, adapter=adapter, params=params, bay_data=_bay_data(),
+            tunable_mask=np.ones(3, dtype=bool), n_proc=1, seed=0, verbose=False,
+        )
+    with pytest.raises(ValueError, match="excludes every one"):
+        bayesian_kcat_tuning(
+            model, adapter=adapter, params=params, bay_data=_bay_data(),
+            tunable_mask=np.zeros(len(model.ec.rxns), dtype=bool),
+            n_proc=1, seed=0, verbose=False,
+        )
