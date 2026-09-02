@@ -151,3 +151,41 @@ def test_rvs_single_draws_the_intended_lognormal_around_its_parent():
     assert np.all(values > 0)
     np.testing.assert_allclose(log_ratio.mean(axis=0), [0.0, 0.0], atol=0.03)
     np.testing.assert_allclose(log_ratio.std(axis=0), sigma0_log, rtol=0.05)
+
+
+def test_rvs_batch_spreads_parents_evenly():
+    """Every accepted particle should be perturbed a near-equal number
+    of times: independent draws would leave some parents unused and
+    reuse others, throwing away population diversity."""
+    n_particles, n_draws = 8, 80
+    X = pd.DataFrame({f"k{i}": np.linspace(1.0, 2.0, n_particles) for i in range(3)})
+    transition = GeckoTransition(np.full(3, 0.3))
+    transition.fit(X, np.full(n_particles, 1.0 / n_particles))
+
+    np.random.seed(0)
+    batch = transition.rvs_batch(n_draws)
+
+    assert batch.shape == (3, n_draws)
+    assert np.all(batch > 0)
+    # Each parent is closest to its own row value; with even spreading no
+    # parent should be used more than twice its fair share.
+    nearest = np.abs(
+        np.log(batch[0])[:, None] - np.log(X["k0"].to_numpy())[None, :]
+    ).argmin(axis=1)
+    counts = np.bincount(nearest, minlength=n_particles)
+    assert counts.max() <= 2 * (n_draws / n_particles)
+
+
+def test_rvs_batch_matches_rvs_single_distribution():
+    """Batch draws must follow the same kernel as the single draw."""
+    X = pd.DataFrame({"k0": [4.0]})
+    sigma0_log = np.array([0.35])
+    transition = GeckoTransition(sigma0_log, adapt_frac_early=0.0, sigma_floor_frac=1.0)
+    transition.fit(X, np.array([1.0]))
+
+    np.random.seed(1)
+    batch = transition.rvs_batch(6000)[0]
+    log_ratio = np.log(batch / 4.0)
+
+    assert abs(log_ratio.mean()) < 0.02
+    np.testing.assert_allclose(log_ratio.std(), sigma0_log[0], rtol=0.05)

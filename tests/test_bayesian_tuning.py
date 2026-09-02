@@ -273,3 +273,15 @@ def test_missing_bay_data_raises(tmp_path):
 
     with pytest.raises(ValueError, match="nothing to tune"):
         bayesian_kcat_tuning(model, adapter=adapter, bay_data=empty)
+
+
+def test_kcat_bounds_follow_matlab_windows():
+    """Ordinary kcats propose within 1e-2..1e4 1/s; a prior already above
+    1e4 keeps a window around itself instead of being clipped down."""
+    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import kcat_bounds
+
+    kcat0 = np.array([1.0, 5e4, 1e-3])
+    lo, hi = kcat_bounds(kcat0)
+
+    np.testing.assert_allclose(lo, [1e-2, 5e2, 1e-2])
+    np.testing.assert_allclose(hi, [1e4, 1e8, 1e4])

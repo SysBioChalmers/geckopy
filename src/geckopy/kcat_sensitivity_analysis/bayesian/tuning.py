@@ -268,6 +268,7 @@ def bayesian_kcat_tuning(
             excarbon_rxn_ids.update(data.exch_rxn_ids)
     excarbon_rxn_ids.update(bay_data.zero_flux)
     excarbon = compute_excarbon(model, excarbon_rxn_ids, bio_rxn_id=bio_rxn)
+    kcat_lo, kcat_hi = kcat_bounds(kcat0)
 
     if n_proc is None:
         n_proc = cobra.Configuration().processes
@@ -335,16 +336,16 @@ def bayesian_kcat_tuning(
             if generation == 1:
                 prior = build_kcat_prior(kcat0, sigma0_log)
                 draws = [prior.rvs() for _ in range(n_new)]
+                new_particles = np.array(
+                    [[draw[c] for c in columns] for draw in draws]
+                ).T
                 transition: Optional[GeckoTransition] = None
             else:
                 X_df = pd.DataFrame(kcat_top.T, columns=columns)
                 transition = GeckoTransition(sigma0_log)
                 transition.fit(X_df, weights_top)
-                draws = [transition.rvs_single() for _ in range(n_new)]
-            new_particles = np.array(
-                [[draw[c] for c in columns] for draw in draws]
-            ).T
-            new_particles = np.maximum(new_particles, np.finfo(float).tiny)
+                new_particles = transition.rvs_batch(n_new)
+            new_particles = np.clip(new_particles, kcat_lo[:, None], kcat_hi[:, None])
             new_rmse = score_batch(new_particles)
 
             if selection == "truncation":
@@ -416,6 +417,34 @@ def bayesian_kcat_tuning(
 # --------------------------------------------------------------------------- #
 # Scoring core, shared by the serial and parallel paths
 # --------------------------------------------------------------------------- #
+
+def kcat_bounds(kcat0: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Biologically plausible bounds for proposed kcats, in 1/s.
+
+    Proposals outside these bounds are not hypotheses worth spending an
+    FBA solve on. Ported from ``bayesianSensitivityTuning.m``'s
+    ``proposeSimple``: 1e-2 to 1e4 for an ordinary kcat, and for one
+    whose prior already exceeds 1e4 (catalase and friends) a window of
+    prior/100 to 1e8 so an unusually fast enzyme is not clipped down to
+    the generic ceiling.
+
+    Parameters
+    ----------
+    kcat0
+        Prior kcat per tunable row, 1/s.
+
+    Returns
+    -------
+    tuple of numpy.ndarray
+        Lower and upper bound per row.
+    """
+    lo = np.full_like(kcat0, 1e-2, dtype=float)
+    hi = np.full_like(kcat0, 1e4, dtype=float)
+    exceptional = kcat0 > 1e4
+    lo[exceptional] = kcat0[exceptional] / 100.0
+    hi[exceptional] = 1e8
+    return lo, hi
+
 
 def _reset_solver_basis(model: "EcModel") -> None:
     """Discard the solver's incumbent basis so the solves below start cold.

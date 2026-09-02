@@ -112,6 +112,33 @@ class GeckoTransition(Transition):
         )
         return Parameter(dict(zip(self._columns, sample)))
 
+    def rvs_batch(self, n: int) -> np.ndarray:
+        """Draw ``n`` particles at once, spreading parents evenly.
+
+        Parents are picked by systematic resampling rather than
+        independent draws: with uniform weights each accepted particle
+        is perturbed a near-equal number of times instead of some being
+        used repeatedly and others not at all, which keeps the
+        population's diversity. Ported from
+        ``bayesianSensitivityTuning.m``'s "select parents with minimal
+        duplication" step, generalised to weighted particles.
+
+        Returns
+        -------
+        numpy.ndarray, shape ``(n_params, n)``
+            Columns in the same parameter order as :meth:`fit`'s ``X``.
+        """
+        if self._log_bandwidth is None:
+            raise RuntimeError("GeckoTransition.rvs_batch() called before fit().")
+        w_norm = self.w / self.w.sum()
+        positions = (np.random.random() + np.arange(n)) / n
+        parent_idx = np.searchsorted(np.cumsum(w_norm), positions)
+        np.clip(parent_idx, 0, len(self.X) - 1, out=parent_idx)
+        np.random.shuffle(parent_idx)
+        parents = self.X.to_numpy(dtype=float)[parent_idx]
+        steps = np.random.standard_normal((n, len(self._log_bandwidth)))
+        return (parents * np.exp(steps * self._log_bandwidth[None, :])).T
+
     def component_logpdf(self, x: np.ndarray, parent: np.ndarray) -> float:
         """Log-density of the single kernel component that perturbs
         ``parent`` to reach ``x`` -- one term of :meth:`pdf`'s
