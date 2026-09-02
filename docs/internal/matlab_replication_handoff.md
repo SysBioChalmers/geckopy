@@ -101,10 +101,22 @@ python -m venv "$VENV"           # see note on placement below
   A LAN token-server licence is also available at
   `/apps/Arch/software/Gurobi/12.0.1-GCCcore-13.3.0/gurobi.lic` if the
   WLS endpoint ever stalls.
-* Set `Threads = 1` per worker (`model.solver.problem.Params.Threads =
-  1`). Gurobi defaults to using every core, which oversubscribes badly
-  once workers fill the allocation. Particle-level parallelism is the
-  useful axis.
+* Set `Threads = 1` per worker. Gurobi defaults to using every core,
+  which oversubscribes badly once workers fill the allocation;
+  particle-level parallelism is the useful axis. Set it with a
+  `gurobi.env` file in the working directory the run is launched from:
+
+  ```bash
+  printf 'Threads 1\n' > "$RUNDIR/gurobi.env"
+  ```
+
+  Gurobi reads that file whenever an environment is created, so every
+  pool worker picks it up (they inherit the parent's cwd) and logs
+  `Set parameter Threads to value 1` at startup -- check for one such
+  line per worker. Setting `model.solver.problem.Params.Threads = 1` on
+  the parent model does *not* reach the workers: `ProcessPool` pickles
+  the model and each worker rebuilds its own Gurobi problem on
+  unpickling, at the default `Threads 0` (all cores).
 
 ## Cores
 
