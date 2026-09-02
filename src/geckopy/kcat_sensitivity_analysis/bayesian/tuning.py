@@ -286,6 +286,7 @@ def bayesian_kcat_tuning(
             initargs=(
                 model, tunable_idx, ec_rxn_ids_tunable, bay_data,
                 excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
+                params.max_growth_weight,
             ),
         )
 
@@ -298,6 +299,7 @@ def bayesian_kcat_tuning(
                         excarbon, bio_rxn, kcat_matrix[:, j],
                         make_anaerobic=make_anaerobic,
                         change_protein_biomass=change_protein_biomass,
+                        max_growth_weight=params.max_growth_weight,
                     )
                     for j in range(kcat_matrix.shape[1])
                 ])
@@ -318,6 +320,10 @@ def bayesian_kcat_tuning(
         result = BayesianTuningResult(
             rxns=ec_rxn_ids_tunable, old_kcat=kcat0.copy(), groups=list(groups),
         )
+
+        # Persistent multiplier on the fitted proposal bandwidth. Stays
+        # at 1.0 (a no-op) unless params.adapt_proposal_width is set.
+        proposal_scale = 1.0
 
         generation = 0
         while True:
@@ -342,7 +348,9 @@ def bayesian_kcat_tuning(
                 transition: Optional[GeckoTransition] = None
             else:
                 X_df = pd.DataFrame(kcat_top.T, columns=columns)
-                transition = GeckoTransition(sigma0_log)
+                transition = GeckoTransition(
+                    sigma0_log, bandwidth_scale=proposal_scale,
+                )
                 transition.fit(X_df, weights_top)
                 new_particles = transition.rvs_batch(n_new)
             new_particles = np.clip(new_particles, kcat_lo[:, None], kcat_hi[:, None])
@@ -360,6 +368,17 @@ def bayesian_kcat_tuning(
                 sel = quantile_epsilon_select(combined_rmse, epsilon=epsilon)
                 if sel.accepted_idx.size == 0:
                     sel.accepted_idx = np.array([int(np.argmin(combined_rmse))])
+
+            # Fraction of *this* generation's proposals that survived
+            # selection. Columns 0..n_new-1 of combined_particles are the
+            # new draws; the rest are the carried-over accepted set.
+            proposal_accept_rate = float(
+                np.mean(sel.accepted_idx < new_particles.shape[1])
+            )
+            if params.adapt_proposal_width:
+                proposal_scale = adapt_proposal_scale(
+                    proposal_scale, proposal_accept_rate, params,
+                )
 
             n_total_this_gen = len(combined_rmse)
             new_kcat_top = combined_particles[:, sel.accepted_idx]
@@ -392,8 +411,9 @@ def bayesian_kcat_tuning(
             if verbose:
                 logger.info(
                     "bayesian_kcat_tuning: generation %d, best RMSE = %g, "
-                    "accepted %d/%d",
+                    "accepted %d/%d, proposal accept %.4f, scale %.4f",
                     generation, diag.best_rmse, diag.n_accepted, diag.n_total,
+                    proposal_accept_rate, proposal_scale,
                 )
 
             kcat_top, rmse_top, weights_top = new_kcat_top, new_rmse_top, new_weights_top
@@ -468,6 +488,36 @@ def _reset_solver_basis(model: "EcModel") -> None:
         reset()
 
 
+def adapt_proposal_scale(
+    scale: float, accept_rate: float, params: "BayesianParams",
+) -> float:
+    """Steer the proposal bandwidth by how many proposals survive.
+
+    MATLAB's proposal width is ``0.5 * std_obs + 0.5 * sigma0_log``,
+    which cannot fall below half the prior width and grows as the
+    accepted set spreads. Its own diagnostics show the consequence: on
+    the full ecYeastGEM run the width climbs 0.213 -> 1.037 while the
+    proposal acceptance rate collapses 0.10 -> 0.005, so the sampler
+    widens exactly when its steps are already too large and the last
+    third of the run makes no progress.
+
+    This multiplies the fitted bandwidth by a scale that follows the
+    acceptance rate instead, in the usual adaptive-MCMC form:
+    ``scale *= exp(rate_param * (accept_rate - target))``, clamped to
+    ``params.proposal_scale_bounds``. Below target the steps shrink;
+    above it they grow back.
+
+    MATLAB has no such feedback, so this is a deliberate departure from
+    the faithful path and is off unless ``params.adapt_proposal_width``
+    is set.
+    """
+    lo, hi = params.proposal_scale_bounds
+    adjusted = scale * float(np.exp(
+        params.proposal_adaptation_rate * (accept_rate - params.target_accept_rate)
+    ))
+    return float(np.clip(adjusted, lo, hi))
+
+
 def _score_kcat_vector(
     model: "EcModel",
     tunable_idx: np.ndarray,
@@ -479,6 +529,7 @@ def _score_kcat_vector(
     *,
     make_anaerobic,
     change_protein_biomass,
+    max_growth_weight: float = 1.0,
 ) -> float:
     """Score one kcat vector against ``model`` (mutated in place).
 
@@ -517,6 +568,7 @@ def _score_kcat_vector(
     rmse, _ = bayesian_distance(
         bay_data, flux_sims=flux_sims, max_grate_sims=max_grate_sims,
         excarbon=excarbon, bio_rxn_id=bio_rxn_id,
+        max_growth_weight=max_growth_weight,
     )
     return rmse
 
@@ -534,6 +586,7 @@ _WORKER_EXCARBON: Optional[dict[str, float]] = None
 _WORKER_BIO_RXN: Optional[str] = None
 _WORKER_MAKE_ANAEROBIC = None
 _WORKER_CHANGE_PROTEIN_BIOMASS = None
+_WORKER_MAX_GROWTH_WEIGHT: float = 1.0
 
 
 def _init_worker(
@@ -545,6 +598,7 @@ def _init_worker(
     bio_rxn_id: str,
     make_anaerobic,
     change_protein_biomass,
+    max_growth_weight: float = 1.0,
 ) -> None:
     """Pool initializer: stash this worker process's own EcModel copy
     (deserialised by ``ProcessPool``, not by us) and everything else
@@ -552,6 +606,7 @@ def _init_worker(
     global _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE
     global _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
     global _WORKER_MAKE_ANAEROBIC, _WORKER_CHANGE_PROTEIN_BIOMASS
+    global _WORKER_MAX_GROWTH_WEIGHT
     _WORKER_MODEL = model
     _WORKER_TUNABLE_IDX = tunable_idx
     _WORKER_EC_RXN_IDS_TUNABLE = ec_rxn_ids_tunable
@@ -560,6 +615,7 @@ def _init_worker(
     _WORKER_BIO_RXN = bio_rxn_id
     _WORKER_MAKE_ANAEROBIC = make_anaerobic
     _WORKER_CHANGE_PROTEIN_BIOMASS = change_protein_biomass
+    _WORKER_MAX_GROWTH_WEIGHT = max_growth_weight
 
 
 def _score_worker(kcat_vec: np.ndarray) -> float:
@@ -569,4 +625,5 @@ def _score_worker(kcat_vec: np.ndarray) -> float:
         _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN, kcat_vec,
         make_anaerobic=_WORKER_MAKE_ANAEROBIC,
         change_protein_biomass=_WORKER_CHANGE_PROTEIN_BIOMASS,
+        max_growth_weight=_WORKER_MAX_GROWTH_WEIGHT,
     )

@@ -191,25 +191,38 @@ def bayesian_distance(
     excarbon: dict[str, float],
     bio_rxn_id: str,
     penalty: float = INFEASIBLE_PENALTY,
+    max_growth_weight: float = 1.0,
 ) -> tuple[float, dict[str, np.ndarray]]:
     """Combine both datasets' RMSE into one score, per ``abc_max.m``.
 
     ``flux_sims`` must be given (non-``None``) iff ``bay_data.flux_data``
     is not ``None``, and likewise for ``max_grate_sims`` /
     ``bay_data.max_grate``. A dataset absent from ``bay_data`` doesn't
-    contribute to the combined RMSE (MATLAB: ``mean([rmse_1, rmse_2],
-    'omitnan')``, where a missing dataset's ``rmse_*`` stays ``[]``).
+    contribute to the combined RMSE (MATLAB: a missing dataset's
+    ``rmse_*`` stays ``[]`` and drops out of ``validIdx``).
+
+    Parameters
+    ----------
+    max_growth_weight
+        Relative weight of the *flux* dataset against the max-growth
+        dataset, giving ``(w * rmse_flux + rmse_max_grate) / (w + 1)``.
+        MATLAB's ``params.bayesian.maxGrowthWeight``, applied in
+        ``abc_max.m`` as ``weights = [maxGrowthWeight, 1]`` against
+        ``values = [rmse_flux, rmse_maxGrate]`` -- so despite the name
+        it scales the flux term. ``YeastGEMAdapter.m`` sets it to 2;
+        the default of 1 here reproduces a plain mean.
 
     Returns
     -------
     rmse : float
-        Mean of whichever dataset RMSEs are present. ``NaN`` if
-        neither dataset is present.
+        Weighted mean of whichever dataset RMSEs are present. ``NaN``
+        if neither dataset is present.
     detail : dict[str, numpy.ndarray]
         Per-condition RMSE arrays, keyed ``"flux_data"`` /
         ``"max_grate"`` for whichever datasets were scored.
     """
     parts: list[float] = []
+    weights: list[float] = []
     detail: dict[str, np.ndarray] = {}
 
     if bay_data.flux_data is not None:
@@ -221,6 +234,7 @@ def bayesian_distance(
             penalty=penalty,
         )
         parts.append(rmse)
+        weights.append(float(max_growth_weight))
         detail["flux_data"] = per_cond
 
     if bay_data.max_grate is not None:
@@ -232,7 +246,11 @@ def bayesian_distance(
             penalty=penalty,
         )
         parts.append(rmse)
+        weights.append(1.0)
         detail["max_grate"] = per_cond
 
-    rmse = float(np.mean(parts)) if parts else float("nan")
+    if parts:
+        rmse = float(np.dot(parts, weights) / np.sum(weights))
+    else:
+        rmse = float("nan")
     return rmse, detail
