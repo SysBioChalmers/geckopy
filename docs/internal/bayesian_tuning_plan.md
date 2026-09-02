@@ -367,6 +367,67 @@ MATLAB's 0.93, confirming that a 1e-2 threshold is too aggressive:
 parameters that matter only jointly are excluded by a one-at-a-time
 screen.
 
+### Two kcat vectors: the best particle and the blend
+
+Each generation produces two different parameter vectors, and only one
+of them is ever tested.
+
+* **Best particle** -- `kcatTop(:, bestIdx)`, the single accepted
+  candidate with the lowest RMSE. Every one of its entries was randomly
+  perturbed on the way there, so nearly all differ from the prior; most
+  of those differences are noise that happened to ride along in a
+  vector that fit well overall. This is what MATLAB writes to
+  `ecModel.ec.kcat` (`bayesianSensitivityTuning.m:395-396`) and what
+  this port writes too.
+* **Blend** -- computed from the whole accepted population: the
+  per-parameter mean in log space, shrunk toward the prior by
+  `shrinkWeight = min(devFromPrior / shrinkThr, 1)`, forced to the
+  prior when the deviation is small, then snapped exactly to the prior
+  when the remaining change is below `sparsityThr * sigma0log`.
+  Averaging over the population cancels the perturbation noise, so a
+  parameter the data does not push ends up back at its prior. This is
+  the vector that embodies "leave a kcat alone unless the data moved
+  it".
+
+MATLAB stores the blend in `kcatTrace` and never scores it, never
+proposes from it and never writes it to the model. Its tuning report
+(`writeBayesianTuningReport.m:90`, `kcatFinal = kcatTrace(:, end)`)
+therefore describes the *blend*, while the RMSE in the same report
+describes the *best particle*. The two headline numbers in that report
+belong to different parameter vectors: RMSE 0.9289 (best particle,
+measured) alongside 93% unchanged (blend, never scored). This port
+reproduces MATLAB's model faithfully -- 4788 of 4834 kcats changed --
+because it reproduces the same choice of returned vector.
+
+### Planned: ship the blend, and report what we ship (deferred)
+
+To be explored once the port reproduces MATLAB's fit:
+
+1. **Score the blend.** One evaluation. Either the snapping preserves
+   the fit (in which case the better-behaved model has been discarded
+   every generation), or it destroys it (in which case the "% unchanged"
+   statistic is cosmetic).
+2. **Judge on held-out conditions, not training RMSE.** 4834 parameters
+   against 41 measurements means the best particle is overfitted almost
+   by construction, and the blend is a regularised competitor. On
+   held-out conditions the blend may well *win*, in which case there is
+   no trade-off to manage. The k-fold harness exists for this.
+3. **Pick the operating point from a measured curve.** Rather than a
+   fixed rule such as "blend half the approved changes", sweep the
+   sparsity threshold (or the MAP objective's `tau`) and choose by a
+   stated criterion -- e.g. the sparsest model within 5% of the best
+   achievable held-out fit. One interpretable knob instead of MATLAB's
+   seven thresholds (`shrinkThr*`, `forcePriorThr*`, `sparsityThreshold`).
+4. **Polish after snapping.** Once unevidenced kcats are pinned to
+   their priors, re-optimise only the survivors -- the standard
+   debiasing step after sparse selection. This should recover most of
+   the fit lost to snapping while keeping the model sparse.
+5. **Report both numbers, attached to the right vectors.** The shipped
+   model's RMSE is the headline; the best particle's RMSE is quoted as
+   the unconstrained reference, and the gap between them is the price
+   of parsimony. Never report a fit for a vector that is not the one
+   written to the model -- that is the flaw found above.
+
 ### Solver
 
 All FBA runs on Gurobi (WLS licence via `GRB_LICENSE_FILE`).
