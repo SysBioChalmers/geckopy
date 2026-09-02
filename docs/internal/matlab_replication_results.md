@@ -217,6 +217,62 @@ lambda 0 run would settle it. And each cell is one seed, so differences
 under a few percent in RMSE are inside the noise measured elsewhere in
 this document.
 
+## Identifiability: most of the changes are provably meaningless
+
+Two screens already existed from earlier work and answer the parsimony
+question far better than the penalty sweep did.
+
+**FVA reachability.** Per-condition ecFVA across all 41 conditions:
+3955 of 4834 kcats belong to reactions that can carry flux in at least
+one condition. **879 can never carry flux in any of them**, so no
+datum in this dataset constrains their kcat. The relaxed-protein-pool
+variant is a subset (3950) and adds nothing.
+
+Every run changes them anyway: 873 of 879 in the corrected run, 876 in
+the B1 run, 868 at lambda 0.01. Those edits cannot be justified by the
+data under any weighting, and no amount of RMSE improvement excuses
+them.
+
+**One-at-a-time sensitivity.** Perturbing each reachable kcat by x2
+either way at the prior moves the distance by more than 1e-3 for 1939
+of them, more than 1e-2 for only 81.
+
+### Reverting by importance instead of by magnitude
+
+`parsimony.py`'s frontier reverts the *least-moved* kcats, which is a
+poor proxy: in a diffuse solution a kcat can move 8 sigma and matter
+not at all. Reverting by screened sensitivity instead is dramatically
+better:
+
+corrected run (full vector: 4798 changed, RMSE 0.9093, 7.55 sigma)
+
+| keep abs(dRMSE) > | changed | RMSE | mean dev |
+|-------------------|---------|------|----------|
+| 1e-4  | 2736 | **0.9069** | 4.32 sigma |
+| 1e-3  | 1925 | 0.9261 | 3.01 sigma |
+| 3e-3  | **297** | 1.0759 | 0.46 sigma |
+| 1e-2  | 80 | 1.2726 | 0.13 sigma |
+
+lambda 0.01 run (full vector: 4782 changed, RMSE 1.0506, 3.86 sigma)
+
+| keep abs(dRMSE) > | changed | RMSE | mean dev |
+|-------------------|---------|------|----------|
+| 1e-4  | 2730 | 1.0500 | 2.69 sigma |
+| 1e-3  | **1920** | **1.0287** | 1.87 sigma |
+| 3e-3  | 301 | 1.2340 | 0.30 sigma |
+
+Two results stand out. Reverting everything below 1e-4 *improves* both
+runs while dropping ~2000 changes -- those changes were not merely
+unjustified, they were mildly harmful. And 297 changed kcats retain an
+RMSE of 1.076 against the prior's 8.60, where magnitude-ranked
+reverting needed 527 changes to reach only 2.97.
+
+So the answer to "far fewer kcats should change" is not a stronger
+penalty. It is that the search is free to edit thousands of parameters
+the data cannot see, and nothing -- not the penalty, not the shrinkage,
+not the sparsity snap -- ever consults whether a parameter is
+identifiable at all.
+
 ## Open items
 
 1. **The blend is never scored or optimised.** MATLAB computes it every
