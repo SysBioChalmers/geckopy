@@ -275,6 +275,98 @@ Remaining serial cost worth knowing: generation 1 draws from
 `build_kcat_prior`'s pyabc `Distribution` at 82 ms per particle (82 s
 for a 1000-particle first generation). Only generation 1 uses it.
 
+### Identifiability: what the data can actually inform
+
+The point estimate is the deliverable, and a kcat should stay at its
+prior unless moving it demonstrably helps -- so the first question is
+how many kcats the 41 measured conditions can inform at all.
+
+| screen | kcats | note |
+|---|---|---|
+| active at the FBA optimum | 499 | misleading: an FBA vertex is maximally sparse |
+| FVA reachable, current kcats | 3955 | can carry flux in >= 1 condition |
+| FVA reachable, protein pool relaxed | 3950 | ceiling over *any* kcat assignment |
+| `\|dRMSE\| > 1e-3` under a x2 perturbation | 1939 | measurably moves the residuals |
+| `\|dRMSE\| > 1e-2` | 81 | strong influence |
+
+Reachability must come from FVA, not from one FBA solve: a reaction
+idle at the optimal vertex can still carry flux under other kcats, and
+the single-solve screen undercounts by 8x. Relaxing the protein pool
+changes nothing (3950 vs 3955), so the ~880 unreachable rows are
+blocked by stoichiometry and the condition constraints, not by enzyme
+cost -- no kcat assignment can make them relevant.
+
+Influence is steeply skewed: nearly everything reachable responds
+slightly, but the count falls two orders of magnitude between
+`\|dRMSE\|` 1e-3 and 1e-2. This is the "sloppy model" spectrum, and it
+matches what MATLAB's own converged run did -- it changed **338 of
+4834 kcats (7%)**, which sits between those two thresholds:
+
+| source | total | % unchanged (MATLAB) |
+|---|---|---|
+| custom | 207 | 100.0% |
+| brenda | 3198 | 97.9% |
+| OpenKineticsPredictor | 1175 | 84.6% |
+| unlabelled | 254 | 65.0% |
+
+Caveat: this is one-at-a-time sensitivity, so it understates parameters
+that only matter jointly (co-limiting enzymes in a pathway).
+
+Distance-function validation: scoring the untuned model gives RMSE
+**9.6229** against MATLAB's reported prior RMSE **9.5544** -- 0.7%
+apart on the same model, so the port's distance is faithful. MATLAB's
+trace then runs 9.55 -> 4.72 (gen 2) -> 0.97 (gen 14) -> 0.9289,
+plateauing around generation 14 of 31.
+
+### Sampler: tempered SMC instead of hard-epsilon ABC
+
+The ported scheme weights particles by prior/transition density, which
+degenerates as dimension grows (ESS 1.000 at 4834 parameters, and ~1
+even at 50 in a synthetic test). Subsetting alone does not fix that, so
+the sampler was replaced rather than shrunk:
+
+* pseudo-likelihood `exp(-d^2 / 2 tau^2)` instead of hard acceptance,
+  so weights vary smoothly;
+* `tau` lowered adaptively, each step chosen by bisection to hit an ESS
+  target, with a forced minimum decrement so the schedule cannot stall
+  when the population sits far from the data;
+* systematic resampling plus random-walk Metropolis rejuvenation, so
+  particles move rather than merely being reweighted.
+
+Two failures were found on synthetic problems before spending real
+compute: the epsilon schedule let the best distance degrade across
+generations (no elitism, non-monotone epsilon), and the tempering
+stalled at a temperature where the pseudo-likelihood was flat.
+
+Calibration was then checked on synthetic data with known truths (24
+replicates, 30 parameters): **90% intervals covered 94.4%** and 50%
+intervals 56.9% -- slightly conservative, i.e. honest rather than
+overconfident, with intervals 27% narrower than the prior. This is what
+makes a null result on the real model interpretable: poor contraction
+there is now a statement about the data, not about the sampler.
+
+### First real-scale posterior, and why `tau` must be anchored
+
+On the 81-kcat subset (`\|dRMSE\| > 1e-2`), 6800 evaluations in 89 min
+took the best RMSE from 9.62 to 6.88, and every parameter contracted
+(100% below 0.9, 65% below 0.5). But contraction was **flat at ~0.45
+across a 16x range of influence**, which is not what genuine
+per-parameter learning looks like.
+
+The cause is `tau_final`: at 0.5 against a mean distance of ~7.2,
+`exp(-d^2/2 tau^2)` is negligible for every particle, so the sampler
+concentrates on the best-fitting corner and reports a width set by the
+temperature rather than by the data. `tau` represents model discrepancy
+plus measurement error and must be anchored to the *attained* fit --
+the experimental files carry no error estimates (only
+`bayesianRMSEweight`, all 1), so it has to be swept around what each
+subset can actually achieve, not asserted below it.
+
+The 81-kcat subset also caps the achievable fit at ~6.9 against
+MATLAB's 0.93, confirming that a 1e-2 threshold is too aggressive:
+parameters that matter only jointly are excluded by a one-at-a-time
+screen.
+
 ### Solver
 
 All FBA runs on Gurobi (WLS licence via `GRB_LICENSE_FILE`).
