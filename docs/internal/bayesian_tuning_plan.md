@@ -369,15 +369,18 @@ screen.
 
 ### Replicating MATLAB's result
 
-MATLAB's reference run on this model: 9.5544 -> 0.9289 in 31
-generations, plateauing around generation 14.
+MATLAB's reference numbers for this model: 9.5544 -> 0.9289 in 31
+generations, plateauing around generation 14. GECKO's own exported run
+(`tutorials/full_ecModel/output/rmse_trace.tsv`) instead records
+8.6001 -> 0.8715; the two disagree by 11% on the prior, which is a
+deterministic quantity. See `matlab_replication_results.md`.
 
 A first replication at MATLAB's own schedule (1000/800/600/400 samples
 at generations 1/2/9/15, `min_keep` 0.3, `YeastGEMAdapter.m`'s sigma and
 threshold values) reached **1.4849 in 16 generations** -- the right
 shape, but roughly 1.7x behind MATLAB at matched generations. Two
 MATLAB behaviours were missing from the proposal step, and adding them
-closed the gap:
+moved the early generations ahead of MATLAB's curve:
 
 | generation | before | after | MATLAB |
 |---|---|---|---|
@@ -398,9 +401,27 @@ The two fixes (`b4c1db3`):
   leave some accepted particles unused and others repeated, discarding
   population diversity.
 
-The run was stopped at generation 6 to hand the pipeline to a 64-core
-allocation (see `matlab_replication_handoff.md`); it was tracking at or
-slightly ahead of MATLAB's curve throughout.
+**The early lead does not survive to convergence.** Carried to
+MATLAB's full 31 generations on a 64-core allocation, the same run
+ends at **1.2038** against MATLAB's 0.9289 and 0.8715
+(`matlab_replication_results.md`): ahead through generation 6, level
+around generation 8, behind from generation 10 onward. In relative
+terms the port cuts RMSE 87.5% from its own prior against MATLAB's
+89.9%, so the shortfall is smaller than the absolute numbers suggest,
+but it is real and it appears late.
+
+The fixes are still worth having -- they beat the pre-fix run at every
+generation, and the pre-fix run's *final* 1.4849 is passed by
+generation 12. What they do not do is close the gap.
+
+Two results reframe what remains. The port's samples/accepted sequence
+reproduces MATLAB's generation for generation, down to the terminal
+171/571 fixed point, so schedule, pooling and selection are faithful
+and the remaining difference is not in the sampler. And the distance
+function is unverified: with the two MATLAB priors disagreeing by 11%,
+the earlier 0.7% agreement was a coincidence of picking one of them.
+Localising that per-condition disagreement is the prerequisite for
+reading any final RMSE as a target.
 
 ### Two kcat vectors: the best particle and the blend
 
