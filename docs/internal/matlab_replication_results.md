@@ -150,6 +150,73 @@ saved `.npy` vectors, MATLAB's export included, without re-solving.
 A variant that improves RMSE while increasing sigma-movement, or while
 touching `custom`/`brenda`, has not improved anything.
 
+## The prior-penalty sweep
+
+`prior_penalty_weight` adds `rmse + lambda * mean((log(k/k0)/sigma0_log)^2)`
+to selection, so parsimony is optimised rather than applied afterwards.
+Selection uses that objective; `rmse_trace` stays the plain RMSE and
+`objective_trace` records what was minimised, so runs remain comparable
+to each other and to MATLAB at any lambda.
+
+Calibration first, since the penalty must be scaled against the RMSE:
+the best particle has `mean(dev^2)` of 88, so the penalty equals the
+RMSE at lambda 0.0103, the diffuse particle loses to the sparse blend
+at lambda ~0.041, and above lambda ~0.087 the search never leaves the
+prior at all. The sweep brackets that.
+
+Four runs, 15 generations each, seed 0, otherwise identical:
+
+| lambda | RMSE | mean dev | changed | knee | objective flat from |
+|--------|------|----------|---------|------|---------------------|
+| 0.003 | 1.0012 | 5.13 sigma | 4767 | 4237 @ 0.9752 | gen 14 |
+| 0.01  | 1.0506 | 4.68 sigma | 4782 | **2434 @ 1.0096** | gen 11 |
+| 0.03  | 1.3780 | 3.01 sigma | 4734 | 3779 @ 1.3458 | **gen 6** |
+| 0.06  | 1.3515 | 2.99 sigma | 4737 | 4737 @ 1.3515 | **gen 6** |
+
+RMSE here is the *returned* vector's, read off the frontier at `t=0`.
+At lambda > 0 the returned vector is the best-by-objective particle,
+whose plain RMSE is not `rmse_trace[-1]` -- that is the lowest RMSE
+among accepted particles, which is a different particle. Reporting the
+latter as the returned vector's fit understates it by up to 27%.
+
+### What it bought, and what it did not
+
+Movement falls monotonically with lambda, 5.13 -> 4.68 -> 3.01 -> 2.99
+sigma, against 7.55 for the unpenalised run. Fit is flat to lambda 0.01
+and then costs about 28%. That is a real, well-behaved trade-off curve,
+and lambda 0.01 is better than the unpenalised run on *both* axes.
+
+Two things it did not do.
+
+**It does not produce a sparse solution.** Every lambda still moves
+98%+ of all kcats. The L2 penalty compresses how *far* parameters move,
+not how *many*. Genuine sparsity needs an L0-shaped mechanism -- block
+or coordinate proposals that perturb a small random subset per draw --
+not a smooth penalty.
+
+**Above lambda ~0.03 the search stalls rather than economises.** Both
+0.03 and 0.06 freeze their objective at generation 6 and never improve
+it again, with proposal acceptance falling to 0.077 and 0.045. Their
+near-identical movement (3.01 and 2.99 sigma) is not two searches
+choosing similar parsimony; it is two searches that stopped. Low
+movement from a frozen search must not be read as a parsimony win --
+check `objective_trace` for a plateau before believing any such number.
+
+### Recommendation
+
+**lambda = 0.01.** It has by far the best frontier -- 2434 changed at
+RMSE 1.0096, against 3716 for the unpenalised run -- its objective was
+still improving to generation 11 rather than stalling, and it costs
+nothing in fit. The value sits just below the point where the penalty
+equals the RMSE, which is where a regulariser usually belongs.
+
+Two caveats on the comparison. The unpenalised movement figure (7.55
+sigma) comes from a 31-generation run while these are 15, so it is an
+upper bound rather than a like-for-like control; a 15-generation
+lambda 0 run would settle it. And each cell is one seed, so differences
+under a few percent in RMSE are inside the noise measured elsewhere in
+this document.
+
 ## Open items
 
 1. **The blend is never scored or optimised.** MATLAB computes it every
