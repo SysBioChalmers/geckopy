@@ -53,7 +53,11 @@ def parse_okp_output(
         wildcard_level, origin``. ``source`` is the per-row provenance
         from the ``Source kcat`` column (the prediction method such as
         ``CataPro``, or a database such as ``BRENDA`` / ``Sabio-RK`` /
-        ``UniProt``).
+        ``UniProt``), prefixed with ``OKP-`` to mark it as having come
+        through this pipeline stage (e.g. ``OKP-CataPro``,
+        ``OKP-BRENDA``). ``merge_kcats`` recognizes the prefix (after
+        ``normalize_source`` folds it to ``okp_``) and still routes an
+        ``OKP-BRENDA`` / ``OKP-Sabio-RK`` row to the database tiers.
 
     Raises
     ------
@@ -113,7 +117,8 @@ def parse_okp_output(
         sequence = df.at[idx, "Protein Sequence"]
         smiles = df.at[idx, "Substrate"]
         kcat = float(numeric_kcat[idx])
-        source = _PREDICTION_PREFIX_RE.sub("", df.at[idx, "Source kcat"]).strip()
+        bare_source = _PREDICTION_PREFIX_RE.sub("", df.at[idx, "Source kcat"]).strip()
+        source = f"OKP-{bare_source}"
 
         protein_idxs = seq_to_proteins.get(sequence, [])
         mets = smiles_to_mets.get(smiles, [])

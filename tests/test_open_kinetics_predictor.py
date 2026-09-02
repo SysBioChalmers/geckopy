@@ -172,9 +172,10 @@ def test_parse_maps_back_to_ec_rxns():
 def test_parse_source_provenance_stripped_and_verbatim():
     df = parse_okp_output(_ec_model(), _OKP_RESULT_CSV)
     sources = set(df["source"])
-    # "Prediction from CataPro" -> "CataPro"; "BRENDA" kept verbatim.
-    assert "CataPro" in sources
-    assert "BRENDA" in sources
+    # "Prediction from CataPro" -> "CataPro"; "BRENDA" kept verbatim; both
+    # tagged with the OKP- pipeline-stage prefix.
+    assert "OKP-CataPro" in sources
+    assert "OKP-BRENDA" in sources
     assert not any(s.startswith("Prediction from") for s in sources)
 
 
@@ -184,7 +185,7 @@ def test_parse_kcat_and_columns():
         "rxn_id", "source", "eccode", "substrates", "genes",
         "kcat", "wildcard_level", "origin",
     ]
-    cco_rows = df[df["source"] == "CataPro"]
+    cco_rows = df[df["source"] == "OKP-CataPro"]
     assert all(cco_rows["kcat"] == 12.5)
     assert all(s == ["ala"] for s in cco_rows["substrates"])
     assert all(g == ["g1"] for g in cco_rows["genes"])

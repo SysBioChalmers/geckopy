@@ -402,11 +402,11 @@ def _okp_row(
     eccode: str = "",
     gene: str = "g1",
 ) -> dict:
-    """A row as produced by parse_okp_output: per-row provenance source,
-    NA wildcard/origin."""
+    """A row as produced by parse_okp_output: per-row provenance source
+    tagged with the OKP- pipeline-stage prefix, NA wildcard/origin."""
     return {
         "rxn_id": rxn_id,
-        "source": source,
+        "source": f"OKP-{source}",
         "eccode": eccode,
         "substrates": ["alpha"],
         "genes": [gene],
@@ -458,7 +458,7 @@ def test_merge_kcats_okp_experimental_db_is_database_exact():
     ])
     out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
     assert len(out) == 1
-    assert out.iloc[0]["source"] == "BRENDA"
+    assert out.iloc[0]["source"] == "OKP-BRENDA"
     assert out.iloc[0]["kcat"] == 7.0
 
 
@@ -469,8 +469,9 @@ def test_merge_kcats_sabio_rk_is_database_exact():
     ])
     out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
     assert len(out) == 1
-    # Original (un-normalised) source label is preserved on output.
-    assert out.iloc[0]["source"] == "Sabio-RK"
+    # Original (un-normalised, OKP--tagged) source label is preserved on
+    # output.
+    assert out.iloc[0]["source"] == "OKP-Sabio-RK"
 
 
 def test_merge_kcats_exact_db_preferred_over_fuzzy_top():
@@ -483,7 +484,7 @@ def test_merge_kcats_exact_db_preferred_over_fuzzy_top():
         source_priority=["database_exact", "database_top", "database_bottom"],
     )
     assert len(out) == 1
-    assert out.iloc[0]["source"] == "BRENDA"
+    assert out.iloc[0]["source"] == "OKP-BRENDA"
     assert out.iloc[0]["kcat"] == 8.0
 
 
@@ -496,7 +497,7 @@ def test_merge_kcats_okp_brenda_beats_dlkcat():
         source_priority=["database_exact", "dlkcat"],
     )
     assert len(out) == 1
-    assert out.iloc[0]["source"] == "BRENDA"
+    assert out.iloc[0]["source"] == "OKP-BRENDA"
 
 
 def test_merge_kcats_catapro_used_when_no_database_value():
@@ -507,7 +508,7 @@ def test_merge_kcats_catapro_used_when_no_database_value():
     out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
     assert sorted(out["rxn_id"]) == ["r1", "r2"]
     by_rxn = {r["rxn_id"]: r["source"] for _, r in out.iterrows()}
-    assert by_rxn == {"r1": "BRENDA", "r2": "CataPro"}
+    assert by_rxn == {"r1": "OKP-BRENDA", "r2": "OKP-CataPro"}
 
 
 def test_merge_kcats_fuzzy_and_okp_mixed():
@@ -524,7 +525,7 @@ def test_merge_kcats_fuzzy_and_okp_mixed():
         source_priority=["database_exact", "database_top", "catapro"],
     )
     by_rxn = {r["rxn_id"]: r["source"] for _, r in out.iterrows()}
-    assert by_rxn == {"r1": "brenda", "r2": "Sabio-RK", "r3": "CataPro"}
+    assert by_rxn == {"r1": "brenda", "r2": "OKP-Sabio-RK", "r3": "OKP-CataPro"}
 
 
 def test_merge_kcats_keeps_all_rows_of_winning_tier():
@@ -536,7 +537,7 @@ def test_merge_kcats_keeps_all_rows_of_winning_tier():
     out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
     assert len(out) == 2
     assert sorted(out["kcat"]) == [7.0, 9.0]
-    assert all(out["source"] == "BRENDA")
+    assert all(out["source"] == "OKP-BRENDA")
 
 
 def test_merge_kcats_database_bottom_fallback():
@@ -576,7 +577,7 @@ def test_merge_kcats_preserves_input_order():
     out = merge_kcats(okp, source_priority=["database_exact", "catapro"])
     # Row order follows the input list (matching MATLAB mergeKcats), not
     # the tier priority: CataPro was first in, so it stays first.
-    assert list(out["source"]) == ["CataPro", "BRENDA"]
+    assert list(out["source"]) == ["OKP-CataPro", "OKP-BRENDA"]
 
 
 def test_merge_kcats_drops_nonpositive_kcat():
@@ -589,3 +590,31 @@ def test_merge_kcats_drops_nonpositive_kcat():
     )
     assert len(out) == 1
     assert out.iloc[0]["source"] == "DLKcat"
+
+
+def test_merge_kcats_okp_prefix_stripped_for_source_priority_match():
+    """A non-database OKP source (e.g. CataPro) matches its bare name in
+    source_priority despite the OKP- tag, exactly like a database source
+    strips the tag for tiering."""
+    out = merge_kcats(
+        _okp_df([_okp_row("r1", 7.0, "CataPro")]),
+        _dlkcat_df([_dlkcat_row("r1", 100.0)]),
+        source_priority=["catapro", "dlkcat"],
+    )
+    assert len(out) == 1
+    # The tag is stripped only for matching; the output keeps it.
+    assert out.iloc[0]["source"] == "OKP-CataPro"
+    assert out.iloc[0]["kcat"] == 7.0
+
+
+def test_merge_kcats_okp_and_bare_source_rank_identically():
+    """An OKP-tagged row and a bare row for the same underlying source
+    are indistinguishable for ranking purposes -- only the tag differs
+    in the output."""
+    bare_out = merge_kcats(
+        _dlkcat_df([_dlkcat_row("r1", 100.0)]),
+        _okp_df([_okp_row("r2", 100.0, "DLKcat")]),
+        source_priority=["dlkcat"],
+    )
+    assert sorted(bare_out["rxn_id"]) == ["r1", "r2"]
+    assert len(bare_out) == 2
