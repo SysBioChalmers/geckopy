@@ -26,3 +26,46 @@ reviewed = true
 
 [complex]
 taxonomic_id = 559292
+
+[bayesian]
+sigma0_log_default = 0.3
+shrink_thr_default = 5.0
+force_prior_thr_default = 3.5
+sparsity_threshold = 0.5
+schedule_generations = [1, 2, 9, 15]
+schedule_samples = [1000, 800, 600, 400]
+min_keep = 0.3
+max_keep = 0.6
+rmse_threshold = 0.2
+max_generations = 50
+# abc_max.m applies weights [maxGrowthWeight, 1] to [rmse_flux, rmse_maxGrate],
+# so despite the name it scales the flux term.
+max_growth_weight = 2.0
+
+# Trust tiers, least to most trusted. This model labels predicted kcats
+# "OpenKineticsPredictor"; match_okp additionally catches models that label
+# them with the predictor method name (OkpParams.method) instead.
+[bayesian.source_groups.okp]
+sources = ["OpenKineticsPredictor"]
+match_okp = true
+
+[bayesian.source_groups.brenda]
+sources = ["brenda"]
+
+[bayesian.source_groups.custom]
+sources = ["custom"]
+
+[bayesian.sigma0_log_source]
+okp = 0.25
+brenda = 0.2
+custom = 0.1
+
+[bayesian.shrink_thr_source]
+okp = 3.0
+brenda = 10.0
+custom = 12.0
+
+[bayesian.force_prior_thr_source]
+okp = 2.5
+brenda = 11.0
+custom = 13.0
