@@ -116,6 +116,40 @@ def build_sigma0_log(groups: np.ndarray, params: BayesianParams) -> np.ndarray:
     return sigma0_log
 
 
+def build_proposal_sigma_log(
+    groups: np.ndarray, params: BayesianParams,
+) -> np.ndarray:
+    """Per-row width used to propose, which may differ from the prior.
+
+    ``sigma0_log`` carries two jobs: it states how far a source is
+    trusted, and it sets the transition kernel's bandwidth. Those pull
+    apart -- a prior wide enough to describe the real spread of a
+    database kcat proposes steps too large to be accepted, and the
+    search stalls. Setting ``proposal_sigma_log_default`` or
+    ``proposal_sigma_log_source`` moves the proposing job here, leaving
+    ``sigma0_log`` to express confidence alone. Groups absent from the
+    override keep their ``sigma0_log_source`` value.
+
+    Returns
+    -------
+    numpy.ndarray of float, same shape as ``groups``. Identical to
+    :func:`build_sigma0_log` when neither override is set.
+    """
+    if (params.proposal_sigma_log_default is None
+            and not params.proposal_sigma_log_source):
+        return build_sigma0_log(groups, params)
+    default = (
+        params.sigma0_log_default
+        if params.proposal_sigma_log_default is None
+        else params.proposal_sigma_log_default
+    )
+    source = {**params.sigma0_log_source, **params.proposal_sigma_log_source}
+    out = np.full(len(groups), default, dtype=float)
+    for name, value in source.items():
+        out[groups == name] = value
+    return out
+
+
 def _check_shapes(kcat0: np.ndarray, sigma0_log: np.ndarray) -> None:
     if kcat0.shape != sigma0_log.shape:
         raise ValueError(
