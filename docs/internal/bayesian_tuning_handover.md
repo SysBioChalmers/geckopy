@@ -79,11 +79,11 @@ Never on RMSE alone. Report all of these, every time:
    Two runs in the penalty sweep looked parsimonious because they had
    stopped searching.
 
-6. **What it did to conditions it already fit.** The aggregate hides
-   sign changes: tuning improves badly-fit subsets four- to eight-fold
-   and degrades the well-fit subset two-fold, so an aggregate gain can
-   contain a real regression. Score the prior and the result on the
-   same subsets and report both.
+6. **What it did to conditions it already fit.** An aggregate gain can
+   hide a per-condition regression, so score the prior and the result
+   on the same conditions and report both. Subset a dataset by zeroing
+   weights, never by dropping rows: dropping a row unblocks that
+   condition's carbon source for every other row.
 
 `parsimony.py` computes 2-4 from saved `.npy` vectors, MATLAB's export
 included, without re-solving. `holdout.py` and `holdout_baseline.py` in
@@ -131,12 +131,13 @@ Two mechanisms exist but are **not** recommended:
 
 ## Known open problems
 
-0. **Generalisation is unmeasured except once, and that once is
-   negative.** Tuning on 23+6 conditions and scoring on the 10+2 held
-   back gives 4.1260 against the untuned 1.9292. That split holds out
-   the subset the prior fits best, so it is the least favourable case;
-   splits B and C are queued. Nothing in the method or the criteria
-   asks whether tuned kcats predict anything they were not fitted to.
+0. **Generalisation is unmeasured.** The first attempt measured a
+   harness bug instead -- dropping rows from a dataset unblocks the
+   carbon sources of the dropped conditions, so held-out scores were
+   wrong in both directions. `holdout.py` now splits by zeroing
+   weights and keeps every row; runs on the corrected splits are
+   queued. Nothing in the method or the criteria asks whether tuned
+   kcats predict conditions they were not fitted to.
 
 1. **The trust mask needs a second threshold and a seed.** 3e-4 is the
    only value run. Sweeping it traces mask size against fit the way
