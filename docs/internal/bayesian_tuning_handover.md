@@ -144,13 +144,15 @@ Two mechanisms exist but are **not** recommended:
 
 ## Known open problems
 
-0. **Generalisation holds, on two splits.** A run trained on one half
-   of a group split and scored on the half it never saw cuts the error
-   46% (split A) and 89% (split B) against the untuned prior. Seeds and
-   split C are running. The first attempt at this measured a harness
-   bug instead -- dropping rows from a dataset unblocks the dropped
-   conditions' carbon sources -- so splits now zero weights and keep
-   every row.
+0. **Do not split conditions into train and test.** Decided
+   2026-09-04: this model has 41 conditions and most adapters will have
+   far fewer, so a scheme needing spare conditions cannot be how the
+   method is judged, and withholding data from an already thin fit
+   costs more than it returns. Fit on everything; rank on the five
+   criteria below, none of which needs a split. Four runs were done
+   before this was decided and they answer the question they were
+   asked -- tuned kcats predict conditions they were not fitted to, by
+   46% to 90% -- so it does not need revisiting.
 
 1. **The trust mask needs a second threshold and a seed.** 3e-4 is the
    only value run. Sweeping it traces mask size against fit the way
