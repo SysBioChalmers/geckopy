@@ -90,6 +90,19 @@ included, without re-solving. `holdout.py` and `holdout_baseline.py` in
 the run scratch do 6, and `run_sigma.py` reports train, held-out and
 all-41 distances for a run trained on one half of a split.
 
+## The finding that reframes the rest
+
+Reverting a tuned vector to its K most impactful changes: **1 kcat
+gives 48% of the improvement, 3 give 80%, 40 give 96%**, and the
+remaining 3881 changes buy 4.3%. Masks admitting 62 to 4834 kcats all
+reach the same distance within seed noise.
+
+The head of the impact distribution is a short list of implausible
+database values -- lanosterol synthase at 0.0019 1/s carries 16.9% of
+all achievable improvement on its own. The tuner's real product on this
+dataset is a few dozen corrections, and it should be reported that way,
+with provenance, rather than as a 4834-long posterior.
+
 ## The target shape
 
 Few changes, each large, each load-bearing. Specifically **not** many

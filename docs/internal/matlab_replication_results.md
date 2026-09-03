@@ -682,6 +682,87 @@ proposal bandwidth. Separating the two -- a bandwidth reference
 independent of `sigma0_log` -- is the change that would let the priors
 carry their real values without destroying acceptance.
 
+## How many kcats does this data actually constrain?
+
+Restricting the search by the sigma-weighted identifiability screen,
+15 generations, seeds as marked:
+
+| mask | eligible | changed | RMSE | sd | seeds |
+|------|----------|---------|------|----|-------|
+| none | 4834 | 4787 | 1.0778 | - | 1 |
+| reach (FVA) | 3955 | 3910 | 1.0003 | 0.050 | 3 |
+| trust 1e-4 | 2491 | 2458 | 0.9832 | - | 1 |
+| trust 3e-4 | 1448 | 1437 | 0.9879 | 0.052 | 3 |
+| trust 1e-3 | 111 | 110 | 1.0598 | 0.073 | 3 |
+| **trust 3e-3** | **62** | **62** | **1.0852** | - | 2 |
+
+Across a 77-fold range in how many kcats may move, fit varies by 0.12
+against a seed spread of 0.05-0.07. Sixty-two kcats take the distance
+from 8.6002 to 1.09; 3910 take it to 1.00. The gap between the tightest
+and the loosest mask is roughly two standard errors -- suggestive, not
+established -- so the honest statement is that **mask size is not a
+lever on fit anywhere in the range tested**.
+
+### Where the fit actually comes from
+
+Take a tuned vector, revert all but its K most impactful changes, and
+score. Ranking is by the one-at-a-time screen, which never saw either
+result, so the ordering is not circular.
+
+| top K kept | reach@31, 3921 changed | % of gain | trust 1e-3, 110 changed | % of gain |
+|------------|------------------------|-----------|-------------------------|-----------|
+| 0 (prior) | 8.6002 | 0% | 8.6002 | 0% |
+| 1 | 4.8637 | **48.3%** | 5.0727 | 46.7% |
+| 3 | 2.4485 | **79.6%** | 2.9512 | 74.8% |
+| 5 | 1.9841 | 85.6% | 2.8246 | 76.4% |
+| 10 | 1.8080 | 87.9% | 2.7670 | 77.2% |
+| 20 | 1.4434 | 92.6% | 1.7586 | 90.6% |
+| 40 | 1.1985 | 95.7% | 1.3116 | 96.5% |
+| all | 0.8688 | 100% | 1.0446 | 100% |
+
+**One kcat carries half the improvement. Three carry 80%. Forty carry
+96%.** The other 3881 changes in `reach@31` buy the remaining 4.3%.
+
+### The kcats in question
+
+| rank | reaction | enzyme | source | kcat0 (1/s) | share |
+|------|----------|--------|--------|-------------|-------|
+| 1 | r_0698 | lanosterol synthase | brenda | **0.0019** | **16.9%** |
+| 2 | r_0109 | acetyl-CoA carboxylase | brenda | 1.23 | 4.4% |
+| 3 | r_0079 | phosphoribosylformylglycinamidine synthetase | brenda | 0.05 | 4.3% |
+| 4 | r_0486_EXP_2 | (custom) | custom | 29 | 2.8% |
+| 7 | r_1264 | succinate transport | okp | 12.3 | 2.0% |
+| 9 | r_1239 | oxaloacetate transport | okp | 17.3 | 1.8% |
+| 10-14 | r_0438_EXP_1..5 | five isozyme copies | okp | 54.3 | 5.8% |
+| 19 | r_0015 | diaminopyrimidinone reductase | brenda | 0.00067 | 0.6% |
+
+The head of the distribution is largely implausibly low BRENDA
+assignments creating artificial bottlenecks -- a lanosterol synthase at
+0.0019 1/s, a reductase at 0.00067 -- which every tuned vector raises
+by one to two orders of magnitude.
+
+The five isozyme copies of `r_0438` share a prior of 54.3 and receive
+1.4x, 141x, 6.7x, 1.6x and 184x from `reach@31`. They are
+interchangeable, so the search distributes values among them
+arbitrarily. That is unidentifiability made visible, in a single row.
+
+### What this means for the method
+
+On this dataset the tuner's product is a few dozen kcat corrections,
+dominated by a handful of bad database values. Everything downstream
+follows from the objective being flat past that point: mask size does
+not matter, seed spread (5%) exceeds every variant difference measured,
+change counts reproduce to 0.2% while fit does not, the prior penalty
+compressed magnitudes without reducing counts, and identical isozymes
+receive wildly different values.
+
+This does not make the method worthless -- it found the corrections,
+and the screen that ranks them is part of the same machinery. It does
+mean the result should be *reported* as those corrections, with their
+provenance, rather than as a 4834-long posterior. A reviewer can check
+whether lanosterol synthase is really 0.0019 1/s. Nobody can check
+3921 simultaneous changes.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
