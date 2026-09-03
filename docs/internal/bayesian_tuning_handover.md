@@ -73,8 +73,16 @@ Never on RMSE alone. Report all of these, every time:
    Two runs in the penalty sweep looked parsimonious because they had
    stopped searching.
 
+6. **What it did to conditions it already fit.** The aggregate hides
+   sign changes: tuning improves badly-fit subsets four- to eight-fold
+   and degrades the well-fit subset two-fold, so an aggregate gain can
+   contain a real regression. Score the prior and the result on the
+   same subsets and report both.
+
 `parsimony.py` computes 2-4 from saved `.npy` vectors, MATLAB's export
-included, without re-solving.
+included, without re-solving. `holdout.py` and `holdout_baseline.py` in
+the run scratch do 6, and `run_sigma.py` reports train, held-out and
+all-41 distances for a run trained on one half of a split.
 
 ## The target shape
 
@@ -116,6 +124,13 @@ Two mechanisms exist but are **not** recommended:
   without reporting all five criteria above.
 
 ## Known open problems
+
+0. **Generalisation is unmeasured except once, and that once is
+   negative.** Tuning on 23+6 conditions and scoring on the 10+2 held
+   back gives 4.1260 against the untuned 1.9292. That split holds out
+   the subset the prior fits best, so it is the least favourable case;
+   splits B and C are queued. Nothing in the method or the criteria
+   asks whether tuned kcats predict anything they were not fitted to.
 
 1. **The trust mask needs a second threshold and a seed.** 3e-4 is the
    only value run. Sweeping it traces mask size against fit the way
