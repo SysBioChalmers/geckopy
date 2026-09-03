@@ -323,20 +323,41 @@ compressed magnitude (7.55 -> 4.68 sigma) while leaving the count at
 98% of all kcats. They are complementary rather than alternatives,
 which is not how the penalty sweep framed them.
 
-The one datapoint on combining them is discouraging -- `sens3` plus
-lambda 0.01 stalled at generation 8 -- but that stacked two tight
-constraints at half budget. A loose mask with a mild penalty at full
-budget is a different proposition and is worth testing before either
-is adopted as a default.
+Combining them at full budget confirms this. `reach` plus lambda 0.01
+over 31 generations gives RMSE 0.9813 with 3910 changed at 4.31 sigma,
+against the mask alone at 0.8688 with 3921 changed at 7.55 sigma: the
+same count, nearly half the magnitude, for 13% of the fit. It is also
+the only run leaving whole groups untouched -- okp 31.8% unchanged,
+unlabelled 24.8%, brenda 14.8%, where every other run is near zero.
+
+The penalty still does not earn its place, because pruning the
+lambda 0 run dominates it on the fit/count frontier at every level:
+1920 changed at 0.9255 against the combination's 2158 at 1.1618, and
+2728 at 0.9297 against 2551 at 0.9491. If the criterion is how many
+kcats move, the penalty costs a hyperparameter and buys nothing.
 
 ### Recommendation
 
-Restrict to FVA-reachable kcats by default. It has no hyperparameter,
-it improves both axes simultaneously, and it removes a class of change
--- editing kcats no condition can constrain -- that is indefensible
-regardless of what the objective rewards. Report the sensitivity
-frontier alongside the result so the fit/parsimony trade-off is chosen
-explicitly rather than left implicit.
+**Restrict to FVA-reachable kcats, prune the result by the sensitivity
+screen, and leave `prior_penalty_weight` at 0.** No hyperparameter is
+added: the mask is derived from the model and the conditions, and the
+pruning threshold is an operating point on a reported curve rather than
+something tuned per model.
+
+| operating point | RMSE | changed |
+|-----------------|------|---------|
+| MATLAB | 0.8715 | ~4804 |
+| best fit (mask, no pruning) | **0.8688** | 3921 |
+| balanced (prune at 1e-3) | 0.9255 | 1920 |
+| sparse (prune at 3e-3) | 1.0124 | 301 |
+
+Every point beats MATLAB on parsimony; the first beats it on fit as
+well. Report the whole curve, not one row: the trade-off is a choice
+about the model, not a property of the algorithm.
+
+Restriction also removes a class of change -- editing kcats no
+condition can constrain -- that is indefensible regardless of what the
+objective rewards, which is a stronger argument for it than the RMSE.
 
 ## Open items
 
