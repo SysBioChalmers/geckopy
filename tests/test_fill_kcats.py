@@ -267,8 +267,8 @@ def test_filled_kcats_have_isozymes_source():
     fill_kcats_from_isozymes(ec_model, apply=False)
 
     assert _source(ec_model, "R2_EXP_2") == "isozymes"
-    # The source of the originally-set reaction should still be 'manual'.
-    assert _source(ec_model, "R2_EXP_1") == "manual"
+    # The source of the originally-set reaction should be untouched.
+    assert _source(ec_model, "R2_EXP_1") == "setKcatForReactions"
 
 
 def test_deprecated_alias_still_works():

@@ -55,7 +55,7 @@ def test_set_single_suffixed_rxn():
     updated = set_kcat_for_reactions(ec_model, ["R3"], 10.0, apply=False)
     assert updated == ["R3"]
     assert _kcat_at(ec_model, "R3") == 10.0
-    assert _source_at(ec_model, "R3") == "manual"
+    assert _source_at(ec_model, "R3") == "setKcatForReactions"
 
 
 def test_set_single_kcat_scalar_only_form():
@@ -102,12 +102,16 @@ def test_unsuffixed_rxn_with_scalar_kcat_broadcasts():
     assert _kcat_at(ec_model, "R2_EXP_2") == 7.5
 
 
-def test_unsuffixed_rxn_with_list_kcat_forbidden():
-    """Strict rule: un-suffixed ID expanding to multiple matches with a
-    length-N kcat list is forbidden."""
+def test_unsuffixed_rxn_with_list_kcat_assigns_positionally():
+    """raven-gecko-parity#77: an un-suffixed ID expanding to multiple
+    matches now accepts a length-N kcat list, assigning positionally in
+    ec.rxns order -- matching MATLAB setKcatForReactions exactly, not
+    refusing it."""
     ec_model = _ectestgem_ec_model()
-    with pytest.raises(ValueError, match="must be a scalar"):
-        set_kcat_for_reactions(ec_model, ["R2"], [1.0, 2.0], apply=False)
+    updated = set_kcat_for_reactions(ec_model, ["R2"], [1.0, 2.0], apply=False)
+    assert updated == ["R2_EXP_1", "R2_EXP_2"]
+    assert _kcat_at(ec_model, "R2_EXP_1") == 1.0
+    assert _kcat_at(ec_model, "R2_EXP_2") == 2.0
 
 
 def test_set_specific_isozyme_with_suffix():
@@ -245,10 +249,13 @@ def test_apply_only_updates_passed_reactions():
 # Source string
 # --------------------------------------------------------------------------- #
 
-def test_source_string_is_manual():
+def test_source_string_matches_matlab():
+    """raven-gecko-parity#77: ec.source reads 'setKcatForReactions',
+    matching MATLAB's actual assignment (its docstring says 'from
+    setKcatForReactions', but the real code writes the bare name)."""
     ec_model = _ectestgem_ec_model()
     set_kcat_for_reactions(ec_model, ["R3"], 10.0, apply=False)
-    assert _source_at(ec_model, "R3") == "manual"
+    assert _source_at(ec_model, "R3") == "setKcatForReactions"
 
 
 # --------------------------------------------------------------------------- #
@@ -277,7 +284,7 @@ def test_light_set_single_explicit_prefixed_id():
     updated = set_kcat_for_reactions(ec, ["001_R3"], 10.0, apply=False)
     assert updated == ["001_R3"]
     assert _kcat_at(ec, "001_R3") == 10.0
-    assert _source_at(ec, "001_R3") == "manual"
+    assert _source_at(ec, "001_R3") == "setKcatForReactions"
 
 
 def test_light_unsuffixed_id_expands_to_all_isozyme_rows():
@@ -292,12 +299,15 @@ def test_light_unsuffixed_id_expands_to_all_isozyme_rows():
     assert _kcat_at(ec, "002_R2_REV") == 0.0
 
 
-def test_light_unsuffixed_with_list_kcat_forbidden():
-    """Same strict rule as full: an un-suffixed ID that expands to
-    multiple matches must take a scalar kcat."""
+def test_light_unsuffixed_with_list_kcat_assigns_positionally():
+    """Same as the full-layout case: an un-suffixed ID that expands to
+    multiple matches now accepts a per-match kcat list, assigned
+    positionally in ec.rxns order."""
     ec = _ectestgem_light_ec_model()
-    with pytest.raises(ValueError, match="must be a scalar"):
-        set_kcat_for_reactions(ec, ["R2"], [1.0, 2.0], apply=False)
+    updated = set_kcat_for_reactions(ec, ["R2"], [1.0, 2.0], apply=False)
+    assert updated == ["001_R2", "002_R2"]
+    assert _kcat_at(ec, "001_R2") == 1.0
+    assert _kcat_at(ec, "002_R2") == 2.0
 
 
 def test_light_set_specific_isozyme_with_prefix():
