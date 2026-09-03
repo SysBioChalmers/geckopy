@@ -18,7 +18,6 @@ from pydantic import BaseModel
 from .params import ModelParameters
 
 _INJECTED_FIELDS = {"path"}  # loader injects at runtime, never in template
-_ADVANCED_SECTIONS = {"bayesian"}
 _REQUIRED_PLACEHOLDERS = {
     "conv_gem": '"models/REPLACE_ME.xml"',
     "org_name": '"REPLACE_ME"',
@@ -37,7 +36,7 @@ def _format_toml_value(value: Any) -> str | None:
         return f'"{value.as_posix()}"'
     if isinstance(value, (int, float)):
         return repr(value)
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         parts = [_format_toml_value(v) for v in value]
         if any(p is None for p in parts):
             return None
@@ -94,17 +93,16 @@ def _is_nested_model(annotation: Any) -> bool:
     return inspect.isclass(annotation) and issubclass(annotation, BaseModel)
 
 
-def generate_template_toml(
-    *, advanced: bool = False, project_name: str = "my-ecmodel",
-) -> str:
+def generate_template_toml(*, project_name: str = "my-ecmodel") -> str:
     """Generate a commented TOML template for a new ecModel project.
+
+    Every section of the schema is emitted, Bayesian kcat-tuning
+    hyperparameters included; optional fields are commented out at
+    their defaults, so the template doubles as the reference for what
+    can be set.
 
     Parameters
     ----------
-    advanced
-        Include the advanced sections (currently just Bayesian
-        kcat-tuning hyperparameters); omitted by default since most
-        projects never need to touch them.
     project_name
         Name written into the template's header comment.
 
@@ -147,11 +145,7 @@ def generate_template_toml(
                 required=False,
             ))
 
-    has_omitted_advanced = False
     for name, model_cls in sections:
-        if name in _ADVANCED_SECTIONS and not advanced:
-            has_omitted_advanced = True
-            continue
         lines.append(f"[{name}]")
         instance = model_cls()
         for sub_name, sub_field in model_cls.model_fields.items():
@@ -161,11 +155,5 @@ def generate_template_toml(
                 default_value=getattr(instance, sub_name),
                 required=False,
             ))
-
-    if has_omitted_advanced:
-        lines.extend([
-            "# Note: advanced sections (Bayesian kcat-tuning hyperparameters)",
-            "# are omitted by default. Regenerate with --advanced to include them.",
-        ])
 
     return "\n".join(lines) + "\n"
