@@ -611,75 +611,51 @@ proposition from declining to touch kcats no condition can constrain.
 Both are defensible; they are not the same argument, and the
 `sigma0_log` ranking is what decides between them.
 
-## Held-out conditions: what tuning does to data it did not fit
+## Held-out conditions: a harness bug, and what it cost
 
-Conditions are held out in groups -- a whole study of flux conditions,
-a whole carbon source of max-growth conditions -- because 30 of the 33
-flux conditions are glucose and ten of those sit within 0.32-0.39 1/h
-of each other, so a random row split leaves a near-duplicate of every
-held-out condition in the training set. Three splits, each vector
-scored on both halves:
+The first attempt at group splits produced held-out numbers that were
+all wrong, in both directions, and a conclusion that was backwards. It
+is recorded here because the failure is easy to repeat.
 
-| split | held out | prior | reach@31 | trust@31 |
-|-------|----------|-------|----------|----------|
-| A | AEM-1998 series, ethanol, acetate | **1.9292** | 3.9187 | 3.8738 |
-| B | DLKcat study, galactose, maltose | 13.6301 | 1.6652 | 1.6863 |
-| C | two small studies, mannose, sucrose | 5.7487 | 1.2205 | 1.2160 |
+`simulate_bayesian_dataset` blocks every exchange reaction named as a
+*condition* of the dataset it is handed, so that one row's carbon
+source cannot feed another row's simulation. The first `holdout.py`
+built a split by dropping rows. A max-growth dataset holding only
+ethanol and acetate therefore blocked only those two, leaving glucose,
+fructose, mannose, galactose, maltose and sucrose open -- and the model
+ate them while nominally growing on ethanol.
 
-Tuning compresses every subset toward roughly 1: subsets the prior fits
-badly improve by four- to eight-fold, and the one subset it fits well
-degrades by two. The aggregate 8.60 -> 0.87 is therefore a mix of
-genuine improvement and redistribution, and the balance depends on
-which conditions are asked about. A tuned model predicts the AEM-1998
-glucose series and ethanol/acetate growth *worse* than the untuned one.
+| max-growth condition | vector | full 8-condition set | 2-condition subset |
+|----------------------|--------|----------------------|--------------------|
+| ethanol | prior | 2.1098 | 0.4379 |
+| ethanol | reach@31 | **0.0683** | 11.9118 |
+| acetate | prior | 5.3360 | 1.5733 |
+| acetate | reach@31 | **3.7472** | 9.8942 |
 
-`reach@31` and `trust@31` were tuned on all 41 conditions, so neither
-column above is out-of-sample for them; the table shows where the
-objective spends its budget, not generalisation.
+Scored correctly, tuning *improves* maximum-growth prediction on both
+non-fermentable carbon sources -- ethanol thirty-fold. Scored through
+the subset it appeared to destroy them, because higher tuned kcats
+relax the enzyme constraint and let the leaked sugars be consumed,
+while the prior is too constrained to exploit them. The error inverted
+with the vector being scored, which is what made it look like a real
+effect.
 
-### The one real held-out measurement so far
+The arithmetic gave it away before the check did: per-condition values
+of 11.9 and 9.9 cannot sit inside `reach@31`'s aggregate of 0.8688,
+since `dataset_rmse` takes a plain mean over conditions and max-growth
+carries weight 1 of 3.
 
-One run has been tuned on a split's training half and scored on the
-half it never saw: shipped sigmas, FVA mask, 15 generations, split A.
+**The fix**: a split zeroes weights, never drops rows. Every condition
+stays in the dataset, so the blocked set is unchanged; the rows a half
+does not score get weight 0, and the scored rows are scaled by
+`n / n_scored` so the dataset mean still equals the mean over the
+scored rows alone.
 
-| | train (23+6) | held out (10+2) |
-|---|---|---|
-| prior | 10.9548 | 1.9292 |
-| tuned | 0.9734 | **4.1260** |
-
-It fits the conditions it saw eleven times better and the conditions it
-did not see twice worse than doing nothing. Reproducible: a second seed
-gives 0.9762 and 4.2159, within 2% on both axes.
-
-#### The aggregate hides two opposite effects
-
-Condition by condition, the held-out half splits cleanly:
-
-| held-out condition | prior | tuned | ratio |
-|--------------------|-------|-------|-------|
-| glucose, gr 0.025-0.100 (3 conditions) | 0.043-0.164 | unchanged | 1.00 |
-| glucose, gr 0.150-0.400 (7 conditions) | 0.67-8.18 | 0.22-1.69 | 0.17-0.32 |
-| **ethanol**, max growth | 0.4379 | **12.0853** | **27.6** |
-| **acetate**, max growth | 1.5733 | **10.1931** | 6.5 |
-
-Tuning generalises well within the glucose flux conditions -- three- to
-six-fold better on ten conditions it never saw, with the three lowest
-dilution rates untouched because the enzyme constraint does not bind
-there. The whole aggregate regression comes from two conditions:
-maximum growth on **ethanol and acetate**, the only non-fermentable
-carbon sources in the set, where the tuned model is 27-fold and 6.5-fold
-worse than the untuned one.
-
-This is a mechanistic failure, not a statistical one. Split A trains on
-six sugar carbon sources and holds out the two C2 substrates; with 30
-of the 33 flux conditions on glucose as well, nothing in the objective
-rewards preserving respiratory or gluconeogenic capability, and the
-search does not preserve it.
-
-The usable statement: **a tuned ecModel is better than the untuned one
-on carbon sources resembling its tuning data, and can be far worse on
-ones that do not.** That belongs in the method's user-facing
-documentation, not only here.
+Retracted with the bug: every held-out figure computed before it, the
+claim that tuning is worse than doing nothing on unseen conditions, and
+the "C2 collapse". Unaffected, because they never used a split: the
+seed spread, the impact concentration, the mask curve, the sigma stalls
+and the fold-change comparisons.
 
 ### Widening the priors stalls the search
 
