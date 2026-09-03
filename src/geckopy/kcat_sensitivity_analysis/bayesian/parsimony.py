@@ -56,6 +56,14 @@ def source_movement(
 ) -> dict[str, dict[str, float]]:
     """Median fold change and near-prior fraction, per source group.
 
+    Two medians are reported per source, separating how *many* kcats a
+    result moves from how *far* it moves them. ``median_fold`` is taken
+    over every kcat of the source; where most of a source sits at its
+    prior -- which a restrictive ``tunable_mask`` guarantees -- it
+    saturates at 1.0 and carries no information about the tier.
+    ``median_fold_moved`` conditions on the kcats that did move, and so
+    stays informative at any sparsity.
+
     Parameters
     ----------
     order
@@ -63,13 +71,15 @@ def source_movement(
         whether movement respects that ranking.
     near_tol
         A kcat within ``1 + near_tol`` fold of its prior counts as
-        untouched.
+        untouched, and is excluded from ``median_fold_moved``.
 
     Returns
     -------
-    dict keyed by source name, plus ``"_ordered"``: whether median fold
-    change is non-decreasing along ``order``, i.e. whether the result
-    moved trusted kcats less than untrusted ones.
+    dict keyed by source name, plus ``"_ordered"``: whether
+    ``median_fold_moved`` is non-decreasing along ``order``, i.e.
+    whether the result moved trusted kcats less far than untrusted
+    ones. A source with nothing moved reports ``median_fold_moved``
+    1.0 and takes no part in that check.
     """
     fold = fold_change(kcat, kcat0)
     groups = np.asarray(groups)
@@ -79,12 +89,16 @@ def source_movement(
         sel = groups == name
         if not sel.any():
             continue
-        med = float(np.median(fold[sel]))
-        medians.append(med)
+        moved = sel & (fold >= 1.0 + near_tol)
+        med_moved = float(np.median(fold[moved])) if moved.any() else 1.0
+        if moved.any():
+            medians.append(med_moved)
         out[name] = {
-            "median_fold": med,
+            "median_fold": float(np.median(fold[sel])),
+            "median_fold_moved": med_moved,
             "frac_near_prior": float(np.mean(fold[sel] < 1.0 + near_tol)),
             "n": int(sel.sum()),
+            "n_moved": int(moved.sum()),
         }
     out["_ordered"] = all(
         medians[i] <= medians[i + 1] for i in range(len(medians) - 1)
