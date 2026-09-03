@@ -611,91 +611,76 @@ proposition from declining to touch kcats no condition can constrain.
 Both are defensible; they are not the same argument, and the
 `sigma0_log` ranking is what decides between them.
 
-## Held-out conditions: a harness bug, and what it cost
+## Held-out conditions: not part of this method's evaluation
 
-The first attempt at group splits produced held-out numbers that were
-all wrong, in both directions, and a conclusion that was backwards. It
-is recorded here because the failure is easy to repeat.
+**Decided 2026-09-04: do not split conditions into training and test
+sets.** This model has 41 conditions and most adapters will have far
+fewer -- eight, five, sometimes one growth rate. A validation scheme
+that only works when conditions are plentiful cannot be part of how
+this method is judged, and holding conditions back from a fit that is
+already short of data makes the fit worse for no return.
 
-`simulate_bayesian_dataset` blocks every exchange reaction named as a
-*condition* of the dataset it is handed, so that one row's carbon
-source cannot feed another row's simulation. The first `holdout.py`
-built a split by dropping rows. A max-growth dataset holding only
-ethanol and acetate therefore blocked only those two, leaving glucose,
-fructose, mannose, galactose, maltose and sucrose open -- and the model
-ate them while nominally growing on ethanol.
+Evaluate on all conditions, and rank variants on the quantities that
+do not need a split: how many kcats a result changes, which ones, how
+far, whether the trust ranking is respected, the share of screened
+impact carried, and whether the objective stalled. Those are the five
+criteria in the hand-over, and none of them requires holding data back.
+
+The work already done in this direction is recorded below, both because
+it produced a usable answer and because it produced a bug worth not
+repeating. Nothing further is planned on it.
+
+### What it showed before being dropped
+
+Four runs, each fitted on part of a group split and scored on the
+conditions it never saw:
+
+| split | held out | untuned | tuned | reduction |
+|-------|----------|---------|-------|-----------|
+| A | 10 flux + 2 max-growth | 2.8353 | 1.5206 | 46% |
+| B seed 0 | 15 flux + 2 max-growth | 13.8744 | 1.4756 | 89% |
+| B seed 1 | 15 flux + 2 max-growth | 13.8744 | 1.5050 | 89% |
+| C seed 0 | 6 flux + 2 max-growth | 5.8874 | 0.6099 | 90% |
+
+Tuned kcats predict conditions they were not fitted to, in every split
+tried. That is worth knowing and does not need re-establishing.
+
+Note that split C scores better held out (0.6099) than in training
+(1.0465): the two halves differ in difficulty, and the untuned model
+scores 9.1434 against 5.8874 on them. A distance is only interpretable
+against the same conditions' own baseline.
+
+### The bug, so it is not repeated
+
+`simulate_bayesian_dataset` blocks every exchange named as a
+*condition* of the dataset it is handed, so one row's carbon source
+cannot feed another row's simulation. The first split implementation
+dropped rows, so a max-growth dataset holding only ethanol and acetate
+left the six sugar uptakes open and the model grew on those instead.
 
 | max-growth condition | vector | full 8-condition set | 2-condition subset |
 |----------------------|--------|----------------------|--------------------|
 | ethanol | prior | 2.1098 | 0.4379 |
 | ethanol | reach@31 | **0.0683** | 11.9118 |
 | acetate | prior | 5.3360 | 1.5733 |
-| acetate | reach@31 | **3.7472** | 9.8942 |
+| acetate | reach@31 | 3.7472 | 9.8942 |
 
-Scored correctly, tuning *improves* maximum-growth prediction on both
-non-fermentable carbon sources -- ethanol thirty-fold. Scored through
-the subset it appeared to destroy them, because higher tuned kcats
-relax the enzyme constraint and let the leaked sugars be consumed,
-while the prior is too constrained to exploit them. The error inverted
-with the vector being scored, which is what made it look like a real
-effect.
+The error reversed with the vector -- the prior is too constrained to
+exploit the leaked sugars, a tuned vector is not -- which made it look
+like a real effect and produced a confident, wrong conclusion that
+tuning destroys growth prediction on non-fermentable carbon sources.
+Scored correctly, tuning improves ethanol prediction thirty-fold.
 
-The arithmetic gave it away before the check did: per-condition values
-of 11.9 and 9.9 cannot sit inside `reach@31`'s aggregate of 0.8688,
-since `dataset_rmse` takes a plain mean over conditions and max-growth
-carries weight 1 of 3.
+Arithmetic caught it, not suspicion: per-condition values of 11.9 and
+9.9 cannot sit inside `reach@31`'s aggregate of 0.8688, because
+`dataset_rmse` takes a plain mean and max-growth carries weight 1 of 3.
+**Reconcile per-condition detail against the reported aggregate
+whenever a scoring path changes.** That check is free and would have
+caught this four hours earlier.
 
-**The fix**: a split zeroes weights, never drops rows. Every condition
-stays in the dataset, so the blocked set is unchanged; the rows a half
-does not score get weight 0, and the scored rows are scaled by
-`n / n_scored` so the dataset mean still equals the mean over the
-scored rows alone.
-
-Retracted with the bug: every held-out figure computed before it, the
-claim that tuning is worse than doing nothing on unseen conditions, and
-the "C2 collapse". Unaffected, because they never used a split: the
-seed spread, the impact concentration, the mask curve, the sigma stalls
-and the fold-change comparisons.
-
-### What the corrected splits say
-
-The prior's distance varies by a factor of five depending on which
-conditions are asked about, which is why a single aggregate hides so
-much:
-
-| split | held out | prior, train | prior, held out |
-|-------|----------|--------------|-----------------|
-| A | AEM-1998 series, ethanol, acetate | 10.9550 | 2.8353 |
-| B | DLKcat study, galactose, maltose | 4.3894 | 13.8744 |
-| C | two small studies, mannose, sucrose | 9.1434 | 5.8874 |
-
-Only the diagonal measures generalisation -- a vector scored on the
-half of *its own* split it never saw. Everything else in a
-split-by-split table is in-sample: `reach@31` and `trust@31` were tuned
-on all 41 conditions, and a vector trained on split A's training half
-has already seen the conditions split B holds out.
-
-| split | prior, held out | tuned on that split's training half | reduction |
-|-------|-----------------|-------------------------------------|-----------|
-| A | 2.8353 | 1.5206 | 46% |
-| B | 13.8744 | **1.4756** | **89%** |
-
-**Tuned kcats generalise.** On the conditions a run never saw, the
-error falls by half to nearly an order of magnitude. Fit on held-out
-conditions is worse than on training conditions (0.7608 against 1.4756
-for split B), which is expected; the comparison that matters is against
-doing nothing, and against that it wins clearly.
-
-Split B's row is the clean one -- trained with correct blocking on 18
-flux + 6 max-growth, scored on the 15 + 2 held back. Split A's vector
-was trained before the harness was fixed, so its training objective was
-itself slightly corrupted; its held-out score is computed correctly but
-the run behind it is not clean.
-
-This sits comfortably beside the ablation. A few dozen genuinely wrong
-kcats are being corrected, and correcting them helps on conditions the
-search never saw; the thousands of further changes are neither
-necessary nor harmful, merely unconstrained.
+The general lesson outlives the splits: subsetting a dataset changes
+what the simulation blocks. Any future need to score a subset should
+zero weights and keep every row, as `holdout.py` now does.
 
 ### Widening the priors stalls the search
 
