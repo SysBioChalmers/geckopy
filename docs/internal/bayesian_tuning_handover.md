@@ -133,6 +133,11 @@ numbers, but it carries a threshold of its own and rests on one seed
 and one threshold value. Adopt it once the seed sweep lands and a
 second threshold is on the curve.
 
+Two directions are closed and should not be reopened: **train/test
+splits over conditions** (most adapters have far fewer than 41
+conditions) and **widening the prior widths** (stalls when coupled,
+loses when decoupled).
+
 Two mechanisms exist but are **not** recommended:
 
 * `prior_penalty_weight` compresses how far kcats move rather than how
@@ -141,6 +146,12 @@ Two mechanisms exist but are **not** recommended:
 * `adapt_proposal_width` gives the best raw RMSE of any variant
   (0.8281) but scatters parameters badly. Off by default; do not enable
   without reporting all five criteria above.
+* **Widening `sigma0_log` is closed.** Coupled to the proposal it
+  stalls the sampler (acceptance 0.02, two seeds at x5, one at the
+  measured widths); decoupled it searches but still lands 74% worse
+  than the shipped widths while changing more kcats and moving them
+  further. The measured spreads are for *reporting* movement honestly,
+  not for sampling. Do not reopen this.
 
 ## Known open problems
 
