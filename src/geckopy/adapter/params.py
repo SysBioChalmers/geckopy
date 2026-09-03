@@ -83,59 +83,134 @@ class BayesianParams(BaseModel):
     """
     model_config = ConfigDict(extra="forbid")
 
-    sigma0_log_default: float = 0.5
+    sigma0_log_default: float = Field(
+        default=0.5,
+        description=(
+            "Prior standard deviation in log-space for kcats whose source "
+            "matches no source_groups entry."
+        ),
+    )
     source_groups: dict[str, SourceGroupRule] = Field(
         default_factory=lambda: {
             "dlkcat": SourceGroupRule(sources=["dlkcat"]),
             "brenda": SourceGroupRule(sources=["brenda"]),
             "custom": SourceGroupRule(sources=["custom"]),
-        }
+        },
+        description="Trust tiers: group name -> which ec.source values it covers.",
     )
     sigma0_log_source: dict[str, float] = Field(
-        default_factory=lambda: {"dlkcat": 0.4, "brenda": 0.2, "custom": 0.1}
+        default_factory=lambda: {"dlkcat": 0.4, "brenda": 0.2, "custom": 0.1},
+        description=(
+            "Prior log-space standard deviation per group. Lower is more "
+            "trusted, and narrows that group's proposal width."
+        ),
     )
 
-    shrink_thr_default: float = 1.5
+    shrink_thr_default: float = Field(
+        default=1.5,
+        description=(
+            "Deviation from prior, in sigma, at which the reported blend "
+            "follows the accepted particles instead of the prior."
+        ),
+    )
     shrink_thr_source: dict[str, float] = Field(
-        default_factory=lambda: {"dlkcat": 1.5, "brenda": 3.5, "custom": 5.5}
+        default_factory=lambda: {"dlkcat": 1.5, "brenda": 3.5, "custom": 5.5},
+        description="Per-group shrinkage threshold; higher resists change.",
     )
 
-    force_prior_thr_default: float = -1.0
+    force_prior_thr_default: float = Field(
+        default=-1.0,
+        description=(
+            "Deviation from prior, in sigma, above which the blend snaps a "
+            "kcat back to its prior. -1 never snaps."
+        ),
+    )
     force_prior_thr_source: dict[str, float] = Field(
-        default_factory=lambda: {"dlkcat": -1.0, "brenda": 4.0, "custom": 8.0}
+        default_factory=lambda: {"dlkcat": -1.0, "brenda": 4.0, "custom": 8.0},
+        description="Per-group snap-to-prior threshold.",
     )
-    sparsity_threshold: float = 0.5
+    sparsity_threshold: float = Field(
+        default=0.5,
+        description=(
+            "Deviation, in units of sigma0_log, below which the blend leaves "
+            "a kcat at its prior."
+        ),
+    )
 
-    schedule_generations: list[int] = Field(default_factory=lambda: [1, 2, 9, 15])
-    schedule_samples: list[int] = Field(default_factory=lambda: [1000, 800, 600, 400])
+    schedule_generations: list[int] = Field(
+        default_factory=lambda: [1, 2, 9, 15],
+        description="Generations at which the per-generation sample count changes.",
+    )
+    schedule_samples: list[int] = Field(
+        default_factory=lambda: [1000, 800, 600, 400],
+        description="Samples drawn per generation, one entry per schedule_generations entry.",
+    )
 
-    min_keep: float = 0.3
-    max_keep: float = 0.6
+    min_keep: float = Field(
+        default=0.3,
+        description="Smallest fraction of scored samples truncation selection keeps.",
+    )
+    max_keep: float = Field(
+        default=0.6,
+        description="Largest fraction of scored samples truncation selection keeps.",
+    )
 
-    rmse_threshold: float = 0.2
-    max_generations: int = 150
+    rmse_threshold: float = Field(
+        default=0.2,
+        description="Stop once the best RMSE reaches this; negative never stops early.",
+    )
+    max_generations: int = Field(
+        default=150, description="Hard cap on ABC-SMC generations.",
+    )
 
-    max_growth_weight: float = 1.0
+    max_growth_weight: float = Field(
+        default=1.0,
+        description=(
+            "Weight on the flux-data RMSE against the max-growth RMSE: "
+            "(w * rmse_flux + rmse_max_growth) / (w + 1)."
+        ),
+    )
 
-    # Proposal-width adaptation. Off by default: MATLAB has no such
-    # feedback, so enabling it is a deliberate departure from the
-    # faithful path (see docs/internal/matlab_replication_results.md).
     # Weight on a Gaussian prior term in the selection objective:
     # rmse + w * mean((log(k/k0) / sigma0_log)**2). Because sigma0_log
     # already encodes per-source confidence, this charges more for
     # moving a trusted kcat than an unlabelled one, making parsimony
     # part of what the search optimises rather than something applied
     # afterwards. 0 reproduces MATLAB, which has no prior term.
-    prior_penalty_weight: float = 0.0
+    prior_penalty_weight: float = Field(
+        default=0.0,
+        description=(
+            "Weight on a prior term in the selection objective, "
+            "rmse + w * mean((log(k/k0) / sigma0_log)**2). 0 scores on RMSE alone."
+        ),
+    )
 
-    adapt_proposal_width: bool = False
+    # Proposal-width adaptation. Off by default: MATLAB has no such
+    # feedback, so enabling it is a deliberate departure from the
+    # faithful path (see docs/internal/matlab_replication_results.md).
+    adapt_proposal_width: bool = Field(
+        default=False,
+        description=(
+            "Steer proposal width by the observed acceptance rate instead of "
+            "holding MATLAB's fixed blend of particle spread and prior width."
+        ),
+    )
     # Measured at the min_keep truncation threshold: with min_keep 0.3,
     # a generation whose proposals are neither better nor worse than the
     # carried set accepts about 0.3 of them, so this sits just below
     # neutral -- narrow when proposals stop landing, widen when they do.
-    target_accept_rate: float = 0.25
-    proposal_adaptation_rate: float = 2.0
-    proposal_scale_bounds: tuple[float, float] = (0.02, 2.0)
+    target_accept_rate: float = Field(
+        default=0.25,
+        description="Proposal acceptance rate adaptation steers towards.",
+    )
+    proposal_adaptation_rate: float = Field(
+        default=2.0,
+        description="How sharply proposal width responds to missing that rate.",
+    )
+    proposal_scale_bounds: tuple[float, float] = Field(
+        default=(0.02, 2.0),
+        description="Lower and upper clamp on the adapted proposal scale.",
+    )
 
     @model_validator(mode="after")
     def _check_group_keys_and_schedule_lengths(self) -> "BayesianParams":
