@@ -611,6 +611,74 @@ proposition from declining to touch kcats no condition can constrain.
 Both are defensible; they are not the same argument, and the
 `sigma0_log` ranking is what decides between them.
 
+## Held-out conditions: what tuning does to data it did not fit
+
+Conditions are held out in groups -- a whole study of flux conditions,
+a whole carbon source of max-growth conditions -- because 30 of the 33
+flux conditions are glucose and ten of those sit within 0.32-0.39 1/h
+of each other, so a random row split leaves a near-duplicate of every
+held-out condition in the training set. Three splits, each vector
+scored on both halves:
+
+| split | held out | prior | reach@31 | trust@31 |
+|-------|----------|-------|----------|----------|
+| A | AEM-1998 series, ethanol, acetate | **1.9292** | 3.9187 | 3.8738 |
+| B | DLKcat study, galactose, maltose | 13.6301 | 1.6652 | 1.6863 |
+| C | two small studies, mannose, sucrose | 5.7487 | 1.2205 | 1.2160 |
+
+Tuning compresses every subset toward roughly 1: subsets the prior fits
+badly improve by four- to eight-fold, and the one subset it fits well
+degrades by two. The aggregate 8.60 -> 0.87 is therefore a mix of
+genuine improvement and redistribution, and the balance depends on
+which conditions are asked about. A tuned model predicts the AEM-1998
+glucose series and ethanol/acetate growth *worse* than the untuned one.
+
+`reach@31` and `trust@31` were tuned on all 41 conditions, so neither
+column above is out-of-sample for them; the table shows where the
+objective spends its budget, not generalisation.
+
+### The one real held-out measurement so far
+
+One run has been tuned on a split's training half and scored on the
+half it never saw: shipped sigmas, FVA mask, 15 generations, split A.
+
+| | train (23+6) | held out (10+2) |
+|---|---|---|
+| prior | 10.9548 | 1.9292 |
+| tuned | 0.9734 | **4.1260** |
+
+It fits the conditions it saw eleven times better and the conditions it
+did not see twice worse than doing nothing. Split A is the least
+favourable case -- it holds out the subset the prior already fits best,
+so there is more to lose than to gain -- and runs on splits B and C are
+queued to settle whether the result is about generalisation or about
+those particular conditions.
+
+### Widening the priors stalls the search
+
+`sigma0_log` is both the prior width and the proposal bandwidth
+(`adapt_frac_early * std_obs + (1 - adapt_frac_early) * sigma0_log`,
+floored at `sigma_floor_frac * sigma0_log`). Multiplying it by 5
+collapses proposal acceptance from ~0.25 to 0.02 and freezes the
+objective at 3.0572 from generation 13 onward.
+
+| sigma set | train | held out (A) | acceptance | objective |
+|-----------|-------|--------------|------------|-----------|
+| shipped | 0.9734 | 4.1260 | ~0.25 | still moving |
+| shipped x5 | 3.0512 | 2.5452 | 0.02 | **frozen at gen 13** |
+
+The x5 run scores better on held-out data, and that is not a
+generalisation win: it barely moved, and on the one split where the
+prior beats every tuned vector, barely moving is the winning play. This
+is what criterion 5 exists to catch.
+
+The measured uncertainties (BRENDA transfers across organisms at a
+robust sd of 2.2 in log space, against the 0.2 asserted here) therefore
+cannot be adopted as prior widths while the same number sets the
+proposal bandwidth. Separating the two -- a bandwidth reference
+independent of `sigma0_log` -- is the change that would let the priors
+carry their real values without destroying acceptance.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
