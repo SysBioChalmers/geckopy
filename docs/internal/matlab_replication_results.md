@@ -370,7 +370,10 @@ objective rewards, which is a stronger argument for it than the RMSE.
 
 ## Movement by source, in fold changes
 
-Median fold change per source, most-trusted first:
+Median fold change per source, most-trusted first, over *every* kcat of
+the source (see "The FVA mask does not break the trust ranking after
+all" below for why this reading misleads once a mask is in play, and
+read the moved-only table there alongside it):
 
 | vector | custom | brenda | okp | unlabelled | ordered? |
 |--------|--------|--------|-----|------------|----------|
@@ -385,10 +388,12 @@ moves about two-fold at the median, with only ~9% left within 1.1x of
 prior, so "trusted kcats stay near their original values" is not yet
 true of any run here.
 
-The FVA mask **breaks the ranking**: it is source-blind, so removing
-879 unreachable kcats silently reweights which tiers dominate, and
-`okp` ends up moving less than `brenda`. `identifiability_mask` is the
-response -- it requires a kcat's measured effect to clear a bar
+The FVA mask appears to break the ranking here -- `okp` moving less
+than `brenda` -- but on the moved-only reading it does not; what it
+breaks is the ranking of how many kcats each source moves. It is
+source-blind, so removing 879 unreachable kcats reweights which tiers
+dominate without reference to how far a source is trusted.
+`identifiability_mask` is the response -- it requires a kcat's measured effect to clear a bar
 proportional to its own `sigma0_log`, so a `custom` kcat needs three
 times the effect of an unlabelled one before it is eligible to move at
 all. One global threshold; the per-source differentiation is derived
@@ -430,8 +435,91 @@ at a median 4.5 fold, carrying 69% of available impact, RMSE 1.0124
 against the prior's 8.6002 -- few, large, and demonstrably
 load-bearing, because the screen selected them by impact.
 
+## The trust-weighted mask
+
+`identifiability_mask` at threshold 3e-4 leaves **1448** of 4834 kcats
+eligible, against `reach`'s 3955. Because eligibility is
+`|dRMSE| * sigma0_log > threshold`, a `custom` kcat must show three
+times the measured effect of an unlabelled one to qualify. 31
+generations, seed 0, 53.5 min:
+
+| vector | RMSE | changed | impact | median fold (moved) |
+|--------|------|---------|--------|---------------------|
+| MATLAB best | 0.8715 | ~4804 | 99.8% | 4.32 |
+| reach@31 | **0.8688** | 3921 | 99.4% | 5.06 |
+| reach@31 pruned at 1e-3 | 0.9255 | 1920 | 94.5% | 4.98 |
+| reach@31 pruned at 3e-3 | 1.0124 | **301** | 69.1% | 4.48 |
+| **trust@31** | 0.8844 | **1433** | 88.5% | 3.69 |
+
+It **beats the pruned operating point on fit and count at once**: 1433
+changes at 0.8844 against 1920 at 0.9255. Its impact share is 6 points
+lower for 25% fewer changes, so per change it concentrates more of the
+screened effect, not less. Against the
+unpruned mask it gives up 1.8% of fit for 2.7x fewer changes. The
+search did not stall -- the trace was still stepping down at
+generation 29 of 31 (0.9100 -> 0.8844), and with `lambda` 0 the
+objective and RMSE traces coincide.
+
+Movement by source, among the kcats each result actually moved:
+
+| vector | custom | brenda | okp | unlabelled | ordered? |
+|--------|--------|--------|-----|------------|----------|
+| port unrestricted@31 | 1.83 | 3.71 | 5.32 | 7.96 | yes |
+| port reach@31 | 2.39 | 4.78 | 7.47 | 10.91 | yes |
+| **trust@31** | **2.49** | 3.45 | 4.40 | 7.47 | yes |
+
+and how much of each source it leaves alone:
+
+| vector | custom | brenda | okp | unlabelled |
+|--------|--------|--------|-----|------------|
+| port unrestricted@31 | 9.2% | 3.5% | 3.3% | 2.0% |
+| port reach@31 | 9.7% | 17.4% | 32.1% | 26.8% |
+| **trust@31** | **84.1%** | 71.0% | 72.0% | 62.2% |
+
+This is the first run in which trusted kcats are mostly untouched: 37
+of 207 `custom` kcats move, against 196 under the FVA mask alone. The
+tier gradient now appears where it belongs, in *how many* kcats a
+source is allowed to move -- 17.9% of `custom` against 38.6% of
+unlabelled -- rather than only in how far they travel.
+
+### The FVA mask does not break the trust ranking after all
+
+The claim above that `reach` inverts the ranking (`okp` moving less
+than `brenda`) came from a median taken over every kcat of a source.
+That statistic saturates at 1.00 as soon as most of a source sits at
+its prior, and it mixes count with magnitude. Among moved kcats
+`reach@31` is monotone -- 2.39, 4.78, 7.47, 10.91 -- so what it breaks
+is the ranking of *how many* kcats move per source (94.7% of `custom`
+against 68.9% of `okp`), not how far they move. `source_movement`
+reports both medians for this reason; read `median_fold_moved`
+alongside `n_moved`, never `median_fold` alone.
+
+The trust mask under the same reading has an ordering that is barely a
+gradient at the top (2.49 for `custom` against 3.45 for `brenda`),
+which is the honest version of the earlier "trust order respected:
+YES" -- that flag was computed from four medians all equal to 1.00 and
+meant nothing.
+
+### What is not yet established
+
+One seed. The reach-to-trust difference is 1.8% of RMSE, and the
+`corrected`/MATLAB traces cross each other repeatedly at that scale, so
+this comparison is not yet safe against sampler noise. Three seeds per
+mask at 15 generations are running; until they land, the ranking above
+is provisional and the dominance over the pruned point (which is the
+larger claim, 25% fewer changes at 4.4% better RMSE) is the more
+robust half of it.
+
+The threshold 3e-4 is also a hyperparameter, which the FVA mask is not.
+It buys the per-source differentiation, and it sets mask size the way
+the pruning threshold sets change count -- an operating point on a
+curve rather than a fitted value -- but the curve has one point on it
+so far.
+
 ## Open items
 
+0. **Seed spread**, in flight: three seeds per mask at 15 generations.
+   Everything ranked in this document rests on one seed each.
 1. **The blend is never scored or optimised.** MATLAB computes it every
    generation, reports its statistics, then discards it and returns the
    best particle; the port faithfully does the same. Nothing in either
