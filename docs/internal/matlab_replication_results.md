@@ -648,11 +648,38 @@ half it never saw: shipped sigmas, FVA mask, 15 generations, split A.
 | tuned | 0.9734 | **4.1260** |
 
 It fits the conditions it saw eleven times better and the conditions it
-did not see twice worse than doing nothing. Split A is the least
-favourable case -- it holds out the subset the prior already fits best,
-so there is more to lose than to gain -- and runs on splits B and C are
-queued to settle whether the result is about generalisation or about
-those particular conditions.
+did not see twice worse than doing nothing. Reproducible: a second seed
+gives 0.9762 and 4.2159, within 2% on both axes.
+
+#### The aggregate hides two opposite effects
+
+Condition by condition, the held-out half splits cleanly:
+
+| held-out condition | prior | tuned | ratio |
+|--------------------|-------|-------|-------|
+| glucose, gr 0.025-0.100 (3 conditions) | 0.043-0.164 | unchanged | 1.00 |
+| glucose, gr 0.150-0.400 (7 conditions) | 0.67-8.18 | 0.22-1.69 | 0.17-0.32 |
+| **ethanol**, max growth | 0.4379 | **12.0853** | **27.6** |
+| **acetate**, max growth | 1.5733 | **10.1931** | 6.5 |
+
+Tuning generalises well within the glucose flux conditions -- three- to
+six-fold better on ten conditions it never saw, with the three lowest
+dilution rates untouched because the enzyme constraint does not bind
+there. The whole aggregate regression comes from two conditions:
+maximum growth on **ethanol and acetate**, the only non-fermentable
+carbon sources in the set, where the tuned model is 27-fold and 6.5-fold
+worse than the untuned one.
+
+This is a mechanistic failure, not a statistical one. Split A trains on
+six sugar carbon sources and holds out the two C2 substrates; with 30
+of the 33 flux conditions on glucose as well, nothing in the objective
+rewards preserving respiratory or gluconeogenic capability, and the
+search does not preserve it.
+
+The usable statement: **a tuned ecModel is better than the untuned one
+on carbon sources resembling its tuning data, and can be far worse on
+ones that do not.** That belongs in the method's user-facing
+documentation, not only here.
 
 ### Widening the priors stalls the search
 
