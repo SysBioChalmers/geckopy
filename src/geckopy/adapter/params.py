@@ -181,8 +181,10 @@ class BayesianParams(BaseModel):
     max_growth_weight: float = Field(
         default=1.0,
         description=(
-            "Weight on the flux-data RMSE against the max-growth RMSE: "
-            "(w * rmse_flux + rmse_max_growth) / (w + 1)."
+            "Weight on the max-growth RMSE against the flux RMSE: "
+            "(rmse_flux + w * rmse_max_growth) / (w + 1). At 2 the "
+            "max-growth conditions count double. MATLAB weights the "
+            "flux term instead, so pass 0.5 to reproduce its 2."
         ),
     )
 

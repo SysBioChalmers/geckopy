@@ -396,10 +396,12 @@ def test_bayesian_distance_combines_both_datasets(tmp_path):
     assert "flux_data" in detail and "max_grate" in detail
 
 
-def test_bayesian_distance_max_growth_weight_scales_the_flux_term(tmp_path):
-    """MATLAB's ``abc_max.m`` applies ``weights = [maxGrowthWeight, 1]``
-    to ``values = [rmse_flux, rmse_maxGrate]``, so the weight scales the
-    *flux* term despite its name."""
+def test_bayesian_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
+    """``max_growth_weight`` scales the max-growth term, so 2 makes the
+    eight max-growth conditions count double against the 33 flux ones.
+
+    MATLAB's ``abc_max.m`` weights the flux term with the same field,
+    so reproducing its ``maxGrowthWeight = 2`` needs 0.5 here."""
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
     flux_data = _flux_data(ethanol_grrate=20.0)
@@ -432,6 +434,16 @@ def test_bayesian_distance_max_growth_weight_scales_the_flux_term(tmp_path):
         excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=2.0,
     )
     assert rmse == pytest.approx(
+        (expected_flux_rmse + 2.0 * expected_max_grate_rmse) / 3.0
+    )
+
+    # 0.5 reproduces MATLAB's maxGrowthWeight = 2, which weights flux.
+    rmse_matlab, _ = bayesian_distance(
+        bay_data,
+        flux_sims=flux_sims, max_grate_sims=max_grate_sims,
+        excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=0.5,
+    )
+    assert rmse_matlab == pytest.approx(
         (2.0 * expected_flux_rmse + expected_max_grate_rmse) / 3.0
     )
 
