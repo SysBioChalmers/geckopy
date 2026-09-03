@@ -657,6 +657,46 @@ the "C2 collapse". Unaffected, because they never used a split: the
 seed spread, the impact concentration, the mask curve, the sigma stalls
 and the fold-change comparisons.
 
+### What the corrected splits say
+
+The prior's distance varies by a factor of five depending on which
+conditions are asked about, which is why a single aggregate hides so
+much:
+
+| split | held out | prior, train | prior, held out |
+|-------|----------|--------------|-----------------|
+| A | AEM-1998 series, ethanol, acetate | 10.9550 | 2.8353 |
+| B | DLKcat study, galactose, maltose | 4.3894 | 13.8744 |
+| C | two small studies, mannose, sucrose | 9.1434 | 5.8874 |
+
+Only the diagonal measures generalisation -- a vector scored on the
+half of *its own* split it never saw. Everything else in a
+split-by-split table is in-sample: `reach@31` and `trust@31` were tuned
+on all 41 conditions, and a vector trained on split A's training half
+has already seen the conditions split B holds out.
+
+| split | prior, held out | tuned on that split's training half | reduction |
+|-------|-----------------|-------------------------------------|-----------|
+| A | 2.8353 | 1.5206 | 46% |
+| B | 13.8744 | **1.4756** | **89%** |
+
+**Tuned kcats generalise.** On the conditions a run never saw, the
+error falls by half to nearly an order of magnitude. Fit on held-out
+conditions is worse than on training conditions (0.7608 against 1.4756
+for split B), which is expected; the comparison that matters is against
+doing nothing, and against that it wins clearly.
+
+Split B's row is the clean one -- trained with correct blocking on 18
+flux + 6 max-growth, scored on the 15 + 2 held back. Split A's vector
+was trained before the harness was fixed, so its training objective was
+itself slightly corrupted; its held-out score is computed correctly but
+the run behind it is not clean.
+
+This sits comfortably beside the ablation. A few dozen genuinely wrong
+kcats are being corrected, and correcting them helps on conditions the
+search never saw; the thousands of further changes are neither
+necessary nor harmful, merely unconstrained.
+
 ### Widening the priors stalls the search
 
 `sigma0_log` is both the prior width and the proposal bandwidth
