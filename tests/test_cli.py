@@ -17,22 +17,24 @@ def test_generated_template_parses_as_toml():
     assert "sigma" not in parsed
 
 
-def test_template_without_advanced_excludes_bayesian():
-    text = generate_template_toml(advanced=False)
-    assert "[bayesian]" not in text
-    assert "advanced" in text.lower()
-
-
-def test_template_with_advanced_includes_bayesian():
-    text = generate_template_toml(advanced=True)
-    assert "[bayesian]" in text
-
-
 def test_template_includes_nested_sections():
     text = generate_template_toml()
     assert "[kegg]" in text
     assert "[uniprot]" in text
     assert "[complex]" in text
+    assert "[bayesian]" in text
+
+
+def test_template_renders_dict_valued_bayesian_fields():
+    """The Bayesian section carries per-source tables, not just scalars."""
+    text = generate_template_toml()
+    uncommented = "\n".join(
+        line.lstrip("# ") for line in text.splitlines()
+        if line.lstrip("# ").startswith(("sigma0_log_source", "source_groups"))
+    )
+    parsed = tomllib.loads(uncommented)
+    assert parsed["sigma0_log_source"]["brenda"] == 0.2
+    assert parsed["source_groups"]["brenda"]["sources"] == ["brenda"]
 
 
 def test_template_includes_field_descriptions_as_comments():
@@ -62,9 +64,9 @@ def test_cli_init_refuses_nonempty_folder(tmp_path, capsys):
     assert "not empty" in captured.err
 
 
-def test_cli_init_accepts_advanced_flag(tmp_path):
+def test_cli_init_scaffolds_the_bayesian_section(tmp_path):
     target = tmp_path / "my-ec"
-    main(["init", str(target), "--advanced"])
+    main(["init", str(target)])
     toml_text = (target / "model_adapter.toml").read_text()
     assert "[bayesian]" in toml_text
 
