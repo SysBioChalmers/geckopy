@@ -60,10 +60,16 @@ Never on RMSE alone. Report all of these, every time:
    the trust ranking is respected. Report `median_fold_moved` with
    `n_moved` beside it: a median over the whole source saturates at
    1.00 once a mask leaves most of it at prior, and then the ordering
-   check passes vacuously. Do *not* report movement in sigma units:
-   `sigma0_log` differs by source, so it divides out the tier being
-   examined and has already inverted one conclusion here. Only the
-   ranking of the sigmas is meaningful.
+   check passes vacuously.
+
+   Never report movement in sigma units. Dividing by `sigma0_log`
+   removes exactly the thing being examined, and it has now inverted
+   two readings: across sources, where sigma differs by tier, and
+   across configurations, where `mean_dev` made runs with 5x wider
+   priors look conservative (1.32 sigma against 5.36) while they were
+   in fact moving kcats further (median 3.88-fold against 3.22, and
+   6.52-fold for the measured widths). `mean_dev` is comparable only
+   within one sigma setting. Fold changes are comparable everywhere.
 4. **Impact share** -- the fraction of total screened `|dRMSE|` carried
    by the changed kcats. Distinguishes "few and consequential" from
    merely few. The blend changes 560 kcats but carries 28% of the
