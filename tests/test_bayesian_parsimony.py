@@ -112,3 +112,22 @@ def test_identifiability_mask_asks_more_of_trusted_sources():
     assert list(identifiability_mask(np.array([1e-2, 1e-2]), sigma0, 1.5e-4)) == [True, True]
     # And nothing qualifies under an unreachable bar.
     assert not identifiability_mask(drmse, sigma0, 1.0).any()
+
+
+def test_impact_share_rewards_changing_the_kcats_that_matter():
+    from geckopy.kcat_sensitivity_analysis.bayesian.parsimony import impact_share
+
+    kcat0 = np.ones(4)
+    drmse = np.array([1.0, 1.0, 0.01, 0.01])     # two matter, two barely
+
+    # Two changes, both load-bearing.
+    few_good = np.array([2.0, 2.0, 1.0, 1.0])
+    assert impact_share(few_good, kcat0, drmse) == pytest.approx(2.0 / 2.02)
+
+    # Two changes, neither load-bearing: same count, far less impact.
+    few_bad = np.array([1.0, 1.0, 2.0, 2.0])
+    assert impact_share(few_bad, kcat0, drmse) == pytest.approx(0.02 / 2.02)
+    assert impact_share(few_bad, kcat0, drmse) < impact_share(few_good, kcat0, drmse)
+
+    # Nothing changed carries nothing.
+    assert impact_share(kcat0, kcat0, drmse) == 0.0
