@@ -106,6 +106,21 @@ class BayesianParams(BaseModel):
         ),
     )
 
+    proposal_sigma_log_default: Optional[float] = Field(
+        default=None,
+        description=(
+            "Width used when proposing, when it should differ from "
+            "sigma0_log_default. Unset, proposals use sigma0_log."
+        ),
+    )
+    proposal_sigma_log_source: dict[str, float] = Field(
+        default_factory=dict,
+        description=(
+            "Per-group proposing width; groups left out fall back to "
+            "sigma0_log_source."
+        ),
+    )
+
     shrink_thr_default: float = Field(
         default=1.5,
         description=(
@@ -166,8 +181,10 @@ class BayesianParams(BaseModel):
     max_growth_weight: float = Field(
         default=1.0,
         description=(
-            "Weight on the flux-data RMSE against the max-growth RMSE: "
-            "(w * rmse_flux + rmse_max_growth) / (w + 1)."
+            "Weight on the max-growth RMSE against the flux RMSE: "
+            "(rmse_flux + w * rmse_max_growth) / (w + 1). At 2 the "
+            "max-growth conditions count double. MATLAB weights the "
+            "flux term instead, so pass 0.5 to reproduce its 2."
         ),
     )
 
@@ -230,6 +247,13 @@ class BayesianParams(BaseModel):
                     f"BayesianParams.{name} keys {sorted(keys)} must match "
                     f"source_groups keys {sorted(group_names)}."
                 )
+        extra = set(self.proposal_sigma_log_source) - group_names
+        if extra:
+            raise ValueError(
+                f"BayesianParams.proposal_sigma_log_source keys "
+                f"{sorted(extra)} are not source_groups keys "
+                f"{sorted(group_names)}."
+            )
         if len(self.schedule_generations) != len(self.schedule_samples):
             raise ValueError(
                 "BayesianParams.schedule_generations and schedule_samples "

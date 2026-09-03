@@ -93,7 +93,8 @@ from .data import BayesianData, load_bayesian_data
 from .diagnostics import GenerationDiagnostics, compute_generation_diagnostics
 from .distance import bayesian_distance, compute_excarbon
 from .posterior import PosteriorUpdate, update_posterior_shrinkage
-from .priors import build_kcat_prior, build_sigma0_log, classify_kcat_sources
+from .priors import (build_kcat_prior, build_proposal_sigma_log,
+                     build_sigma0_log, classify_kcat_sources)
 from .selection import next_quantile_epsilon, quantile_epsilon_select, truncation_select
 from .simulate import simulate_bayesian_dataset
 from .transition import GeckoTransition
@@ -291,6 +292,7 @@ def bayesian_kcat_tuning(
     sources = [model.ec.source[i] for i in tunable_idx]
     groups = classify_kcat_sources(sources, params, okp_method=okp_method)
     sigma0_log = build_sigma0_log(groups, params)
+    proposal_sigma_log = build_proposal_sigma_log(groups, params)
     n_params = len(kcat0)
     columns = [f"k{i}" for i in range(n_params)]
 
@@ -387,7 +389,7 @@ def bayesian_kcat_tuning(
             else:
                 X_df = pd.DataFrame(kcat_top.T, columns=columns)
                 transition = GeckoTransition(
-                    sigma0_log, bandwidth_scale=proposal_scale,
+                    proposal_sigma_log, bandwidth_scale=proposal_scale,
                 )
                 transition.fit(X_df, weights_top)
                 new_particles = transition.rvs_batch(n_new)
