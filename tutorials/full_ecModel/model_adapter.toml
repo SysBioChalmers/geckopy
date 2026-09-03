@@ -38,8 +38,9 @@ min_keep = 0.3
 max_keep = 0.6
 rmse_threshold = 0.2
 max_generations = 50
-# abc_max.m applies weights [maxGrowthWeight, 1] to [rmse_flux, rmse_maxGrate],
-# so despite the name it scales the flux term.
+# Weights the max-growth term: the eight max-growth conditions count double
+# against the 33 flux conditions, which are 30 parts glucose. MATLAB weights
+# the flux term with this field instead, so its maxGrowthWeight = 2 is 0.5 here.
 max_growth_weight = 2.0
 
 # Trust tiers, least to most trusted. This model labels predicted kcats

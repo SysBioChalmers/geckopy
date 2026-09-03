@@ -204,13 +204,18 @@ def bayesian_distance(
     Parameters
     ----------
     max_growth_weight
-        Relative weight of the *flux* dataset against the max-growth
-        dataset, giving ``(w * rmse_flux + rmse_max_grate) / (w + 1)``.
-        MATLAB's ``params.bayesian.maxGrowthWeight``, applied in
-        ``abc_max.m`` as ``weights = [maxGrowthWeight, 1]`` against
-        ``values = [rmse_flux, rmse_maxGrate]`` -- so despite the name
-        it scales the flux term. ``YeastGEMAdapter.m`` sets it to 2;
-        the default of 1 here reproduces a plain mean.
+        Relative weight of the max-growth dataset against the flux
+        dataset, giving ``(rmse_flux + w * rmse_max_grate) / (w + 1)``.
+        At 2 the eight max-growth conditions carry twice the weight of
+        the 33 flux conditions, which is the intended emphasis here:
+        the max-growth set is where the carbon-source diversity lives,
+        while 30 of the 33 flux conditions are glucose.
+
+        This is deliberately not MATLAB's convention. ``abc_max.m``
+        applies ``weights = [maxGrowthWeight, 1]`` to
+        ``[rmse_flux, rmse_maxGrate]``, so there the same field scales
+        the *flux* term. **A run reproducing MATLAB must pass 0.5
+        here** to match its ``maxGrowthWeight = 2``.
 
     Returns
     -------
@@ -234,7 +239,7 @@ def bayesian_distance(
             penalty=penalty,
         )
         parts.append(rmse)
-        weights.append(float(max_growth_weight))
+        weights.append(1.0)
         detail["flux_data"] = per_cond
 
     if bay_data.max_grate is not None:
@@ -246,7 +251,7 @@ def bayesian_distance(
             penalty=penalty,
         )
         parts.append(rmse)
-        weights.append(1.0)
+        weights.append(float(max_growth_weight))
         detail["max_grate"] = per_cond
 
     if parts:
