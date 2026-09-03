@@ -100,6 +100,35 @@ def test_source_movement_flags_whether_trust_order_is_respected():
     assert source_movement(bad, kcat0, groups, order)["_ordered"] is False
 
 
+def test_source_movement_reads_the_tier_when_most_kcats_are_untouched():
+    from geckopy.kcat_sensitivity_analysis.bayesian.parsimony import source_movement
+
+    kcat0 = np.ones(10)
+    groups = np.array(["custom"] * 5 + ["brenda"] * 5)
+    order = ["custom", "brenda"]
+
+    # One kcat moved per source, custom four-fold against brenda's two.
+    kcat = np.array([1.0, 1.0, 1.0, 1.0, 4.0, 1.0, 1.0, 1.0, 1.0, 2.0])
+    rep = source_movement(kcat, kcat0, groups, order)
+
+    # Over the whole source both medians sit at the prior and say
+    # nothing; conditioning on what moved shows custom moving furthest.
+    assert rep["custom"]["median_fold"] == pytest.approx(1.0)
+    assert rep["brenda"]["median_fold"] == pytest.approx(1.0)
+    assert rep["custom"]["median_fold_moved"] == pytest.approx(4.0)
+    assert rep["brenda"]["median_fold_moved"] == pytest.approx(2.0)
+    assert rep["custom"]["n_moved"] == 1
+    assert rep["_ordered"] is False
+
+    # A source with nothing moved reports 1.0 and does not decide the
+    # ordering on its own.
+    still = np.array([1.0] * 5 + [1.0, 1.0, 1.0, 1.0, 2.0])
+    rep = source_movement(still, kcat0, groups, order)
+    assert rep["custom"]["n_moved"] == 0
+    assert rep["custom"]["median_fold_moved"] == pytest.approx(1.0)
+    assert rep["_ordered"] is True
+
+
 def test_identifiability_mask_asks_more_of_trusted_sources():
     from geckopy.kcat_sensitivity_analysis.bayesian.parsimony import identifiability_mask
 
