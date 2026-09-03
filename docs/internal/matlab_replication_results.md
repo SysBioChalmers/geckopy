@@ -561,6 +561,56 @@ Measured at 15 generations. Whether spread narrows by generation 31 is
 unmeasured; until it is, a fit claim from one seed at any budget is an
 anecdote.
 
+## How concentrated the achievable fit is
+
+The one-at-a-time screen answers this without any tuning run. Over the
+3950 kcats it reaches, total `|dRMSE|` is 11.616, distributed with a
+max/median ratio of 1972:
+
+| impact captured | kcats needed | share of the model |
+|-----------------|--------------|--------------------|
+| 39.3% | top 10 | 0.2% |
+| 50% | top 24 | 0.5% |
+| 63.6% | top 110 | 2.3% |
+| 74.0% | top 500 | 10.3% |
+| 90% | top 1442 | 29.8% |
+| 99% | top 2511 | 51.9% |
+
+**Twenty-four kcats carry half the achievable improvement.** The
+remaining half is spread across thousands of parameters each worth
+about 1e-3 of RMSE, mutually substitutable as far as the distance is
+concerned.
+
+That is the mechanism behind the mask curve: past the first hundred
+parameters the objective is nearly flat, so a search with 3910 free
+kcats and one with 110 arrive at the same distance by different routes,
+and the extra 3800 changes are movement the data never asked for. It
+also explains why the prior penalty compressed magnitudes without
+reducing counts -- there is no pressure toward any particular sparse
+solution when so many are equivalent.
+
+### The top of the impact distribution is enriched in `custom`
+
+| source | share of top 110 by impact | share of the model |
+|--------|---------------------------|--------------------|
+| custom | **25.5%** | 4.3% |
+| brenda | 57.3% | 66.2% |
+| okp | 14.5% | 24.3% |
+| unlabelled | 2.7% | 5.3% |
+
+`custom` is six-fold over-represented among the highest-leverage kcats.
+The likely reason is selection: a curated kcat exists because someone
+found the model sensitive to it, so enrichment here is not evidence
+that curated values are wrong.
+
+It does sharpen what the trust mask is doing. Requiring `custom` to
+clear a bar three times higher excludes, disproportionately, the
+parameters with the most leverage -- so its parsimony is bought partly
+by declining to touch high-impact kcats, which is a different
+proposition from declining to touch kcats no condition can constrain.
+Both are defensible; they are not the same argument, and the
+`sigma0_log` ranking is what decides between them.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
