@@ -52,7 +52,9 @@ Never on RMSE alone. Report all of these, every time:
 
 1. **Plain RMSE**, comparable to MATLAB's 0.8715. Keep it plain even
    when selection optimises something else -- `rmse_trace` does this,
-   with `objective_trace` alongside.
+   with `objective_trace` alongside. One seed cannot support a fit
+   claim: spread between seeds is 5%. Report three, or report no fit
+   ranking.
 2. **Number of kcats changed** (>2% from prior).
 3. **Median fold change per source**, most-trusted first, and whether
    the trust ranking is respected. Report `median_fold_moved` with
@@ -87,9 +89,10 @@ cannot see. Current best answers:
 | balanced (FVA, pruned 1e-3) | 0.9255 | 1920 | 4.98 | 94.5% |
 | few and large (FVA, pruned 3e-3) | 1.0124 | **301** | 4.48 | 69.1% |
 
-All four beat MATLAB on parsimony; the first beats it on fit. The
-trust mask is off the others' trade-off curve: fewer changes and a
-better fit than the balanced point, at a slightly lower impact share.
+All four beat MATLAB on parsimony. Read the RMSE column as one draw
+from a distribution 5% wide: these rows are separated by parsimony,
+not by fit, and the trust mask changes the fewest kcats of any row that
+keeps impact share near 90%.
 
 ## Recommended method
 
@@ -124,11 +127,12 @@ Two mechanisms exist but are **not** recommended:
    Among moved kcats it respects the trust ranking; it changes 94.7%
    of `custom` against 68.9% of `okp`, which is where being
    source-blind shows. The trust mask addresses exactly this.
-3. **Seed spread.** Three seeds per mask at 15 generations are running
-   (`logs/seeds_latest.log`, ~2.5 h, `sweep_seeds.sh`). Until they
-   land, every ranking here rests on one seed per variant and
-   differences of a few percent -- the reach-to-trust gap included --
-   are not safe.
+3. **Seed spread is measured, and it invalidates the fit rankings.**
+   sd 0.050 (reach) and 0.052 (trust) over three seeds at 15
+   generations; the masks differ by 0.0125 +/- 0.0418. The port-vs-
+   MATLAB gap (4.3%), the B1 advantage (8.9%) and the whole penalty
+   sweep all sit inside that. Whether spread narrows at 31 generations
+   is unmeasured -- that is the cheap follow-up.
 4. **The blend is never scored or optimised**, in either
    implementation, and does not survive an impact-weighted reading.
    Whether to keep reporting it at all is an open question.
