@@ -273,6 +273,71 @@ the data cannot see, and nothing -- not the penalty, not the shrinkage,
 not the sparsity snap -- ever consults whether a parameter is
 identifiable at all.
 
+## Restricting the search to identifiable kcats
+
+`bayesian_kcat_tuning(tunable_mask=...)` holds excluded kcats at their
+prior. The FVA mask -- reactions able to carry flux in at least one of
+the 41 conditions -- has **no hyperparameters**: it is derived from the
+model and the dataset, not chosen.
+
+### It beats pruning afterwards, at every matched sparsity
+
+At equal budget (15 generations), restricting the search against
+reverting the unrestricted run by the same screen:
+
+| changed | prune afterwards | restrict the search |
+|---------|------------------|---------------------|
+| ~1920 | 1.2193 | **1.0978** |
+| ~2730 | 1.2015 | **1.0651** |
+| ~3915 | 1.0778 | **0.9427** |
+
+Restriction wins by 10-13% throughout. An earlier comparison appeared
+to show the opposite only because it set a 31-generation pruned run
+against 15-generation restricted ones; at equal budget the ordering is
+consistent. Deciding before the search which parameters the data can
+speak to beats tuning everything and discarding later, because the
+budget is spent where it counts instead of diffusing across dimensions
+that will be thrown away.
+
+### Result
+
+31 generations, FVA mask, no other change:
+
+| | RMSE | changed | mean dev |
+|---|------|---------|----------|
+| MATLAB | 0.8715 | ~4804 | 8.30 sigma |
+| port, unrestricted | 0.9093 | 4798 | 7.55 sigma |
+| **port, FVA-restricted** | **0.8688** | **3921** | 7.55 sigma |
+
+Better than MATLAB on fit and 883 fewer changed kcats, from a mask with
+nothing to tune. Pruning the restricted result by sensitivity then
+gives the frontier: 1920 changed at 0.9255, or 301 changed at 1.0124,
+against the prior's 8.6002.
+
+### Restriction and the penalty do different things
+
+The FVA-restricted run has mean dev 7.55 sigma -- identical to the
+unrestricted run. Restriction cut the *count* of changes without
+touching their magnitude. The prior penalty did the reverse: it
+compressed magnitude (7.55 -> 4.68 sigma) while leaving the count at
+98% of all kcats. They are complementary rather than alternatives,
+which is not how the penalty sweep framed them.
+
+The one datapoint on combining them is discouraging -- `sens3` plus
+lambda 0.01 stalled at generation 8 -- but that stacked two tight
+constraints at half budget. A loose mask with a mild penalty at full
+budget is a different proposition and is worth testing before either
+is adopted as a default.
+
+### Recommendation
+
+Restrict to FVA-reachable kcats by default. It has no hyperparameter,
+it improves both axes simultaneously, and it removes a class of change
+-- editing kcats no condition can constrain -- that is indefensible
+regardless of what the objective rewards. Report the sensitivity
+frontier alongside the result so the fit/parsimony trade-off is chosen
+explicitly rather than left implicit.
+
 ## Open items
 
 1. **The blend is never scored or optimised.** MATLAB computes it every
