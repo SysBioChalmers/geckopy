@@ -682,30 +682,45 @@ The general lesson outlives the splits: subsetting a dataset changes
 what the simulation blocks. Any future need to score a subset should
 zero weights and keep every row, as `holdout.py` now does.
 
-### Widening the priors stalls the search
+### Widening the prior widths: abandoned
 
-`sigma0_log` is both the prior width and the proposal bandwidth
-(`adapt_frac_early * std_obs + (1 - adapt_frac_early) * sigma0_log`,
-floored at `sigma_floor_frac * sigma0_log`). Multiplying it by 5
-collapses proposal acceptance from ~0.25 to 0.02 and freezes the
-objective at 3.0572 from generation 13 onward.
+**Decided 2026-09-04: do not widen `sigma0_log` beyond its shipped
+values, coupled to the proposal or not.** The measurement that
+motivated it stands -- a BRENDA kcat transferred across organisms is
+off by nine-fold at one standard deviation, against the 0.20 the model
+asserts -- but every attempt to act on it costs fit and returns
+nothing.
 
-| sigma set | train | held out (A) | acceptance | objective |
-|-----------|-------|--------------|------------|-----------|
-| shipped | 0.9734 | 4.1260 | ~0.25 | still moving |
-| shipped x5 | 3.0512 | 2.5452 | 0.02 | **frozen at gen 13** |
+All runs on the FVA mask, 15 generations, flux-weighted objective:
 
-The x5 run scores better on held-out data, and that is not a
-generalisation win: it barely moved, and on the one split where the
-prior beats every tuned vector, barely moving is the winning play. This
-is what criterion 5 exists to catch.
+| widths | coupled? | distance | changed | median fold | acceptance | outcome |
+|--------|----------|----------|---------|-------------|------------|---------|
+| shipped 0.30/0.25/0.20/0.10 | - | **1.0003 +/- 0.050** | 3910 | 3.22 | ~0.25 | baseline, 3 seeds |
+| shipped x5 | yes | 3.05, 2.70 | 3931 | 3.88 | 0.02 | stalled gen 13, gen 11 |
+| measured 2.5/1.5/1.5/0.4 | yes | 3.4355 | 3935 | 6.52 | 0.02 | stalled gen 10, infeasible LPs |
+| measured, proposal at shipped | no | 1.7397 | 3921 | - | 0.25 -> 0.10 | searches, still 74% worse |
 
-The measured uncertainties (BRENDA transfers across organisms at a
-robust sd of 2.2 in log space, against the 0.2 asserted here) therefore
-cannot be adopted as prior widths while the same number sets the
-proposal bandwidth. Separating the two -- a bandwidth reference
-independent of `sigma0_log` -- is the change that would let the priors
-carry their real values without destroying acceptance.
+Decoupling the proposal width from the prior width -- shipping
+`proposal_sigma_log_default`/`_source` for it -- removes the stall and
+recovers about two thirds of the deficit. It does not close it, and it
+does not improve parsimony either: the wide runs change *more* kcats
+than the baseline (3921-3935 against 3910) and move them further.
+
+Two reasons the remaining gap is structural rather than a tuning
+matter. The initial population is still drawn from `sigma0_log`
+(`tuning.py:383`), so wide priors scatter generation 1 across orders of
+magnitude and the search spends its budget recovering. And with
+`prior_penalty_weight` at 0, `sigma0_log` never enters the objective at
+all, so a wider prior cannot buy a better answer -- it can only change
+where the sampler looks.
+
+What the measurement is good for is reporting, not sampling. Movement
+of 5.06-fold reads as eight prior sigma under the asserted widths and
+0.74 sigma under the measured ones; the second is the honest figure and
+belongs in how results are described. It does not belong in the search.
+
+The decoupling stays in the package: it costs nothing when unset, and
+it separates two meanings that were wrongly sharing one field.
 
 ## How many kcats does this data actually constrain?
 
