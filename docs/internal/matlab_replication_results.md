@@ -563,33 +563,56 @@ anecdote.
 
 ## How concentrated the achievable fit is
 
-The one-at-a-time screen answers this without any tuning run. Over the
-3950 kcats it reaches, total `|dRMSE|` is 11.616, distributed with a
-max/median ratio of 1972:
+Measured by `screen.py`, which perturbs each reachable kcat by two-fold
+up and two-fold down, keeps the larger absolute change in the distance,
+and stores each perturbation's two dataset RMSEs separately so leverage
+under any weighting follows without re-simulating. 3952 kcats screened;
+23 minutes on 63 workers.
 
-| impact captured | kcats needed | share of the model |
-|-----------------|--------------|--------------------|
-| 39.3% | top 10 | 0.2% |
-| 50% | top 24 | 0.5% |
-| 63.6% | top 110 | 2.3% |
-| 74.0% | top 500 | 10.3% |
-| 90% | top 1442 | 29.8% |
-| 99% | top 2511 | 51.9% |
+| leverage captured | kcats, flux x2 | kcats, max growth x2 |
+|-------------------|----------------|----------------------|
+| 50% | **11** | **12** |
+| 83.7% / 84.3% | 110 | 110 |
+| 90% | 535 | **239** |
+| 99% | 3478 | 3293 |
 
-**Twenty-four kcats carry half the achievable improvement.** The
-remaining half is spread across thousands of parameters each worth
-about 1e-3 of RMSE, mutually substitutable as far as the distance is
-concerned.
+The largest single kcat is 6967x the median under the old weighting and
+12059x under the new. **Eleven or twelve kcats carry half the total
+leverage in a 4834-parameter model**, and 110 carry 84%.
 
-That is the mechanism behind the mask curve: past the first hundred
-parameters the objective is nearly flat, so a search with 3910 free
-kcats and one with 110 arrive at the same distance by different routes,
-and the extra 3800 changes are movement the data never asked for. It
-also explains why the prior penalty compressed magnitudes without
-reducing counts -- there is no pressure toward any particular sparse
-solution when so many are equivalent.
+Under the objective that weights max growth double the distribution is
+*more* concentrated, not less: 90% of the leverage sits in 239 kcats
+against 535. Weighting the eight max-growth conditions more heavily
+narrows the set of parameters the data can speak to.
 
-### The top of the impact distribution is enriched in `custom`
+These supersede the figures taken from `sensitivity.npy`, which read
+39.3% for the top 10 and 50% for the top 24. That file's perturbation
+step cannot be recovered -- no candidate step reproduces its values and
+unrelated kcats share the identical entry 0.00275, so its low end looks
+floored rather than measured. Its *ranking* was sound: it agrees with
+the new screen on 94 of the top 110, and the two objectives agree with
+each other at a rank correlation of 0.923, which is why the masks built
+on it selected sensible kcats and why nothing measured on 3 September
+needs revisiting on this account.
+
+### The top of the distribution is enriched in `custom`
+
+| source | share of top 110 by leverage | share of the model |
+|--------|------------------------------|--------------------|
+| custom | **22.7%** | 4.3% |
+| brenda | 57.3% | 66.2% |
+| okp | 17.3% | 24.3% |
+| unlabelled | 2.7% | 5.3% |
+
+`custom` is five-fold over-represented among the highest-leverage
+kcats. The likely reason is selection -- a kcat gets curated because
+someone found the model sensitive to it -- so this is not evidence that
+curated values are wrong. It does mean the trust mask, which makes
+`custom` clear a bar three times higher, buys part of its parsimony by
+declining to touch high-leverage parameters. That is a weaker argument
+than declining to touch parameters no condition can constrain.
+
+## The top of the impact distribution is enriched in `custom`
 
 | source | share of top 110 by impact | share of the model |
 |--------|---------------------------|--------------------|

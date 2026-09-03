@@ -86,7 +86,11 @@ Never on RMSE alone. Report all of these, every time:
    condition's carbon source for every other row.
 
 `parsimony.py` computes 2-4 from saved `.npy` vectors, MATLAB's export
-included, without re-solving. `holdout.py` and `holdout_baseline.py` in
+included, without re-solving. Leverage comes from
+`screen_components.npy` (written by `screen.py`), which stores each
+perturbation's two dataset RMSEs so any weighting is arithmetic. The
+older `sensitivity.npy` is superseded: its perturbation step cannot be
+reproduced, though its ranking agrees on 94 of the top 110. `holdout.py` and `holdout_baseline.py` in
 the run scratch do 6, and `run_sigma.py` reports train, held-out and
 all-41 distances for a run trained on one half of a split.
 
@@ -95,7 +99,9 @@ all-41 distances for a run trained on one half of a split.
 Reverting a tuned vector to its K most impactful changes: **1 kcat
 gives 48% of the improvement, 3 give 80%, 40 give 96%**, and the
 remaining 3881 changes buy 4.3%. Masks admitting 62 to 4834 kcats all
-reach the same distance within seed noise.
+reach the same distance within seed noise. The screen agrees from the
+other direction: **11 kcats carry half the total leverage** and 110
+carry 84%.
 
 The head of the impact distribution is a short list of implausible
 database values -- lanosterol synthase at 0.0019 1/s carries 16.9% of
