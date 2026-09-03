@@ -33,6 +33,88 @@ class FrontierPoint:
     rmse: float
 
 
+def fold_change(kcat: np.ndarray, kcat0: np.ndarray) -> np.ndarray:
+    """Per-kcat fold change from the prior, always >= 1.
+
+    ``max(k/k0, k0/k)``. Reported in preference to
+    :func:`movement_in_sigma` because ``sigma0_log`` differs by source
+    (0.10 for ``custom`` up to 0.30 for unlabelled), so dividing by it
+    hides the per-source behaviour: a vector that moves every source by
+    the same number of sigmas has moved the trusted ones three times
+    *less* in fold terms. Only the *ranking* of the sigmas across
+    sources is meaningful, not their absolute values.
+    """
+    return np.exp(np.abs(np.log(np.asarray(kcat, dtype=float) / kcat0)))
+
+
+def source_movement(
+    kcat: np.ndarray,
+    kcat0: np.ndarray,
+    groups: np.ndarray,
+    order: Sequence[str],
+    near_tol: float = 0.1,
+) -> dict[str, dict[str, float]]:
+    """Median fold change and near-prior fraction, per source group.
+
+    Parameters
+    ----------
+    order
+        Source names from most to least trusted. Used only to report
+        whether movement respects that ranking.
+    near_tol
+        A kcat within ``1 + near_tol`` fold of its prior counts as
+        untouched.
+
+    Returns
+    -------
+    dict keyed by source name, plus ``"_ordered"``: whether median fold
+    change is non-decreasing along ``order``, i.e. whether the result
+    moved trusted kcats less than untrusted ones.
+    """
+    fold = fold_change(kcat, kcat0)
+    groups = np.asarray(groups)
+    out: dict[str, dict[str, float]] = {}
+    medians = []
+    for name in order:
+        sel = groups == name
+        if not sel.any():
+            continue
+        med = float(np.median(fold[sel]))
+        medians.append(med)
+        out[name] = {
+            "median_fold": med,
+            "frac_near_prior": float(np.mean(fold[sel] < 1.0 + near_tol)),
+            "n": int(sel.sum()),
+        }
+    out["_ordered"] = all(
+        medians[i] <= medians[i + 1] for i in range(len(medians) - 1)
+    )
+    return out
+
+
+def identifiability_mask(
+    drmse: np.ndarray,
+    sigma0_log: np.ndarray,
+    threshold: float,
+) -> np.ndarray:
+    """Which kcats have earned the right to be tuned.
+
+    Keeps a kcat when ``|dRMSE| * sigma0_log > threshold``, where
+    ``dRMSE`` is its one-at-a-time effect on the distance. Multiplying
+    by ``sigma0_log`` makes a trusted source clear a proportionally
+    higher bar before it may move: with ``custom`` at 0.10 and
+    unlabelled at 0.30, a ``custom`` kcat needs three times the
+    measured effect of an unlabelled one to qualify.
+
+    This uses only the *ranking* of the sigmas across sources, which is
+    the part that carries meaning -- their absolute values are a
+    convention. One global ``threshold`` sets the overall strictness;
+    the per-source differentiation is derived, not tuned.
+    """
+    return (np.asarray(drmse, dtype=float)
+            * np.asarray(sigma0_log, dtype=float)) > threshold
+
+
 def movement_in_sigma(
     kcat: np.ndarray, kcat0: np.ndarray, sigma0_log: np.ndarray,
 ) -> np.ndarray:
