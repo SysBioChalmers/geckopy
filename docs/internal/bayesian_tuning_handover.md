@@ -33,9 +33,18 @@ conditions leaves 879 kcats unable to carry flux in any of them, and
 every unrestricted run changed ~873 of those. Nothing in the method
 asked whether a parameter was identifiable.
 
-**Best result to date**: FVA-restricted, 31 generations, RMSE **0.8688**
+**Best fit to date**: FVA-restricted, 31 generations, RMSE **0.8688**
 with 3921 kcats changed, against MATLAB's 0.8715 with ~4804. Better on
 both axes, from a mask with no hyperparameters.
+
+**Best result to date**: the trust-weighted mask
+(`identifiability_mask` at 3e-4, 1448 eligible), 31 generations, RMSE
+**0.8844** with **1433** changed and 88.5% impact share. It beats the
+pruned operating point below on fit and on count at once (1920 changed
+at 0.9255), while carrying 6 points less of the screened impact for
+25% fewer changes, and it is the first run that leaves trusted kcats
+alone -- 84% of `custom` within 1.1x of
+prior, against 10% under the FVA mask. Single seed; see open problem 3.
 
 ## How to judge any new strategy
 
@@ -46,10 +55,13 @@ Never on RMSE alone. Report all of these, every time:
    with `objective_trace` alongside.
 2. **Number of kcats changed** (>2% from prior).
 3. **Median fold change per source**, most-trusted first, and whether
-   the trust ranking is respected. Do *not* report movement in sigma
-   units: `sigma0_log` differs by source, so it divides out the tier
-   being examined and has already inverted one conclusion here. Only
-   the ranking of the sigmas is meaningful.
+   the trust ranking is respected. Report `median_fold_moved` with
+   `n_moved` beside it: a median over the whole source saturates at
+   1.00 once a mask leaves most of it at prior, and then the ordering
+   check passes vacuously. Do *not* report movement in sigma units:
+   `sigma0_log` differs by source, so it divides out the tier being
+   examined and has already inverted one conclusion here. Only the
+   ranking of the sigmas is meaningful.
 4. **Impact share** -- the fraction of total screened `|dRMSE|` carried
    by the changed kcats. Distinguishes "few and consequential" from
    merely few. The blend changes 560 kcats but carries 28% of the
@@ -70,11 +82,14 @@ cannot see. Current best answers:
 
 | operating point | RMSE | changed | median fold | impact |
 |-----------------|------|---------|-------------|--------|
-| best fit | 0.8688 | 3921 | 5.06 | 99.4% |
-| balanced | 0.9255 | 1920 | 4.98 | 94.5% |
-| few and large | 1.0124 | **301** | 4.48 | 69.1% |
+| best fit (FVA mask) | 0.8688 | 3921 | 5.06 | 99.4% |
+| **trust mask** | 0.8844 | **1433** | 3.69 | 88.5% |
+| balanced (FVA, pruned 1e-3) | 0.9255 | 1920 | 4.98 | 94.5% |
+| few and large (FVA, pruned 3e-3) | 1.0124 | **301** | 4.48 | 69.1% |
 
-All three beat MATLAB on parsimony; the first beats it on fit.
+All four beat MATLAB on parsimony; the first beats it on fit. The
+trust mask is off the others' trade-off curve: fewer changes and a
+better fit than the balanced point, at a slightly lower impact share.
 
 ## Recommended method
 
@@ -82,6 +97,11 @@ FVA-reachable mask, then prune the result by the sensitivity screen.
 `prior_penalty_weight` stays 0. No hyperparameter is added: the mask is
 derived from the model and conditions, and the pruning threshold is an
 operating point on a reported curve, not something tuned per model.
+
+The trust-weighted mask is the likely replacement and beats it on the
+numbers, but it carries a threshold of its own and rests on one seed
+and one threshold value. Adopt it once the seed sweep lands and a
+second threshold is on the curve.
 
 Two mechanisms exist but are **not** recommended:
 
@@ -94,22 +114,21 @@ Two mechanisms exist but are **not** recommended:
 
 ## Known open problems
 
-1. **`custom` kcats still move ~2-fold at the median**, with only ~9%
-   within 1.1x of prior. Least-moved of the four tiers, but not
-   "unchanged". `identifiability_mask` is the current attempt: it makes
-   a kcat clear a bar proportional to its own `sigma0_log`, so `custom`
-   needs 3x the measured effect of an unlabelled kcat to be eligible.
-   A 31-generation run at threshold 3e-4 (1448 eligible) was in flight
-   when this was written -- check
-   `logs/trust_*.log` in the run scratch for its result.
-2. **The FVA mask is source-blind and breaks the trust ranking** --
-   `okp` ends up moving less than `brenda`. Item 1 is the intended fix;
-   confirm it before adopting the plain FVA mask as a default.
-3. **Seed spread is unmeasured.** Every result is a single seed and
-   traces cross freely; differences under a few percent are not safe.
-   Three or four seeds at reduced `max_generations` would bound it
-   cheaply. This is the cheapest outstanding item and it gates the
-   confidence of everything above.
+1. **The trust mask needs a second threshold and a seed.** 3e-4 is the
+   only value run. Sweeping it traces mask size against fit the way
+   the pruning threshold traces change count, and turns the
+   hyperparameter into a reported curve. `custom` movement is largely
+   answered by it -- 84% within 1.1x of prior, 37 of 207 moved -- but
+   the 37 that move still move 2.49-fold at the median.
+2. **The FVA mask's ordering failure is in counts, not magnitudes.**
+   Among moved kcats it respects the trust ranking; it changes 94.7%
+   of `custom` against 68.9% of `okp`, which is where being
+   source-blind shows. The trust mask addresses exactly this.
+3. **Seed spread.** Three seeds per mask at 15 generations are running
+   (`logs/seeds_latest.log`, ~2.5 h, `sweep_seeds.sh`). Until they
+   land, every ranking here rests on one seed per variant and
+   differences of a few percent -- the reach-to-trust gap included --
+   are not safe.
 4. **The blend is never scored or optimised**, in either
    implementation, and does not survive an impact-weighted reading.
    Whether to keep reporting it at all is an open question.
@@ -133,7 +152,9 @@ A 31-generation run is ~65 min on 63 workers.
 
 Scripts used for the runs above live in the run scratch at
 `/cephyr/NOBACKUP/groups/compmeteng/geckopy-matlab-repl-64/`:
-`run_restricted.py` (masks, both axes reported), `parsimony.py`,
-`folds.py`, `settle.py`. They are working scripts, not part of the
+`run_restricted.py` (masks, seeds via `MR64_SEED`, all five criteria
+reported), `sweep_seeds.sh`, `parsimony.py`, `folds.py`, `settle.py`.
+The venv lives on node-local disk and dies with the allocation that
+built it; `build_venv_20.sh` rebuilds it in ~3 min. They are working scripts, not part of the
 package; the reusable parts are in
 `geckopy.kcat_sensitivity_analysis.bayesian.parsimony`.
