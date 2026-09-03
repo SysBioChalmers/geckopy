@@ -102,11 +102,20 @@ unlabelled.
 | port blend (B1) | 3.4627 | 41.8% | 5.25 sigma | 78.7% |
 
 **Every best particle moves the average kcat about eight prior standard
-deviations, and moves them indiscriminately.** MATLAB's moves `custom`
--- the most trusted tier -- hardest of all (8.95 sigma). These vectors
-have no claim to being posteriors; their RMSE only shows that 4834 free
-parameters can fit 41 conditions. The port and MATLAB behave
-identically here, so this is a property of the method, not of the port.
+deviations.** These vectors have no claim to being posteriors; their
+RMSE only shows that 4834 free parameters can fit 41 conditions. The
+port and MATLAB behave identically here, so this is a property of the
+method, not of the port.
+
+An earlier version of this section read the sigma figures as saying
+MATLAB moves `custom` -- the most trusted tier -- hardest of all. That
+was an artifact of the normalisation and is **wrong**: `sigma0_log` is
+0.10 for `custom` and 0.30 for unlabelled, so equal movement in sigma
+units is a three-fold *smaller* change for `custom`. In fold terms the
+tiering works, and works in the right direction (see "Movement by
+source" below). Report fold changes, not sigma multiples: only the
+*ranking* of the sigmas across sources carries meaning, their absolute
+values are a convention.
 
 The blend is the vector that honours the principle: `custom` untouched
 entirely, `brenda` barely moved, what movement there is concentrated in
@@ -358,6 +367,68 @@ about the model, not a property of the algorithm.
 Restriction also removes a class of change -- editing kcats no
 condition can constrain -- that is indefensible regardless of what the
 objective rewards, which is a stronger argument for it than the RMSE.
+
+## Movement by source, in fold changes
+
+Median fold change per source, most-trusted first:
+
+| vector | custom | brenda | okp | unlabelled | ordered? |
+|--------|--------|--------|-----|------------|----------|
+| MATLAB best | 2.13 | 3.98 | 6.37 | 6.36 | ~ |
+| port unrestricted@31 | **1.81** | 3.69 | 5.25 | 7.96 | **yes** |
+| port reach@31 | 2.21 | 3.62 | 2.87 | 5.84 | no |
+| port reach+lambda@31 | 1.47 | 2.11 | 1.74 | 2.32 | no |
+
+The unrestricted port respects the trust ranking monotonically and
+moves `custom` less than MATLAB's own result does. But `custom` still
+moves about two-fold at the median, with only ~9% left within 1.1x of
+prior, so "trusted kcats stay near their original values" is not yet
+true of any run here.
+
+The FVA mask **breaks the ranking**: it is source-blind, so removing
+879 unreachable kcats silently reweights which tiers dominate, and
+`okp` ends up moving less than `brenda`. `identifiability_mask` is the
+response -- it requires a kcat's measured effect to clear a bar
+proportional to its own `sigma0_log`, so a `custom` kcat needs three
+times the effect of an unlabelled one before it is eligible to move at
+all. One global threshold; the per-source differentiation is derived
+from the sigma ranking rather than tuned.
+
+## Few and consequential, not merely few
+
+The goal is a small number of *impactful* changes, not a small number
+of changes. `impact_share` reports the fraction of total screened
+`|dRMSE|` carried by whatever a result changed:
+
+| vector | changed | median fold | >2x | impact share |
+|--------|---------|-------------|-----|--------------|
+| MATLAB best | 4804 | 4.32 | 76% | 99.8% |
+| MATLAB blend | 560 | 2.87 | 87% | **27.7%** |
+| port reach@31 | 3921 | 5.06 | 78% | 99.4% |
+| port reach+lambda@31 | 3910 | **2.58** | 61% | 99.6% |
+| **reach@31 pruned at 3e-3** | **301** | **4.48** | 73% | **69.1%** |
+| reach@31 pruned at 1e-3 | 1920 | 4.98 | 79% | 94.5% |
+
+Two conclusions that reverse earlier advice in this document.
+
+**The prior penalty is contraindicated.** It produces precisely the
+unwanted shape: 3910 kcats changed at a median of 2.58 fold, only 61%
+of them beyond two-fold. Many values nudged. It was already not
+recommended on parsimony grounds; on impact it is worse than neutral
+and should be dropped from the design rather than kept as a knob.
+
+**The blend is worse than it looks.** 560 changes at 2.87 fold, but
+carrying only 27.7% of the available impact: it is changing kcats the
+data barely responds to while leaving load-bearing ones at their
+priors. It has appeared defensible throughout because it scores well on
+*count*. It does not survive an impact-weighted reading, which
+undercuts the "blend is the principled posterior" framing in
+`bayesian_tuning_plan.md`.
+
+Sensitivity pruning gives the wanted shape directly: 301 kcats changed
+at a median 4.5 fold, carrying 69% of available impact, RMSE 1.0124
+against the prior's 8.6002 -- few, large, and demonstrably
+load-bearing, because the screen selected them by impact.
 
 ## Open items
 
