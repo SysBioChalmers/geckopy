@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 _EXP_SUFFIX_PATTERN = re.compile(r"_EXP_\d+$")
 _LIGHT_PREFIX_PATTERN = re.compile(r"^\d{3}_")
-_SOURCE_TAG = "manual"
+_SOURCE_TAG = "setKcatForReactions"
 
 
 def set_kcat_for_reactions(
@@ -40,18 +40,25 @@ def set_kcat_for_reactions(
       model, ``"R2"`` matches ``001_R2``, ``002_R2``.
 
     The ``kcat`` argument follows numpy-style broadcasting: a single
-    float applies to every matched reaction; a sequence must match the
-    total number of matched reactions across all ``rxn_ids``.
+    float applies to every matched reaction; a sequence of length
+    ``len(rxn_ids)`` gives one value per input ID (broadcast across
+    that ID's own matches); a sequence of length equal to the total
+    number of matched reactions gives one value per resolved match, in
+    ``ec.rxns`` order.
 
-    Strict rule: when one un-suffixed ``rxn_id`` expands to multiple
-    matches (isozymes), the kcat value for that ID must be a scalar.
-    Passing a length-N kcat list to cover N expansions implicitly
-    relies on the order of ``ec.rxns``, which is fragile. To set
-    different values for different isozymes, pass the suffixed IDs
-    explicitly.
+    That last form lets one un-suffixed ``rxn_id`` that expands to
+    multiple isozymes take a list of per-isozyme values, matching
+    MATLAB ``setKcatForReactions``'s positional semantics exactly:
+    values are assigned to matches in whatever order they occur in
+    ``ec.rxns``, with no check that this is the order the caller
+    intended. This is real but fragile as an API surface -- prefer
+    passing the suffixed reaction IDs explicitly when the mapping
+    matters, so intent doesn't depend on ``ec.rxns``'s row order.
 
-    ``ec.source`` is set to ``"manual"`` for every reaction changed by
-    this call.
+    ``ec.source`` is set to ``"setKcatForReactions"`` for every
+    reaction changed by this call, matching MATLAB's ``ec.source``
+    label (its own docstring says ``'from setKcatForReactions'``, but
+    the actual assignment writes the bare function name).
 
     Parameters
     ----------
@@ -76,9 +83,9 @@ def set_kcat_for_reactions(
     Raises
     ------
     ValueError
-        If any rxn_id matches zero reactions, or if kcat lengths do not
-        match, or if an un-suffixed rxn_id expands to multiple matches
-        but its kcat is given as a list.
+        If any rxn_id matches zero reactions, or if kcat has a length
+        other than 1, ``len(rxn_ids)``, or the total number of resolved
+        matches.
     """
     rxn_ids = list(rxn_ids)
     if not rxn_ids:
@@ -116,23 +123,18 @@ def set_kcat_for_reactions(
         kcat_per_index = [float(kcat)] * total_matches
     else:
         kcat_seq = list(kcat)
-        # kcat_seq has length len(rxn_ids) (one value per input ID, each
-        # of which may broadcast to multiple matches), or length
-        # total_matches (one value per resolved index, only allowed when
-        # every input has a single match).
+        # kcat_seq has length len(rxn_ids) (one value per input ID,
+        # broadcast across that ID's own matches), or length
+        # total_matches (one value per resolved match, in ec.rxns
+        # order -- MATLAB setKcatForReactions's positional semantics;
+        # see the docstring's fragility note). When every input matches
+        # exactly one row the two are the same list, so there's no
+        # ambiguity between them.
         if len(kcat_seq) == len(rxn_ids):
             kcat_per_index = []
             for value, indices in zip(kcat_seq, matches_per_input):
                 kcat_per_index.extend([float(value)] * len(indices))
         elif len(kcat_seq) == total_matches:
-            for rxn_id, indices in zip(rxn_ids, matches_per_input):
-                if len(indices) > 1:
-                    raise ValueError(
-                        f"rxn_id '{rxn_id}' expands to {len(indices)} "
-                        f"isozymes; kcat for it must be a scalar. To set "
-                        f"different values per isozyme, pass the suffixed "
-                        f"reaction IDs explicitly."
-                    )
             kcat_per_index = [float(v) for v in kcat_seq]
         else:
             raise ValueError(
