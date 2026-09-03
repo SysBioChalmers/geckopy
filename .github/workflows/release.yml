@@ -1,14 +1,18 @@
 name: release
 
 # Builds a wheel + sdist when a release is published, attaches them to
-# the GitHub release, and (commented-out below) would publish to PyPI.
+# the GitHub release, and publishes to PyPI via Trusted Publishing (OIDC,
+# no stored token).
 #
-# PyPI publishing is intentionally NOT enabled yet: the `geckopy` name
-# is currently taken on PyPI by another project. Once the name is
-# released or transferred, uncomment the `pypi-publish` job and add a
-# `PYPI_API_TOKEN` repository secret (or configure trusted publishing
-# at https://pypi.org/manage/account/publishing/ and switch the
-# pypa/gh-action-pypi-publish step to OIDC).
+# One-time setup required before this can succeed (not done by this file):
+# 1. Register trusted publishing for the `geckopy` project at
+#    https://pypi.org/manage/project/geckopy/settings/publishing/ , pointing
+#    at this repo, workflow filename `release.yml`, and environment `pypi`.
+# 2. Create a `pypi` environment in this repo's Settings -> Environments.
+# Also note: geckopy's `raven-toolbox` dependency is currently a git direct
+# reference (see pyproject.toml), which PyPI rejects on upload -- the
+# pypi-publish job below will fail until that's switched to a released
+# version pin.
 
 on:
   release:
@@ -53,17 +57,17 @@ jobs:
         with:
           files: dist/*
 
-  # pypi-publish:
-  #   name: Publish to PyPI
-  #   needs: build
-  #   if: github.event_name == 'release'
-  #   runs-on: ubuntu-latest
-  #   environment: pypi  # configure in repo settings -> Environments
-  #   permissions:
-  #     id-token: write  # OIDC trusted publishing; no API token needed
-  #   steps:
-  #     - uses: actions/download-artifact@v8
-  #       with:
-  #         name: dist
-  #         path: dist/
-  #     - uses: pypa/gh-action-pypi-publish@release/v1
+  pypi-publish:
+    name: Publish to PyPI
+    needs: build
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: pypi  # configure in repo settings -> Environments
+    permissions:
+      id-token: write  # OIDC trusted publishing; no API token needed
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

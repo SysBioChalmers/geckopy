@@ -43,8 +43,10 @@ dependencies = [
     "pydantic>=2",
     # raven-toolbox provides the underlying model-manipulation primitives geckopy
     # extends, plus the ecModel YAML I/O (raven_toolbox.io.ec_data.EcData and the
-    # ec-rxns / ec-enzymes / gecko_light sections in read/write_yaml_model). Not
-    # yet on PyPI; pinned to the SysBioChalmers develop branch.
+    # ec-rxns / ec-enzymes / gecko_light sections in read/write_yaml_model).
+    # raven-toolbox 0.4.0 is on PyPI, but geckopy currently needs a develop-only
+    # addition (convert_to_irreversible(..., rxns=...), added for #42) that
+    # hasn't been released yet -- pinned to develop until that ships.
     "raven-toolbox @ git+https://github.com/SysBioChalmers/raven-toolbox.git@develop",
     "requests>=2.28",
     "ruamel.yaml>=0.17",
@@ -75,10 +77,9 @@ geckopy = "geckopy.cli:main"
 [tool.hatch.metadata]
 # Allow `raven-toolbox @ git+https://...` (PEP 508 direct URL) in
 # project.dependencies. hatchling refuses direct references by default
-# because PyPI rejects sdists that contain them — geckopy can't go on
-# PyPI yet anyway (name is taken), and raven-toolbox isn't on PyPI yet
-# either, so the git URL is the only option for the alpha series.
-# Re-evaluate when raven-toolbox ships to PyPI.
+# because PyPI rejects sdists that contain them. Re-evaluate once
+# raven-toolbox ships the `convert_to_irreversible(rxns=...)` addition
+# in a release and geckopy can pin a version instead.
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
