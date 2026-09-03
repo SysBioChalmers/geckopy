@@ -5,6 +5,7 @@ dist/
 build/
 .eggs/
 .venv/
+.venv-win/
 .env
 *.egg
 .pytest_cache/
