@@ -465,8 +465,8 @@ Movement by source, among the kcats each result actually moved:
 | vector | custom | brenda | okp | unlabelled | ordered? |
 |--------|--------|--------|-----|------------|----------|
 | port unrestricted@31 | 1.83 | 3.71 | 5.32 | 7.96 | yes |
-| port reach@31 | 2.39 | 4.78 | 7.47 | 10.91 | yes |
-| **trust@31** | **2.49** | 3.45 | 4.40 | 7.47 | yes |
+| port reach@31 | 2.52 | 4.98 | 7.67 | 11.45 | yes |
+| **trust@31** | **2.70** | 3.65 | 4.51 | 7.57 | yes |
 
 and how much of each source it leaves alone:
 
@@ -488,33 +488,78 @@ The claim above that `reach` inverts the ranking (`okp` moving less
 than `brenda`) came from a median taken over every kcat of a source.
 That statistic saturates at 1.00 as soon as most of a source sits at
 its prior, and it mixes count with magnitude. Among moved kcats
-`reach@31` is monotone -- 2.39, 4.78, 7.47, 10.91 -- so what it breaks
+`reach@31` is monotone -- 2.52, 4.98, 7.67, 11.45 -- so what it breaks
 is the ranking of *how many* kcats move per source (94.7% of `custom`
 against 68.9% of `okp`), not how far they move. `source_movement`
 reports both medians for this reason; read `median_fold_moved`
 alongside `n_moved`, never `median_fold` alone.
 
+Every mask run here passes on that reading -- unrestricted, all three
+sensitivity screens, and both trust thresholds -- so no mask inverts
+the trust ranking in magnitude; they differ only in the counts.
+
 The trust mask under the same reading has an ordering that is barely a
 gradient at the top (2.49 for `custom` against 3.45 for `brenda`),
-which is the honest version of the earlier "trust order respected:
+which is the honest version of the bare "trust order respected:
 YES" -- that flag was computed from four medians all equal to 1.00 and
 meant nothing.
 
 ### What is not yet established
 
-One seed. The reach-to-trust difference is 1.8% of RMSE, and the
-`corrected`/MATLAB traces cross each other repeatedly at that scale, so
-this comparison is not yet safe against sampler noise. Three seeds per
-mask at 15 generations are running; until they land, the ranking above
-is provisional and the dominance over the pruned point (which is the
-larger claim, 25% fewer changes at 4.4% better RMSE) is the more
-robust half of it.
+The 1.8% fit difference from `reach` is noise -- see "Seed spread"
+below, which measured 5% spread between seeds of one configuration.
+The mask neither wins nor loses on fit; it wins on count, which is the
+reproducible axis.
 
 The threshold 3e-4 is also a hyperparameter, which the FVA mask is not.
 It buys the per-source differentiation, and it sets mask size the way
 the pruning threshold sets change count -- an operating point on a
 curve rather than a fitted value -- but the curve has one point on it
 so far.
+
+## Seed spread: what one run can and cannot show
+
+Three seeds per mask, 15 generations, everything else fixed.
+
+| mask | seed 0 | seed 1 | seed 2 | mean | sd | changed |
+|------|--------|--------|--------|------|----|---------|
+| reach | 0.9427 | 1.0324 | 1.0259 | 1.0003 | 0.0500 | 3910 +/- 5.5 |
+| trust (3e-4) | 1.0353 | 0.9968 | 0.9317 | 0.9879 | 0.0524 | 1437 +/- 2.5 |
+
+**Fit is not reproducible to better than about 5%; change count is
+reproducible to 0.2%.** The two masks differ by 0.0125 +/- 0.0418 in
+mean RMSE -- indistinguishable -- while differing by a factor of 2.7 in
+how many kcats they move, and each mask's change count is stable across
+seeds to a handful of parameters.
+
+For two *single* runs the difference of RMSE carries sd ~0.071, so a
+one-seed gap below roughly 0.14 says nothing. That threshold is larger
+than most differences this document has ranked:
+
+| comparison | gap | verdict |
+|------------|-----|---------|
+| trust vs reach @31 | 0.0156 (1.8%) | noise |
+| port vs MATLAB @31 | 0.0378 (4.3%) | noise |
+| B1 adaptive vs corrected @31 | 0.0812 (8.9%) | noise |
+| prior-penalty sweep, between lambdas | <= 0.13 | noise |
+| trust vs reach @15 | 0.0926 (9.8%) | noise |
+
+The parsimony findings are unaffected, because they rest on quantities
+that *are* reproducible: change counts, impact share, the per-source
+movement pattern, and -- most of all -- mechanism. "This mask forbids
+editing kcats no condition can constrain" is an argument about what the
+search may touch, not a measured 2% of RMSE.
+
+What this costs: the headline "the port reaches 0.9093 against MATLAB's
+0.8715" is not evidence of a shortfall, and "B1 gives the best raw RMSE
+of any variant" is not evidence that it searches better. Both need
+seeds before they mean anything. What it buys: the trust mask no longer
+has to defend a fit deficit, because at equal budget it does not have
+one -- 1437 changes for the same distance as 3910.
+
+Measured at 15 generations. Whether spread narrows by generation 31 is
+unmeasured; until it is, a fit claim from one seed at any budget is an
+anecdote.
 
 ## Open items
 
