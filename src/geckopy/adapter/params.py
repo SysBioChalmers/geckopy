@@ -106,52 +106,6 @@ class BayesianParams(BaseModel):
         ),
     )
 
-    proposal_sigma_log_default: Optional[float] = Field(
-        default=None,
-        description=(
-            "Width used when proposing, when it should differ from "
-            "sigma0_log_default. Unset, proposals use sigma0_log."
-        ),
-    )
-    proposal_sigma_log_source: dict[str, float] = Field(
-        default_factory=dict,
-        description=(
-            "Per-group proposing width; groups left out fall back to "
-            "sigma0_log_source."
-        ),
-    )
-
-    shrink_thr_default: float = Field(
-        default=1.5,
-        description=(
-            "Deviation from prior, in sigma, at which the reported blend "
-            "follows the accepted particles instead of the prior."
-        ),
-    )
-    shrink_thr_source: dict[str, float] = Field(
-        default_factory=lambda: {"dlkcat": 1.5, "brenda": 3.5, "custom": 5.5},
-        description="Per-group shrinkage threshold; higher resists change.",
-    )
-
-    force_prior_thr_default: float = Field(
-        default=-1.0,
-        description=(
-            "Deviation from prior, in sigma, above which the blend snaps a "
-            "kcat back to its prior. -1 never snaps."
-        ),
-    )
-    force_prior_thr_source: dict[str, float] = Field(
-        default_factory=lambda: {"dlkcat": -1.0, "brenda": 4.0, "custom": 8.0},
-        description="Per-group snap-to-prior threshold.",
-    )
-    sparsity_threshold: float = Field(
-        default=0.5,
-        description=(
-            "Deviation, in units of sigma0_log, below which the blend leaves "
-            "a kcat at its prior."
-        ),
-    )
-
     schedule_generations: list[int] = Field(
         default_factory=lambda: [1, 2, 9, 15],
         description="Generations at which the per-generation sample count changes.",
@@ -193,7 +147,7 @@ class BayesianParams(BaseModel):
     # already encodes per-source confidence, this charges more for
     # moving a trusted kcat than an unlabelled one, making parsimony
     # part of what the search optimises rather than something applied
-    # afterwards. 0 reproduces MATLAB, which has no prior term.
+    # afterwards. 0 scores on RMSE alone.
     prior_penalty_weight: float = Field(
         default=0.0,
         description=(
@@ -202,31 +156,13 @@ class BayesianParams(BaseModel):
         ),
     )
 
-    # Proposal-width adaptation. Off by default: MATLAB has no such
-    # feedback, so enabling it is a deliberate departure from the
-    # faithful path (see docs/internal/matlab_replication_results.md).
-    adapt_proposal_width: bool = Field(
+    tie_isozymes: bool = Field(
         default=False,
         description=(
-            "Steer proposal width by the observed acceptance rate instead of "
-            "holding MATLAB's fixed blend of particle spread and prior width."
+            "Give isozyme copies of one reaction a single kcat when they "
+            "share a prior value and a source, so the search cannot invent "
+            "a distinction the kcat assignment never made."
         ),
-    )
-    # Measured at the min_keep truncation threshold: with min_keep 0.3,
-    # a generation whose proposals are neither better nor worse than the
-    # carried set accepts about 0.3 of them, so this sits just below
-    # neutral -- narrow when proposals stop landing, widen when they do.
-    target_accept_rate: float = Field(
-        default=0.25,
-        description="Proposal acceptance rate adaptation steers towards.",
-    )
-    proposal_adaptation_rate: float = Field(
-        default=2.0,
-        description="How sharply proposal width responds to missing that rate.",
-    )
-    proposal_scale_bounds: tuple[float, float] = Field(
-        default=(0.02, 2.0),
-        description="Lower and upper clamp on the adapted proposal scale.",
     )
 
     @model_validator(mode="after")
@@ -236,24 +172,13 @@ class BayesianParams(BaseModel):
         other; otherwise a downstream lookup silently falls back to a
         default or a positional zip silently mismatches."""
         group_names = set(self.source_groups)
-        for name in (
-            "sigma0_log_source",
-            "shrink_thr_source",
-            "force_prior_thr_source",
-        ):
+        for name in ("sigma0_log_source",):
             keys = set(getattr(self, name))
             if keys != group_names:
                 raise ValueError(
                     f"BayesianParams.{name} keys {sorted(keys)} must match "
                     f"source_groups keys {sorted(group_names)}."
                 )
-        extra = set(self.proposal_sigma_log_source) - group_names
-        if extra:
-            raise ValueError(
-                f"BayesianParams.proposal_sigma_log_source keys "
-                f"{sorted(extra)} are not source_groups keys "
-                f"{sorted(group_names)}."
-            )
         if len(self.schedule_generations) != len(self.schedule_samples):
             raise ValueError(
                 "BayesianParams.schedule_generations and schedule_samples "

@@ -21,8 +21,6 @@ def _params() -> BayesianParams:
             "okp": SourceGroupRule(match_okp=True),
         },
         sigma0_log_source={"dlkcat": 0.4, "brenda": 0.2, "okp": 0.3},
-        shrink_thr_source={"dlkcat": 1.5, "brenda": 3.5, "okp": 2.0},
-        force_prior_thr_source={"dlkcat": -1.0, "brenda": 4.0, "okp": 1.0},
     )
 
 
@@ -120,62 +118,3 @@ def test_build_kcat_prior_rejects_shape_mismatch():
     with pytest.raises(ValueError, match="same shape"):
         build_kcat_prior(np.array([1.0, 2.0]), np.array([0.4]))
 
-
-# --------------------------------------------------------------------------- #
-
-
-def test_proposal_sigma_log_defaults_to_the_prior_width():
-    from geckopy.adapter.params import BayesianParams, SourceGroupRule
-    from geckopy.kcat_sensitivity_analysis.bayesian.priors import (
-        build_proposal_sigma_log, build_sigma0_log)
-
-    params = BayesianParams(
-        sigma0_log_default=0.3,
-        source_groups={"brenda": SourceGroupRule(sources=["brenda"]),
-                       "custom": SourceGroupRule(sources=["custom"])},
-        sigma0_log_source={"brenda": 0.2, "custom": 0.1},
-        shrink_thr_source={"brenda": 3.5, "custom": 5.5},
-        force_prior_thr_source={"brenda": 4.0, "custom": 8.0},
-    )
-    groups = np.array(["brenda", "custom", "unlabelled"])
-    assert np.array_equal(build_proposal_sigma_log(groups, params),
-                          build_sigma0_log(groups, params))
-
-
-def test_proposal_sigma_log_overrides_leave_the_prior_alone():
-    """Widening the prior widens every proposal unless the two are split."""
-    from geckopy.adapter.params import BayesianParams, SourceGroupRule
-    from geckopy.kcat_sensitivity_analysis.bayesian.priors import (
-        build_proposal_sigma_log, build_sigma0_log)
-
-    params = BayesianParams(
-        sigma0_log_default=2.5,
-        source_groups={"brenda": SourceGroupRule(sources=["brenda"]),
-                       "custom": SourceGroupRule(sources=["custom"])},
-        sigma0_log_source={"brenda": 1.5, "custom": 0.4},
-        shrink_thr_source={"brenda": 3.5, "custom": 5.5},
-        force_prior_thr_source={"brenda": 4.0, "custom": 8.0},
-        proposal_sigma_log_default=0.3,
-        proposal_sigma_log_source={"brenda": 0.2},
-    )
-    groups = np.array(["brenda", "custom", "unlabelled"])
-
-    # The prior keeps the measured widths.
-    assert list(build_sigma0_log(groups, params)) == [1.5, 0.4, 2.5]
-    # Proposals use the override, and custom -- absent from it -- keeps
-    # its sigma0_log_source value rather than the proposal default.
-    assert list(build_proposal_sigma_log(groups, params)) == [0.2, 0.4, 0.3]
-
-
-def test_proposal_sigma_log_source_rejects_unknown_groups():
-    import pytest
-    from geckopy.adapter.params import BayesianParams, SourceGroupRule
-
-    with pytest.raises(ValueError, match="not source_groups keys"):
-        BayesianParams(
-            source_groups={"brenda": SourceGroupRule(sources=["brenda"])},
-            sigma0_log_source={"brenda": 0.2},
-            shrink_thr_source={"brenda": 3.5},
-            force_prior_thr_source={"brenda": 4.0},
-            proposal_sigma_log_source={"typo": 0.2},
-        )
