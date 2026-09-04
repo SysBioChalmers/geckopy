@@ -826,6 +826,60 @@ provenance, rather than as a 4834-long posterior. A reviewer can check
 whether lanosterol synthase is really 0.0019 1/s. Nobody can check
 3921 simultaneous changes.
 
+## Re-baselining under max growth weighted double
+
+`max_growth_weight` was changed on 2026-09-04 to weight the max-growth
+term, so 2 makes the eight max-growth conditions count double against
+the 33 flux conditions. Every result before that date used the opposite
+emphasis, which is 0.5 under the new convention. The untuned model
+scores 8.4043 under the new objective against 8.6002 under the old.
+
+Masks for these runs come from `screen_components.npy` evaluated at the
+same weighting, so the mask selects for the objective being minimised.
+Thresholds were chosen to admit the same mask sizes as the 3 September
+curve.
+
+### Re-optimising for the new objective gains nothing
+
+| mask | fitted to old, scored old | fitted to old, scored new | fitted to new, scored new |
+|------|---------------------------|---------------------------|---------------------------|
+| reach, 31 gen | 0.8688 | **0.9727** | **0.9822** |
+| trust, 31 gen | 0.8844 | **0.9501** | **0.9891** |
+
+A vector fitted to the old objective scores *better* on the new
+objective than one fitted to the new objective does, for both masks.
+The differences -- 0.010 and 0.039 -- sit inside the 0.05 seed spread,
+so the honest statement is that **65 minutes of re-optimisation
+recovers nothing over simply rescoring the old result.** The weighting
+is not a lever on what the tuner produces.
+
+That is consistent with the screen: leverage under the two weightings
+correlates at 0.923, so both objectives ask about substantially the
+same parameters and both find them.
+
+### The two masks under the new objective
+
+| | reach | trust 3e-5 |
+|---|-------|-----------|
+| eligible | 3955 | 1461 |
+| distance | 0.9822 | 0.9891 |
+| kcats changed | 3925 | **1451** |
+| impact share | 98.8% | 95.4% |
+| median fold moved, custom / brenda / okp / unlabelled | 2.41 / 4.70 / 6.71 / 14.50 | 2.20 / 4.07 / 5.97 / 7.71 |
+| curated kcats within 1.1x of prior | 10.1% | **66.7%** |
+| stalled | no | no |
+
+The masks are 0.007 apart on fit -- indistinguishable -- while the
+trust mask changes 2.7 times fewer kcats and leaves two thirds of the
+curated values alone against a tenth. That is the same result the old
+objective gave (0.0156 apart, 2.7x fewer changes), reproduced without
+reordering.
+
+Its impact share is higher here than on 3 September, 95.4% against
+88.5%, because the replacement screen is more concentrated: the same
+1451 changes cover more of a leverage distribution whose top 110
+entries carry 84% rather than 64%.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
