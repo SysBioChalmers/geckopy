@@ -21,9 +21,6 @@ Parameterised by one swappable axis:
 Particles carry uniform weights, and per-source regularization is
 carried entirely by the priors: each source group's ``sigma0_log``
 sets how far a kcat can drift, and
-``posterior.update_posterior_shrinkage``'s shrink-weight/
-force-to-prior/sparsity-snap blend is computed for the trace only. It
-does not feed back into sampling or into the returned model, matching
 MATLAB: the final ``ecModel.ec.kcat`` is the best raw accepted
 particle, and the next generation samples from the raw accepted
 particle set rather than from the blended point estimate.
@@ -92,9 +89,8 @@ from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
 from .data import BayesianData, load_bayesian_data
 from .diagnostics import GenerationDiagnostics, compute_generation_diagnostics
 from .distance import bayesian_distance, compute_excarbon
-from .posterior import PosteriorUpdate, update_posterior_shrinkage
-from .priors import (build_kcat_prior, build_proposal_sigma_log,
-                     build_sigma0_log, classify_kcat_sources)
+from .priors import (build_kcat_prior, build_sigma0_log,
+                     classify_kcat_sources)
 from .selection import next_quantile_epsilon, quantile_epsilon_select, truncation_select
 from .simulate import simulate_bayesian_dataset
 from .transition import GeckoTransition
@@ -137,10 +133,6 @@ class BayesianTuningResult:
         Best (lowest) value of the quantity selection actually
         minimised, per generation. Identical to ``rmse_trace`` when
         ``params.prior_penalty_weight`` is 0.
-    posterior_trace
-        ``posterior.PosteriorUpdate`` per generation (see the module
-        docstring: recorded for inspection, never fed back into
-        sampling or the returned model).
     diagnostics_trace
         Per-generation, per-source-group diagnostics (see
         ``diagnostics.py``).
@@ -157,7 +149,6 @@ class BayesianTuningResult:
     groups: list[str] = field(default_factory=list)
     rmse_trace: list[float] = field(default_factory=list)
     objective_trace: list[float] = field(default_factory=list)
-    posterior_trace: list[PosteriorUpdate] = field(default_factory=list)
     diagnostics_trace: list[GenerationDiagnostics] = field(default_factory=list)
     n_generations: int = 0
     converged: bool = False
@@ -292,7 +283,6 @@ def bayesian_kcat_tuning(
     sources = [model.ec.source[i] for i in tunable_idx]
     groups = classify_kcat_sources(sources, params, okp_method=okp_method)
     sigma0_log = build_sigma0_log(groups, params)
-    proposal_sigma_log = build_proposal_sigma_log(groups, params)
     n_params = len(kcat0)
     columns = [f"k{i}" for i in range(n_params)]
 
@@ -362,8 +352,6 @@ def bayesian_kcat_tuning(
         )
 
         # Persistent multiplier on the fitted proposal bandwidth. Stays
-        # at 1.0 (a no-op) unless params.adapt_proposal_width is set.
-        proposal_scale = 1.0
 
         generation = 0
         while True:
@@ -388,9 +376,7 @@ def bayesian_kcat_tuning(
                 transition: Optional[GeckoTransition] = None
             else:
                 X_df = pd.DataFrame(kcat_top.T, columns=columns)
-                transition = GeckoTransition(
-                    proposal_sigma_log, bandwidth_scale=proposal_scale,
-                )
+                transition = GeckoTransition(sigma0_log)
                 transition.fit(X_df, weights_top)
                 new_particles = transition.rvs_batch(n_new)
             new_particles = np.clip(new_particles, kcat_lo[:, None], kcat_hi[:, None])
@@ -424,10 +410,6 @@ def bayesian_kcat_tuning(
             proposal_accept_rate = proposal_acceptance_rate(
                 sel.accepted_idx, new_particles.shape[1]
             )
-            if params.adapt_proposal_width:
-                proposal_scale = adapt_proposal_scale(
-                    proposal_scale, proposal_accept_rate, params,
-                )
 
             n_total_this_gen = len(combined_rmse)
             new_kcat_top = combined_particles[:, sel.accepted_idx]
@@ -438,15 +420,6 @@ def bayesian_kcat_tuning(
                 len(sel.accepted_idx), 1.0 / len(sel.accepted_idx),
             )
 
-            posterior_update = update_posterior_shrinkage(
-                new_kcat_top, kcat0, sigma0_log, groups,
-                shrink_thr_default=params.shrink_thr_default,
-                shrink_thr_source=params.shrink_thr_source,
-                force_prior_thr_default=params.force_prior_thr_default,
-                force_prior_thr_source=params.force_prior_thr_source,
-                sparsity_threshold=params.sparsity_threshold,
-            )
-            result.posterior_trace.append(posterior_update)
 
             diag = compute_generation_diagnostics(
                 generation, new_kcat_top, new_weights_top, new_rmse_top,
@@ -465,7 +438,7 @@ def bayesian_kcat_tuning(
                     "bayesian_kcat_tuning: generation %d, best RMSE = %g, "
                     "accepted %d/%d, proposal accept %.4f, scale %.4f",
                     generation, diag.best_rmse, diag.n_accepted, diag.n_total,
-                    proposal_accept_rate, proposal_scale,
+                    proposal_accept_rate,
                 )
 
             kcat_top, rmse_top, weights_top = new_kcat_top, new_rmse_top, new_weights_top
@@ -566,36 +539,6 @@ def proposal_acceptance_rate(accepted_idx: np.ndarray, n_new: int) -> float:
     if n_new <= 0:
         return 0.0
     return float(np.count_nonzero(np.asarray(accepted_idx) < n_new) / n_new)
-
-
-def adapt_proposal_scale(
-    scale: float, accept_rate: float, params: "BayesianParams",
-) -> float:
-    """Steer the proposal bandwidth by how many proposals survive.
-
-    MATLAB's proposal width is ``0.5 * std_obs + 0.5 * sigma0_log``,
-    which cannot fall below half the prior width and grows as the
-    accepted set spreads. Its own diagnostics show the consequence: on
-    the full ecYeastGEM run the width climbs 0.213 -> 1.037 while the
-    proposal acceptance rate collapses 0.10 -> 0.005, so the sampler
-    widens exactly when its steps are already too large and the last
-    third of the run makes no progress.
-
-    This multiplies the fitted bandwidth by a scale that follows the
-    acceptance rate instead, in the usual adaptive-MCMC form:
-    ``scale *= exp(rate_param * (accept_rate - target))``, clamped to
-    ``params.proposal_scale_bounds``. Below target the steps shrink;
-    above it they grow back.
-
-    MATLAB has no such feedback, so this is a deliberate departure from
-    the faithful path and is off unless ``params.adapt_proposal_width``
-    is set.
-    """
-    lo, hi = params.proposal_scale_bounds
-    adjusted = scale * float(np.exp(
-        params.proposal_adaptation_rate * (accept_rate - params.target_accept_rate)
-    ))
-    return float(np.clip(adjusted, lo, hi))
 
 
 def _score_kcat_vector(
