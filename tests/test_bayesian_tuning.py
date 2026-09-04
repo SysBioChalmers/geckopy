@@ -275,16 +275,28 @@ def test_missing_bay_data_raises(tmp_path):
         bayesian_kcat_tuning(model, adapter=adapter, bay_data=empty)
 
 
-def test_kcat_bounds_follow_matlab_windows():
-    """Ordinary kcats propose within 1e-2..1e4 1/s; a prior already above
-    1e4 keeps a window around itself instead of being clipped down."""
+def test_kcat_bounds_keep_the_ordinary_window():
+    """An ordinary kcat proposes within 1e-2..1e4 1/s."""
     from geckopy.kcat_sensitivity_analysis.bayesian.tuning import kcat_bounds
 
-    kcat0 = np.array([1.0, 5e4, 1e-3])
+    lo, hi = kcat_bounds(np.array([1.0, 50.0]))
+
+    np.testing.assert_allclose(lo, [1e-2, 1e-2])
+    np.testing.assert_allclose(hi, [1e4, 1e4])
+
+
+def test_kcat_bounds_always_contain_the_prior():
+    """A prior outside its own bounds cannot be proposed, so the search
+    moves it before considering any evidence."""
+    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import kcat_bounds
+
+    kcat0 = np.array([1.6e-4, 1.9e-3, 1.0, 5e4])
     lo, hi = kcat_bounds(kcat0)
 
-    np.testing.assert_allclose(lo, [1e-2, 5e2, 1e-2])
-    np.testing.assert_allclose(hi, [1e4, 1e8, 1e4])
+    assert np.all(lo <= kcat0) and np.all(kcat0 <= hi)
+    # And with room to move a hundred-fold either way.
+    np.testing.assert_allclose(lo, [1.6e-6, 1.9e-5, 1e-2, 1e-2])
+    np.testing.assert_allclose(hi, [1e4, 1e4, 1e4, 5e6])
 
 
 def test_adapt_proposal_scale_follows_the_acceptance_rate():
