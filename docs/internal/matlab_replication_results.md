@@ -967,6 +967,46 @@ the 0.1233 advantage is therefore freedom rather than skill. Repeating
 it with the same bounds would settle how much; it is one small change
 and one run.
 
+### The proposal floor, and how much it actually mattered
+
+`kcat_bounds` floored proposals at 1e-2 1/s and widened only upwards,
+so any prior below the floor sat outside its own window: 350 of 4834
+kcats on this model, clipped up before scoring, a 62-fold increase for
+the slowest. A prior must be a proposable value, and this one was not.
+Fixed in `01b6ec9`; MATLAB's `proposeSimple` has the same defect.
+
+It is worth being precise about the damage, because the first estimate
+was too strong. The floor was **not binding at the optimum**:
+
+| lanosterol synthase | value | vs prior |
+|---------------------|-------|----------|
+| prior | 0.00194 | - |
+| lowest the old floor allowed | 0.01 | 5.2x |
+| CMA-ES optimum, unbounded | 0.900 | 465x |
+| CMA-ES optimum, corrected bounds | 0.338 | 174x |
+
+The search drives this kcat two orders of magnitude past the floor, so
+the floor never determined its answer. The claim that it contaminated
+every magnitude reported here is withdrawn; what it did was start every
+particle 5x above the prior for those 350 kcats, which is a defect in
+its own right without changing where the search ended up.
+
+The two runs disagreeing by 2.7-fold on that same parameter -- 0.900
+against 0.338, at distances of 0.8005 and 0.8011 -- is the flat-
+directions result again, now visible on the single most consequential
+kcat in the model.
+
+### The optimiser's advantage is not bounds-freedom
+
+| | distance | changes beyond 100x |
+|---|----------|---------------------|
+| CMA-ES, unbounded | 0.8005 | 8 |
+| CMA-ES, corrected bounds | 0.8011 | 5 |
+| ABC-SMC | 0.9156 +/- 0.0549 | - |
+
+Clipping the optimiser to the same window the sampler uses costs
+0.0006. The ~0.12 gap to the sampler is searching, not licence.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
