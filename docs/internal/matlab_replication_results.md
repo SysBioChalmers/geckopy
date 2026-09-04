@@ -1007,6 +1007,55 @@ kcat in the model.
 Clipping the optimiser to the same window the sampler uses costs
 0.0006. The ~0.12 gap to the sampler is searching, not licence.
 
+## The final comparison, and what it costs to believe a kcat
+
+Three methods, three seeds each, same model, same objective, same
+parameter set of 112 free parameters covering 144 kcats.
+
+| method | distance | sd |
+|--------|----------|----|
+| ABC-SMC, 31 generations | 0.9156 | 0.0549 |
+| CMA-ES, unbounded | 0.7923 | 0.0071 |
+| **CMA-ES, sampler's bounds** | **0.7974** | **0.0048** |
+
+The optimiser beats the sampler by **0.1182 +/- 0.0318, 3.7 standard
+errors**, while proposing inside the same window. Bounding costs 0.005
+and buys reproducibility. So the last step of a tuning pipeline should
+be an optimiser, and ABC-SMC's remaining claim -- a posterior -- is one
+neither implementation uses, since both return the best particle.
+
+### The parameters stay undetermined under every method
+
+| agreement across three seeds | ABC-SMC | CMA-ES unbounded | CMA-ES bounded |
+|------------------------------|---------|------------------|----------------|
+| within 1.2x | 0 of 112 | 0 of 144 | 2 of 144 |
+| beyond 5x | 70 | 97 | 97 |
+
+Bounding changes nothing. Converging eight times more tightly on the
+objective changes nothing. Two thirds of the changed kcats differ by
+more than five-fold between runs that agree on the distance to within
+1%.
+
+The clearest single case is the parameter that matters most.
+Lanosterol synthase carries 17% of all screened leverage and supplies
+48% of the achievable improvement. Across the three bounded seeds it
+takes:
+
+| seed | kcat, 1/s | vs prior | distance |
+|------|-----------|----------|----------|
+| 0 | 0.338 | 174x | 0.8011 |
+| 1 | 20.3 | 10 500x | 0.7991 |
+| 2 | 0.0781 | 40x | 0.7920 |
+
+**A 260-fold range, at distances differing by 0.009.** The data says
+this kcat is too low and says nothing whatever about how much. Any
+single run reports one of those three numbers as the answer.
+
+That is the whole result in one row. Tuning identifies *which*
+parameters the priors got wrong; it does not measure what they should
+be. The correction belongs in a curation step with a citation, and the
+tuned vector belongs in a model, not in a table of kcats.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
