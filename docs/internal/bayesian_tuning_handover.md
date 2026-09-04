@@ -60,7 +60,10 @@ Never on RMSE alone. Report all of these, every time:
    the trust ranking is respected. Report `median_fold_moved` with
    `n_moved` beside it: a median over the whole source saturates at
    1.00 once a mask leaves most of it at prior, and then the ordering
-   check passes vacuously.
+   check passes vacuously. Below about ten moved kcats in any source
+   the ordering verdict is noise -- at the 63-kcat mask it is computed
+   over 7 / 35 / 13 / 3 and flips between seeds -- so report it as
+   inconclusive there rather than as a pass or fail.
 
    Never report movement in sigma units. Dividing by `sigma0_log`
    removes exactly the thing being examined, and it has now inverted
@@ -114,6 +117,12 @@ with provenance, rather than as a 4834-long posterior.
 Few changes, each large, each load-bearing. Specifically **not** many
 kcats nudged slightly, and **not** few changes to parameters the data
 cannot see. Current best answers:
+
+Under the objective that weights max growth double (2026-09-04), the
+same curve reads: unrestricted 1.0641 with 4781 changed, FVA mask
+1.0654 +/- 0.080 with 3924, trust 3e-5 1.0828 +/- 0.070 with 1446,
+**trust 9.36e-4 1.0422 +/- 0.057 with 110**, trust 3.07e-3 1.1736 with
+62. The 112-kcat mask has the best mean and the tightest spread.
 
 | operating point | RMSE | changed | median fold | impact |
 |-----------------|------|---------|-------------|--------|
