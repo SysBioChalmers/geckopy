@@ -907,6 +907,66 @@ roughly ten moved kcats in any source. Report it as inconclusive there
 rather than as a pass or a fail, and read `n_moved` before reading the
 verdict.
 
+## A better optimiser fits better and identifies nothing
+
+ABC-SMC draws and truncates; it is not an optimiser, and once a screen
+has reduced the problem to about a hundred parameters it is the wrong
+instrument. Separable CMA-ES in log-space over the same-sized parameter
+set, three seeds, 6800 evaluations each, 45 minutes per seed on 63
+workers.
+
+The parameter set was chosen with tying decided first: isozyme copies
+sharing a reaction, prior and source are one parameter, the screen
+moved each group as a unit, and the mask admitted 112 free parameters
+covering 144 kcats across **100 distinct reactions**, against 79 for
+the same budget spent per copy.
+
+| | distance | sd | seeds |
+|---|----------|----|----|
+| ABC-SMC, 112 kcats, 31 generations | 0.9156 | 0.0549 | 3 |
+| **CMA-ES, 112 free parameters** | **0.7923** | **0.0071** | 3 |
+
+**The optimiser wins by 0.1233 +/- 0.0320 -- 3.9 standard errors -- and
+its run-to-run spread is eight times tighter.** So 0.9156 was the
+sampler's floor, not the objective's, and the last step of a tuning
+pipeline should be an optimiser rather than a sampler.
+
+### And yet it pins nothing
+
+| agreement across three seeds | of 144 kcats moved |
+|------------------------------|--------------------|
+| within 1.2x | **0** |
+| within 2x | 9 |
+| beyond 5x | **97** |
+
+Three runs agree on the distance to 0.7% and disagree by more than
+five-fold on two thirds of the kcats they change. The sampler managed
+0 of 112 within 1.2x and 70 beyond 5x -- proportionally the same.
+
+This settles a question left open earlier. The sampler's parameter
+scatter might have been search noise that a better-converged method
+would resolve; it is not. A method converging to 0.7% on the objective
+scatters the parameters just as widely, which means **these are flat
+directions in the objective, not failures of search.** Many kcat sets
+fit these 41 conditions equally well and nothing in the data chooses
+between them.
+
+The practical consequence: optimising harder buys *fit*, never
+*knowledge*. A tuned kcat vector is a model that predicts better, not a
+set of measurements that can be published as corrections. What survives
+across methods and seeds is which parameters matter -- the screen's
+ranking -- and that comes without any optimisation at all.
+
+### The comparison is not yet like-for-like
+
+CMA-ES ran unbounded where the sampler clips proposals to
+`kcat_lo`/`kcat_hi`. Its largest single changes are 3523x, 28039x and
+1357x across the three seeds, which no biochemist would accept and
+which the sampler was structurally prevented from producing. Some of
+the 0.1233 advantage is therefore freedom rather than skill. Repeating
+it with the same bounds would settle how much; it is one small change
+and one run.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.

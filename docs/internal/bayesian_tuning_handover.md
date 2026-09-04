@@ -97,6 +97,20 @@ reproduced, though its ranking agrees on 94 of the top 110. `holdout.py` and `ho
 the run scratch do 6, and `run_sigma.py` reports train, held-out and
 all-41 distances for a run trained on one half of a split.
 
+## Two methods, one conclusion
+
+CMA-ES over ~112 screened parameters reaches **0.7923 +/- 0.0071**
+against ABC-SMC's 0.9156 +/- 0.0549 -- better by 3.9 standard errors,
+with eight times tighter run-to-run spread. The last step of a pipeline
+should be an optimiser, not a sampler.
+
+It identifies nothing the sampler did not. Across three seeds agreeing
+to 0.7% on the distance, **0 of 144 changed kcats agree within 1.2x and
+97 disagree beyond 5x**. These are flat directions in the objective,
+not search failures, so optimising harder buys fit and never knowledge.
+(CMA-ES ran unbounded and produced changes up to 28039x; repeat with
+`kcat_lo`/`kcat_hi` before quoting the advantage.)
+
 ## The finding that reframes the rest
 
 Reverting a tuned vector to its K most impactful changes: **1 kcat
