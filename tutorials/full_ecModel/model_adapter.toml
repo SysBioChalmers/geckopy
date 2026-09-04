@@ -29,9 +29,6 @@ taxonomic_id = 559292
 
 [bayesian]
 sigma0_log_default = 0.3
-shrink_thr_default = 5.0
-force_prior_thr_default = 3.5
-sparsity_threshold = 0.5
 schedule_generations = [1, 2, 9, 15]
 schedule_samples = [1000, 800, 600, 400]
 min_keep = 0.3
@@ -61,12 +58,3 @@ okp = 0.25
 brenda = 0.2
 custom = 0.1
 
-[bayesian.shrink_thr_source]
-okp = 3.0
-brenda = 10.0
-custom = 12.0
-
-[bayesian.force_prior_thr_source]
-okp = 2.5
-brenda = 11.0
-custom = 13.0
