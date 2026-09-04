@@ -497,11 +497,18 @@ def kcat_bounds(kcat0: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Biologically plausible bounds for proposed kcats, in 1/s.
 
     Proposals outside these bounds are not hypotheses worth spending an
-    FBA solve on. Ported from ``bayesianSensitivityTuning.m``'s
-    ``proposeSimple``: 1e-2 to 1e4 for an ordinary kcat, and for one
-    whose prior already exceeds 1e4 (catalase and friends) a window of
-    prior/100 to 1e8 so an unusually fast enzyme is not clipped down to
-    the generic ceiling.
+    FBA solve on. The window is 1e-2 to 1e4 for an ordinary kcat, and
+    always widened far enough to contain the prior with a hundred-fold
+    margin either side, so an unusually slow or fast enzyme keeps a
+    window around itself rather than being clipped towards the generic
+    range.
+
+    That last part matters more than it sounds. MATLAB's
+    ``proposeSimple`` widens only upwards, which leaves any prior below
+    1e-2 outside its own bounds: on ecYeastGEM that is 350 kcats, and
+    every proposal for them is clipped up to 1e-2 before it is scored --
+    a 62-fold increase for the slowest, applied before any evidence is
+    considered. A prior must always be a proposable value.
 
     Parameters
     ----------
@@ -513,11 +520,9 @@ def kcat_bounds(kcat0: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     tuple of numpy.ndarray
         Lower and upper bound per row.
     """
-    lo = np.full_like(kcat0, 1e-2, dtype=float)
-    hi = np.full_like(kcat0, 1e4, dtype=float)
-    exceptional = kcat0 > 1e4
-    lo[exceptional] = kcat0[exceptional] / 100.0
-    hi[exceptional] = 1e8
+    kcat0 = np.asarray(kcat0, dtype=float)
+    lo = np.minimum(1e-2, kcat0 / 100.0)
+    hi = np.maximum(1e4, kcat0 * 100.0)
     return lo, hi
 
 
