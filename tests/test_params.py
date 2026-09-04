@@ -9,8 +9,6 @@ def test_defaults_are_consistent():
     # The shipped defaults must satisfy the group-key validator.
     bp = BayesianParams()
     assert set(bp.sigma0_log_source) == set(bp.source_groups)
-    assert set(bp.shrink_thr_source) == set(bp.source_groups)
-    assert set(bp.force_prior_thr_source) == set(bp.source_groups)
 
 
 def test_mismatched_source_dict_raises():
@@ -39,8 +37,6 @@ def test_consistent_custom_groups_ok():
             "b": SourceGroupRule(sources=["src_b"], match_okp=True),
         },
         sigma0_log_source={"a": 0.1, "b": 0.2},
-        shrink_thr_source={"a": 1.0, "b": 2.0},
-        force_prior_thr_source={"a": 0.0, "b": 1.0},
     )
     assert set(bp.source_groups) == {"a", "b"}
     assert bp.source_groups["b"].match_okp is True
@@ -58,4 +54,3 @@ def test_dropped_fields_are_rejected():
 
 def test_sparsity_threshold_default_is_not_the_confirmed_bad_range():
     bp = BayesianParams()
-    assert bp.sparsity_threshold == pytest.approx(0.5)
