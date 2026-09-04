@@ -125,3 +125,23 @@ def test_annotations_strip_the_isozyme_suffix_to_find_the_name():
 def test_annotations_report_unknown_ids_as_blank():
     got = annotate_from_model(_FakeModel(), ["r_absent"])
     assert got == {"names": [""], "ec_codes": [""], "sources": [""]}
+
+
+def test_result_reports_its_own_corrections():
+    """The result already carries everything the table needs."""
+    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
+        BayesianTuningResult)
+
+    res = BayesianTuningResult(
+        rxns=["r_slow", "r_untouched", "r_drift"],
+        old_kcat=np.array([1.0, 5.0, 2.0]),
+        new_kcat=np.array([10.0, 5.0, 40.0]),
+        groups=["brenda", "custom", "okp"],
+    )
+    rows = res.corrections(leverage=np.array([3.0, 1.0, 0.01]))
+
+    # Ranked by leverage: the big drifter is last despite moving furthest.
+    assert [r.rxn_id for r in rows] == ["r_slow", "r_drift"]
+    assert rows[0].source == "brenda"
+    assert rows[0].fold_change == pytest.approx(10.0)
+    assert rows[0].cumulative_share == pytest.approx(3.0 / 4.01)

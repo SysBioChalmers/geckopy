@@ -81,7 +81,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Callable, Literal, Optional, Sequence
 
 import cobra
 import numpy as np
@@ -93,6 +93,7 @@ from .data import BayesianData, load_bayesian_data
 from .diagnostics import GenerationDiagnostics, compute_generation_diagnostics
 from .distance import bayesian_distance, compute_excarbon
 from .posterior import PosteriorUpdate, update_posterior_shrinkage
+from .corrections import Correction, corrections as build_corrections
 from .priors import (build_kcat_prior, build_proposal_sigma_log,
                      build_sigma0_log, classify_kcat_sources)
 from .selection import next_quantile_epsilon, quantile_epsilon_select, truncation_select
@@ -161,6 +162,28 @@ class BayesianTuningResult:
     diagnostics_trace: list[GenerationDiagnostics] = field(default_factory=list)
     n_generations: int = 0
     converged: bool = False
+
+    def corrections(
+        self,
+        *,
+        leverage: Optional[np.ndarray] = None,
+        names: Optional[Sequence[str]] = None,
+        ec_codes: Optional[Sequence[str]] = None,
+        rel_tol: float = 0.02,
+    ) -> list["Correction"]:
+        """The changes this run makes, most consequential first.
+
+        The vector in ``new_kcat`` is the answer; this is the answer in
+        a form that can be checked. Pass ``leverage`` from a
+        one-at-a-time screen to rank by how much each change matters
+        rather than by how far it moved, and to fill the share columns.
+        ``annotate_from_model`` supplies ``names``/``ec_codes``.
+        """
+        return build_corrections(
+            self.new_kcat, self.old_kcat, self.rxns,
+            sources=self.groups, names=names, ec_codes=ec_codes,
+            leverage=leverage, rel_tol=rel_tol,
+        )
 
 
 def bayesian_kcat_tuning(
