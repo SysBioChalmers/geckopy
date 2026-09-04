@@ -857,28 +857,55 @@ That is consistent with the screen: leverage under the two weightings
 correlates at 0.923, so both objectives ask about substantially the
 same parameters and both find them.
 
-### The two masks under the new objective
+### The mask curve under the new objective
 
-| | reach | trust 3e-5 |
-|---|-------|-----------|
-| eligible | 3955 | 1461 |
-| distance | 0.9822 | 0.9891 |
-| kcats changed | 3925 | **1451** |
-| impact share | 98.8% | 95.4% |
-| median fold moved, custom / brenda / okp / unlabelled | 2.41 / 4.70 / 6.71 / 14.50 | 2.20 / 4.07 / 5.97 / 7.71 |
-| curated kcats within 1.1x of prior | 10.1% | **66.7%** |
-| stalled | no | no |
+Fourteen runs, masks rebuilt from `screen_components.npy` at the same
+weighting, thresholds chosen to admit the sizes the 3 September curve
+used. Untuned distance is 8.4043.
 
-The masks are 0.007 apart on fit -- indistinguishable -- while the
-trust mask changes 2.7 times fewer kcats and leaves two thirds of the
-curated values alone against a tenth. That is the same result the old
-objective gave (0.0156 apart, 2.7x fewer changes), reproduced without
-reordering.
+| mask | eligible | changed | distance | sd | seeds | impact |
+|------|----------|---------|----------|----|-------|--------|
+| none | 4834 | 4781 | 1.0641 | - | 1 | 99.7% |
+| reach | 3955 | 3924 | 1.0654 | 0.0804 | 3 | 98.6% |
+| trust 3e-5 | 1461 | 1446 | 1.0828 | 0.0697 | 3 | 95.4% |
+| **trust 9.36e-4** | **112** | **110** | **1.0422** | **0.0569** | 3 | 82.5% |
+| trust 3.07e-3 | 63 | 62 | 1.1736 | 0.0204 | 2 | 77.2% |
+| reach, 31 gen | 3955 | 3925 | 0.9822 | - | 1 | 98.8% |
+| trust 3e-5, 31 gen | 1461 | 1451 | 0.9891 | - | 1 | 95.4% |
 
-Its impact share is higher here than on 3 September, 95.4% against
-88.5%, because the replacement screen is more concentrated: the same
-1451 changes cover more of a leverage distribution whose top 110
-entries carry 84% rather than 64%.
+**Restricting the search to 112 of 4834 kcats gives the best mean
+distance on the curve**, and the tightest seed spread with it. Removing
+the restriction entirely is no better than the FVA mask, and both are
+behind the 112-kcat mask by about a quarter of a standard deviation --
+which is to say all three are the same number.
+
+The curve is flat from 4781 changes down to 110 and bends at 62, where
+the distance rises 0.107 above the FVA mask at roughly 1.3 standard
+errors. The old objective bent in the same place, so two objectives
+independently locate the useful mask size between about 60 and 110
+kcats.
+
+Sixteen extra generations buy 0.08 (reach) and 0.09 (trust 3e-5),
+about one standard deviation, and spend it by pushing the same
+parameters three times further: `reach` at 15 generations moves the
+four sources by 1.72 / 3.05 / 3.30 / 4.55 fold, and at 31 by 2.41 /
+4.70 / 6.71 / 14.50.
+
+### Report the trust-ordering check as inconclusive on small samples
+
+`source_movement`'s ordering test compares four medians, and at the
+tight masks those medians are taken over very few kcats. At the
+112-kcat mask the four sources contribute 15 / 62 / 24 / 5 moved kcats;
+at the 63-kcat mask, 7 / 35 / 13 / 3. Three values cannot support a
+median, and the verdicts behave accordingly: the 112-kcat mask passes
+at seeds 0 and 2 and fails at seed 1, and the 63-kcat mask fails at
+both seeds while its `unlabelled` median swings between 2.85 and 9.78.
+
+The check is sound where it was designed to work -- every mask down to
+1446 changed kcats passes it at every seed -- and meaningless below
+roughly ten moved kcats in any source. Report it as inconclusive there
+rather than as a pass or a fail, and read `n_moved` before reading the
+verdict.
 
 ## Open items
 
