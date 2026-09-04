@@ -1056,6 +1056,100 @@ parameters the priors got wrong; it does not measure what they should
 be. The correction belongs in a curation step with a citation, and the
 tuned vector belongs in a model, not in a table of kcats.
 
+## Both datasets, condition by condition
+
+The aggregate distance says a model fits. It does not say which
+conditions it fits, and on this dataset one of them is doing all the
+complaining. Scoring the prior and the tuned vector on every condition
+separately, with the best symmetric CMA-ES run (seed 2, distance
+0.7920) as the tuned model:
+
+| carbon source | measured | untuned | tuned |
+|---------------|---------:|--------:|------:|
+| fructose      | 0.338    | 0.131   | 0.370 |
+| glucose       | 0.410    | 0.131   | 0.392 |
+| ethanol       | 0.120    | 0.069   | 0.119 |
+| mannose       | 0.330    | 0.110   | 0.329 |
+| galactose     | 0.280    | 0.103   | 0.279 |
+| acetate       | 0.170    | 0.040   | 0.080 |
+| maltose       | 0.400    | 0.123   | 0.402 |
+| sucrose       | 0.390    | 0.131   | 0.392 |
+| mean \|error\| |          | 0.200   | 0.018 |
+
+**The untuned model reaches a third of the measured growth rate.** On
+glucose it manages 0.131 against 0.410 measured. Whatever else kcat
+tuning is for, on this model it is the difference between a model that
+grows and one that does not.
+
+**Seven of eight land within 0.01 after tuning; acetate does not.**
+0.080 against 0.170, the single worst residual in the dataset and
+roughly five times the next largest. Acetate is not unreachable -- an
+FVA ceiling with every kcat free puts it at 3.62 /h -- so this is a
+parameter problem, not a structural one.
+
+The flux side, over the 33 conditions:
+
+| | untuned | tuned |
+|---|--------:|------:|
+| mean RMSE          | 8.796 | 0.876 |
+| worst condition    | 39.01 | 5.31  |
+| worse than untuned | --    | 1 of 33 |
+
+**The two terms are not in tension.** Flux RMSE falls ten-fold while
+growth error falls eleven-fold, and exactly one flux condition of 33
+degrades. Nothing here supports the intuition that fitting growth
+costs flux.
+
+**Ten of the 33 flux conditions are identical to four decimals across
+the untuned and every tuned model.** Not similar -- unchanged. A third
+of the flux dataset cannot respond to any of the 112 tuned parameters,
+which is the reach problem of the previous section appearing on the
+flux side. The effective size of this dataset is smaller than its row
+count in both of its halves.
+
+## A hinge reaches every growth rate by deleting the data
+
+Acetate falling 0.09 short raises an obvious question: score only
+shortfalls, so the optimiser is punished for growing too slowly and
+indifferent to growing too fast. Replacing the max-growth term with
+`mean(max(0, measured - simulated))` does exactly that, and it works
+as advertised -- every condition clears its measurement, acetate
+included, at 0.170 exactly.
+
+It also over-predicts all eight.
+
+| | seed 0 | seed 1 |
+|---|-------:|-------:|
+| hinge objective     | 0.3665 | 0.3389 |
+| symmetric distance  | 1.5785 | 1.4332 |
+| growth shortfall    | 0.0000 | 0.0000 |
+| median fold (moved) | 6.68   | 5.72   |
+| largest fold        | 3 959x | 88 427x |
+
+Ethanol reaches 0.270 against 0.120 measured. Mean absolute growth
+error is 0.044, worse than the symmetric objective's 0.018, and flux
+RMSE degrades from 0.876 to 1.099 -- a dataset the change did not
+touch.
+
+**The mechanism is arithmetic, not tuning.** Seed 0's objective is
+0.3665; its flux RMSE, measured separately, is 1.0994; and
+1.0994 / 3 = 0.3665. With the shortfall at zero the max-growth term
+contributes nothing, so `(rmse_flux + 2 x 0) / 3` is the entire
+objective. A hinge does not weight the growth measurements less than a
+squared error does. Once they are cleared it removes them, converting
+eight measurements into eight satisfied inequalities that constrain
+nothing and contribute no gradient. The optimiser then fits flux alone
+with the growth rates free to drift upward, which is why they all do,
+and why one kcat travelled 88 427-fold with nothing opposing it. No
+parameter is pinned at `kcat_bounds` in any of these solutions, so the
+bounds are not what limited the drift either.
+
+This is the argument against asymmetric losses in general here, and it
+is why a prior penalty is the only remaining anchor: nothing in a
+hinge formulation can pull a growth rate back toward its measurement,
+so a penalty term can only pull *parameters* toward their priors and
+lower the growth rates as a side effect.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
