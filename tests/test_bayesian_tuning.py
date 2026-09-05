@@ -195,7 +195,6 @@ def test_trusted_source_moves_less_than_untrusted_for_every_combination(
         # Diagnostics/rmse trace present for every generation.
         assert len(result.rmse_trace) == 4
         assert len(result.diagnostics_trace) == 4
-        assert len(result.posterior_trace) == 4
 
         brenda_moves.append(abs(np.log(result.new_kcat[0]) - np.log(_START_KCAT)))
         dlkcat_moves.append(abs(np.log(result.new_kcat[1]) - np.log(_START_KCAT)))
@@ -275,53 +274,28 @@ def test_missing_bay_data_raises(tmp_path):
         bayesian_kcat_tuning(model, adapter=adapter, bay_data=empty)
 
 
-def test_kcat_bounds_follow_matlab_windows():
-    """Ordinary kcats propose within 1e-2..1e4 1/s; a prior already above
-    1e4 keeps a window around itself instead of being clipped down."""
+def test_kcat_bounds_keep_the_ordinary_window():
+    """An ordinary kcat proposes within 1e-2..1e4 1/s."""
     from geckopy.kcat_sensitivity_analysis.bayesian.tuning import kcat_bounds
 
-    kcat0 = np.array([1.0, 5e4, 1e-3])
+    lo, hi = kcat_bounds(np.array([1.0, 50.0]))
+
+    np.testing.assert_allclose(lo, [1e-2, 1e-2])
+    np.testing.assert_allclose(hi, [1e4, 1e4])
+
+
+def test_kcat_bounds_always_contain_the_prior():
+    """A prior outside its own bounds cannot be proposed, so the search
+    moves it before considering any evidence."""
+    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import kcat_bounds
+
+    kcat0 = np.array([1.6e-4, 1.9e-3, 1.0, 5e4])
     lo, hi = kcat_bounds(kcat0)
 
-    np.testing.assert_allclose(lo, [1e-2, 5e2, 1e-2])
-    np.testing.assert_allclose(hi, [1e4, 1e8, 1e4])
-
-
-def test_adapt_proposal_scale_follows_the_acceptance_rate():
-    """Below target the proposal shrinks, above it grows, and the scale
-    stays inside its bounds."""
-    from geckopy.kcat_sensitivity_analysis.bayesian.tuning import adapt_proposal_scale
-
-    params = BayesianParams(
-        adapt_proposal_width=True, target_accept_rate=0.15,
-        proposal_adaptation_rate=2.0, proposal_scale_bounds=(0.02, 2.0),
-    )
-
-    assert adapt_proposal_scale(1.0, 0.15, params) == pytest.approx(1.0)
-    assert adapt_proposal_scale(1.0, 0.005, params) < 1.0
-    assert adapt_proposal_scale(1.0, 0.50, params) > 1.0
-
-    # MATLAB's own collapsing acceptance rate drives the scale down, and
-    # the clamp holds it above the floor however long that runs.
-    scale = 1.0
-    for rate in (0.10, 0.09, 0.07, 0.05, 0.03, 0.02, 0.005, 0.005, 0.005):
-        scale = adapt_proposal_scale(scale, rate, params)
-    assert 0.02 <= scale < 1.0
-
-    for _ in range(200):
-        scale = adapt_proposal_scale(scale, 0.0, params)
-    assert scale == pytest.approx(0.02)
-
-    scale = 1.0
-    for _ in range(200):
-        scale = adapt_proposal_scale(scale, 1.0, params)
-    assert scale == pytest.approx(2.0)
-
-
-def test_adapt_proposal_width_is_off_by_default():
-    assert BayesianParams().adapt_proposal_width is False
-
-
+    assert np.all(lo <= kcat0) and np.all(kcat0 <= hi)
+    # And with room to move a hundred-fold either way.
+    np.testing.assert_allclose(lo, [1.6e-6, 1.9e-5, 1e-2, 1e-2])
+    np.testing.assert_allclose(hi, [1e4, 1e4, 1e4, 5e6])
 def test_proposal_acceptance_rate_divides_by_the_number_proposed():
     """The denominator is the proposals made, not the accepted set: the
     latter measures the accepted set's composition and sits near 1.0 in

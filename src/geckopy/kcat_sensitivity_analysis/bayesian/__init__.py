@@ -15,7 +15,6 @@ from .distance import (
     dataset_rmse,
 )
 from .diagnostics import GenerationDiagnostics, GroupDiagnostics, compute_generation_diagnostics
-from .posterior import PosteriorUpdate, update_posterior_shrinkage
 from .priors import (
     UNLABELLED_GROUP,
     build_kcat_prior,
@@ -43,7 +42,6 @@ __all__ = [
     "GeckoTransition",
     "GenerationDiagnostics",
     "GroupDiagnostics",
-    "PosteriorUpdate",
     "SelectionResult",
     "bayesian_distance",
     "bayesian_kcat_tuning",
@@ -59,5 +57,4 @@ __all__ = [
     "quantile_epsilon_select",
     "simulate_bayesian_dataset",
     "truncation_select",
-    "update_posterior_shrinkage",
 ]

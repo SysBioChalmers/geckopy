@@ -4,7 +4,7 @@ Ported design intent from GECKO MATLAB's per-source diagnostic block
 in ``bayesianSensitivityTuning.m`` (near-prior counts, mean deviation,
 variance ratio, "active" counts) -- but computed directly from a
 generation's accepted particle population (``kcat_top`` + ``weights``)
-rather than from ``posterior.PosteriorUpdate``'s
+rather than from a shrink-weighted
 ``shrink_weight``/``sigma_log`` outputs. Nothing here reads
 ``PosteriorUpdate``, so these metrics stay comparable across selection
 variants and remain meaningful even though the shrinkage blend never
@@ -98,7 +98,7 @@ def compute_generation_diagnostics(
         Total candidates evaluated this generation (before selection)
         -- for the acceptance rate.
     kcat0, sigma0_log, groups
-        As in ``posterior.update_posterior_shrinkage``.
+        Per-row prior std dev in log space.
     active_threshold
         Per-particle log-space deviation (in prior-sigma units) above
         which a (parameter, particle) pair counts as "active".

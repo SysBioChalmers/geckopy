@@ -907,6 +907,423 @@ roughly ten moved kcats in any source. Report it as inconclusive there
 rather than as a pass or a fail, and read `n_moved` before reading the
 verdict.
 
+## A better optimiser fits better and identifies nothing
+
+ABC-SMC draws and truncates; it is not an optimiser, and once a screen
+has reduced the problem to about a hundred parameters it is the wrong
+instrument. Separable CMA-ES in log-space over the same-sized parameter
+set, three seeds, 6800 evaluations each, 45 minutes per seed on 63
+workers.
+
+The parameter set was chosen with tying decided first: isozyme copies
+sharing a reaction, prior and source are one parameter, the screen
+moved each group as a unit, and the mask admitted 112 free parameters
+covering 144 kcats across **100 distinct reactions**, against 79 for
+the same budget spent per copy.
+
+| | distance | sd | seeds |
+|---|----------|----|----|
+| ABC-SMC, 112 kcats, 31 generations | 0.9156 | 0.0549 | 3 |
+| **CMA-ES, 112 free parameters** | **0.7923** | **0.0071** | 3 |
+
+**The optimiser wins by 0.1233 +/- 0.0320 -- 3.9 standard errors -- and
+its run-to-run spread is eight times tighter.** So 0.9156 was the
+sampler's floor, not the objective's, and the last step of a tuning
+pipeline should be an optimiser rather than a sampler.
+
+### And yet it pins nothing
+
+| agreement across three seeds | of 144 kcats moved |
+|------------------------------|--------------------|
+| within 1.2x | **0** |
+| within 2x | 9 |
+| beyond 5x | **97** |
+
+Three runs agree on the distance to 0.7% and disagree by more than
+five-fold on two thirds of the kcats they change. The sampler managed
+0 of 112 within 1.2x and 70 beyond 5x -- proportionally the same.
+
+This settles a question left open earlier. The sampler's parameter
+scatter might have been search noise that a better-converged method
+would resolve; it is not. A method converging to 0.7% on the objective
+scatters the parameters just as widely, which means **these are flat
+directions in the objective, not failures of search.** Many kcat sets
+fit these 41 conditions equally well and nothing in the data chooses
+between them.
+
+The practical consequence: optimising harder buys *fit*, never
+*knowledge*. A tuned kcat vector is a model that predicts better, not a
+set of measurements that can be published as corrections. What survives
+across methods and seeds is which parameters matter -- the screen's
+ranking -- and that comes without any optimisation at all.
+
+### The comparison is not yet like-for-like
+
+CMA-ES ran unbounded where the sampler clips proposals to
+`kcat_lo`/`kcat_hi`. Its largest single changes are 3523x, 28039x and
+1357x across the three seeds, which no biochemist would accept and
+which the sampler was structurally prevented from producing. Some of
+the 0.1233 advantage is therefore freedom rather than skill. Repeating
+it with the same bounds would settle how much; it is one small change
+and one run.
+
+### The proposal floor, and how much it actually mattered
+
+`kcat_bounds` floored proposals at 1e-2 1/s and widened only upwards,
+so any prior below the floor sat outside its own window: 350 of 4834
+kcats on this model, clipped up before scoring, a 62-fold increase for
+the slowest. A prior must be a proposable value, and this one was not.
+Fixed in `01b6ec9`; MATLAB's `proposeSimple` has the same defect.
+
+It is worth being precise about the damage, because the first estimate
+was too strong. The floor was **not binding at the optimum**:
+
+| lanosterol synthase | value | vs prior |
+|---------------------|-------|----------|
+| prior | 0.00194 | - |
+| lowest the old floor allowed | 0.01 | 5.2x |
+| CMA-ES optimum, unbounded | 0.900 | 465x |
+| CMA-ES optimum, corrected bounds | 0.338 | 174x |
+
+The search drives this kcat two orders of magnitude past the floor, so
+the floor never determined its answer. The claim that it contaminated
+every magnitude reported here is withdrawn; what it did was start every
+particle 5x above the prior for those 350 kcats, which is a defect in
+its own right without changing where the search ended up.
+
+The two runs disagreeing by 2.7-fold on that same parameter -- 0.900
+against 0.338, at distances of 0.8005 and 0.8011 -- is the flat-
+directions result again, now visible on the single most consequential
+kcat in the model.
+
+### The optimiser's advantage is not bounds-freedom
+
+| | distance | changes beyond 100x |
+|---|----------|---------------------|
+| CMA-ES, unbounded | 0.8005 | 8 |
+| CMA-ES, corrected bounds | 0.8011 | 5 |
+| ABC-SMC | 0.9156 +/- 0.0549 | - |
+
+Clipping the optimiser to the same window the sampler uses costs
+0.0006. The ~0.12 gap to the sampler is searching, not licence.
+
+## The final comparison, and what it costs to believe a kcat
+
+Three methods, three seeds each, same model, same objective, same
+parameter set of 112 free parameters covering 144 kcats.
+
+| method | distance | sd |
+|--------|----------|----|
+| ABC-SMC, 31 generations | 0.9156 | 0.0549 |
+| CMA-ES, unbounded | 0.7923 | 0.0071 |
+| **CMA-ES, sampler's bounds** | **0.7974** | **0.0048** |
+
+The optimiser beats the sampler by **0.1182 +/- 0.0318, 3.7 standard
+errors**, while proposing inside the same window. Bounding costs 0.005
+and buys reproducibility. So the last step of a tuning pipeline should
+be an optimiser, and ABC-SMC's remaining claim -- a posterior -- is one
+neither implementation uses, since both return the best particle.
+
+### The parameters stay undetermined under every method
+
+| agreement across three seeds | ABC-SMC | CMA-ES unbounded | CMA-ES bounded |
+|------------------------------|---------|------------------|----------------|
+| within 1.2x | 0 of 112 | 0 of 144 | 2 of 144 |
+| beyond 5x | 70 | 97 | 97 |
+
+Bounding changes nothing. Converging eight times more tightly on the
+objective changes nothing. Two thirds of the changed kcats differ by
+more than five-fold between runs that agree on the distance to within
+1%.
+
+The clearest single case is the parameter that matters most.
+Lanosterol synthase carries 17% of all screened leverage and supplies
+48% of the achievable improvement. Across the three bounded seeds it
+takes:
+
+| seed | kcat, 1/s | vs prior | distance |
+|------|-----------|----------|----------|
+| 0 | 0.338 | 174x | 0.8011 |
+| 1 | 20.3 | 10 500x | 0.7991 |
+| 2 | 0.0781 | 40x | 0.7920 |
+
+**A 260-fold range, at distances differing by 0.009.** The data says
+this kcat is too low and says nothing whatever about how much. Any
+single run reports one of those three numbers as the answer.
+
+That is the whole result in one row. Tuning identifies *which*
+parameters the priors got wrong; it does not measure what they should
+be. The correction belongs in a curation step with a citation, and the
+tuned vector belongs in a model, not in a table of kcats.
+
+## Both datasets, condition by condition
+
+The aggregate distance says a model fits. It does not say which
+conditions it fits, and on this dataset one of them is doing all the
+complaining. Scoring the prior and the tuned vector on every condition
+separately, with the best symmetric CMA-ES run (seed 2, distance
+0.7920) as the tuned model:
+
+| carbon source | measured | untuned | tuned |
+|---------------|---------:|--------:|------:|
+| fructose      | 0.338    | 0.131   | 0.370 |
+| glucose       | 0.410    | 0.131   | 0.392 |
+| ethanol       | 0.120    | 0.069   | 0.119 |
+| mannose       | 0.330    | 0.110   | 0.329 |
+| galactose     | 0.280    | 0.103   | 0.279 |
+| acetate       | 0.170    | 0.040   | 0.080 |
+| maltose       | 0.400    | 0.123   | 0.402 |
+| sucrose       | 0.390    | 0.131   | 0.392 |
+| mean \|error\| |          | 0.200   | 0.018 |
+
+**The untuned model reaches a third of the measured growth rate.** On
+glucose it manages 0.131 against 0.410 measured. Whatever else kcat
+tuning is for, on this model it is the difference between a model that
+grows and one that does not.
+
+**Seven of eight land within 0.01 after tuning; acetate does not.**
+0.080 against 0.170, the single worst residual in the dataset and
+roughly five times the next largest. Acetate is not unreachable -- an
+FVA ceiling with every kcat free puts it at 3.62 /h -- so this is a
+parameter problem, not a structural one.
+
+The flux side, over the 33 conditions:
+
+| | untuned | tuned |
+|---|--------:|------:|
+| mean RMSE          | 8.796 | 0.876 |
+| worst condition    | 39.01 | 5.31  |
+| worse than untuned | --    | 1 of 33 |
+
+**The two terms are not in tension.** Flux RMSE falls ten-fold while
+growth error falls eleven-fold, and exactly one flux condition of 33
+degrades. Nothing here supports the intuition that fitting growth
+costs flux.
+
+**Ten of the 33 flux conditions are identical to four decimals across
+the untuned and every tuned model.** Not similar -- unchanged. A third
+of the flux dataset cannot respond to any of the 112 tuned parameters,
+which is the reach problem of the previous section appearing on the
+flux side. The effective size of this dataset is smaller than its row
+count in both of its halves.
+
+## A hinge reaches every growth rate by deleting the data
+
+Acetate falling 0.09 short raises an obvious question: score only
+shortfalls, so the optimiser is punished for growing too slowly and
+indifferent to growing too fast. Replacing the max-growth term with
+`mean(max(0, measured - simulated))` does exactly that, and it works
+as advertised -- every condition clears its measurement, acetate
+included, at 0.170 exactly.
+
+It also over-predicts all eight.
+
+| | seed 0 | seed 1 |
+|---|-------:|-------:|
+| hinge objective     | 0.3665 | 0.3389 |
+| symmetric distance  | 1.5785 | 1.4332 |
+| growth shortfall    | 0.0000 | 0.0000 |
+| median fold (moved) | 6.68   | 5.72   |
+| largest fold        | 3 959x | 88 427x |
+
+Ethanol reaches 0.270 against 0.120 measured. Mean absolute growth
+error is 0.044, worse than the symmetric objective's 0.018, and flux
+RMSE degrades from 0.876 to 1.099 -- a dataset the change did not
+touch.
+
+**The mechanism is arithmetic, not tuning.** Seed 0's objective is
+0.3665; its flux RMSE, measured separately, is 1.0994; and
+1.0994 / 3 = 0.3665. With the shortfall at zero the max-growth term
+contributes nothing, so `(rmse_flux + 2 x 0) / 3` is the entire
+objective. A hinge does not weight the growth measurements less than a
+squared error does. Once they are cleared it removes them, converting
+eight measurements into eight satisfied inequalities that constrain
+nothing and contribute no gradient. The optimiser then fits flux alone
+with the growth rates free to drift upward, which is why they all do,
+and why one kcat travelled 88 427-fold with nothing opposing it. No
+parameter is pinned at `kcat_bounds` in any of these solutions, so the
+bounds are not what limited the drift either.
+
+This is the argument against asymmetric losses in general here, and it
+is why a prior penalty is the only remaining anchor: nothing in a
+hinge formulation can pull a growth rate back toward its measurement,
+so a penalty term can only pull *parameters* toward their priors and
+lower the growth rates as a side effect.
+
+## The prior penalty buys uniqueness, not fit
+
+Adding `lambda * mean(((log k - log k0) / sigma0)^2)` to the hinge
+objective anchors each parameter to its prior, scaled by the width that
+source is trusted to. Two values of lambda, two seeds each, against the
+plain hinge and the plain symmetric objective:
+
+| | symmetric | hinge, l=0 | l=0.01 | l=0.1 |
+|--------------------|--------:|--------:|--------:|--------:|
+| flux RMSE          | 0.876 | 1.099 | 1.206 | 1.117 |
+| max-growth RMSE    | 0.750 | 1.818 | 2.163 | 1.489 |
+| distance           | 0.792 | 1.579 | 1.844 | 1.365 |
+| mean growth error  | 0.018 | 0.044 | 0.053 | 0.036 |
+| over-predicted     | 3/8   | 8/8   | 7/8   | 6/8   |
+| acetate (0.170)    | 0.080 | 0.170 | 0.154 | 0.094 |
+| median fold moved  | 4.15  | 6.68  | 1.26  | 1.18  |
+
+**Fit is not monotonic in lambda; acetate is.** 0.01 is the worst of
+the three, and reproducibly so -- its two seeds agree to 0.04. It is
+the awkward middle: penalty enough to spoil the flux fit, not enough to
+stop the chase after the growth floors, so it over-predicts seven of
+eight *and* fits flux worse than either neighbour. Acetate meanwhile
+degrades with every increment of anchoring, 0.170 to 0.154 to 0.094,
+giving back exactly the condition the hinge was introduced to fix. No
+setting in this family escapes that exchange, and the best of them sits
+72% above the plain symmetric objective.
+
+**What the penalty does buy is a unique answer.** Two seeds per
+setting, comparing only the parameters that actually moved:
+
+| | moved | of those >2x | agree within 1.2x | worst spread |
+|----------------------|------:|-------------:|------------------:|-------------:|
+| symmetric, no penalty | 144 | 119 | 11 | 27 773x |
+| hinge, no penalty     | 144 | 135 | 19 | 39 206x |
+| hinge + 0.01          | 142 |  29 | 22 |      2x |
+| hinge + 0.1           | 135 |  15 | 15 |      1x |
+
+The worst cross-seed disagreement collapses from thirty thousand-fold
+to two-fold. This is not the penalty suppressing movement into
+agreement: restricted to parameters that moved more than five-fold,
+the penalised runs still agree, 12 of 13 within 1.2x, where the
+unpenalised ones scatter across four orders of magnitude.
+
+That is the identifiability result of this document restated as a
+remedy. The objective has flat directions; many parameter sets fit
+equally well; an unpenalised optimiser lands anywhere along them, which
+is why one kcat spans 260-fold across seeds at distances differing by
+0.009. A prior penalty selects the prior-closest point on the flat
+direction, which is a well-posed problem, so independent runs converge
+on the same answer.
+
+**The cost and the benefit are separable, and have not been separated.**
+Every penalised run here also carries the hinge, which is independently
+responsible for the drift. Whether reproducibility can be had at the
+symmetric objective's fit is a question about the penalty alone, and it
+needs the symmetric objective with the same penalty to answer.
+
+## How much data does this method actually need?
+
+ecYeastGEM ships 33 flux conditions and 8 carbon sources. Most adapters
+have far less, so the question is what the machinery produces when the
+data is one growth rate. Everything downstream was rebuilt on the
+reduced data -- the screen that decides which parameters are visible,
+the mask, the optimisation -- because a user holding one measurement
+does not have the full-data screen to select with. Conditions were
+removed by zeroing their weight rather than dropping rows: a dataset
+that drops rows also stops blocking those carbon sources and silently
+changes the simulation.
+
+**Visibility barely depends on how much data there is.**
+
+| data scored | conditions | parameters with non-zero leverage |
+|------------------|----:|-----:|
+| full dataset     | 41 | 3 407 of 4 218 |
+| glucose + flux   | 34 | 3 404 |
+| glucose alone    |  1 | 3 139 |
+
+Going from 41 conditions to one costs 8% of parameter visibility. In a
+protein-constrained model almost every enzyme reaches growth through
+the shared pool, so a single measurement still moves three quarters of
+the model.
+
+**This separates two properties that are easy to conflate.** The data
+can *see* nearly every parameter even in its most impoverished form;
+what it cannot do -- at 41 conditions or at one -- is *separate* them.
+The screen's threshold is therefore not what makes a hundred-kcat
+shortlist meaningful; the ranking is, and leverage is concentrated
+enough (11 groups carry 59%, 112 carry 85%) that the shortlist survives
+the threshold being nearly vacuous.
+
+**Fit degrades gracefully.** Two seeds each, scored on all 41
+conditions regardless of what they were fitted to:
+
+| | flux RMSE | max-growth RMSE | distance |
+|-------------------|------:|------:|------:|
+| untuned           | 8.796 | 8.208 | 8.404 |
+| fully tuned (41)  | 0.876 | 0.750 | 0.792 |
+| glucose + flux    | 0.806 | 1.627 | 1.353 |
+| glucose alone     | 1.254 | 1.719 | 1.564 |
+
+One growth measurement, with no flux data at all, fits the 33 unseen
+flux conditions seven-fold better than the prior and captures 90% of
+the distance improvement the full 41 conditions achieve. Tuning on
+glucose plus flux even beats the fully tuned model on flux, 0.806
+against 0.876, because with seven growth rates removed the flux term
+carries proportionally more weight. The full dataset is not uniformly
+better; it trades flux accuracy for growth accuracy.
+
+**The transfer works because the prior's error is systematic.** The
+untuned model reaches a near-constant fraction of every measured rate:
+
+| acetate | maltose | glucose | mannose | sucrose | galactose | fructose | ethanol |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.24 | 0.31 | 0.32 | 0.33 | 0.34 | 0.37 | 0.39 | 0.58 |
+
+Six of eight lie between 0.31 and 0.39. The dominant defect is a shared
+three-fold under-prediction, and one condition is enough to correct a
+shared offset. This is the scope of the result: the method degrades
+gracefully on small datasets *when prior error is systematic*, which is
+the normal case for kcats drawn from the same databases by the same
+rules. Independent per-reaction prior error would not transfer this
+way.
+
+The two outliers are the tell. Acetate at 0.24 and ethanol at 0.58
+carry condition-specific error on top of the systematic part, which is
+why acetate resists every objective tried and why ethanol is the
+condition that runs to 0.270 under a hinge. No reweighting fixes
+condition-specific error; only a corrected prior does.
+
+## The penalty was free; the hinge was the cost
+
+Every penalised run in the previous section also carried the hinge, so
+the fit those runs gave up could not be attributed. Rerunning the same
+penalty on the plain symmetric objective separates them.
+
+| | untuned | symmetric | symmetric + prior 0.01 |
+|-------------------|-------:|-------:|-------:|
+| flux RMSE         | 8.796 | 0.876 | 0.928 |
+| max-growth RMSE   | 8.208 | 0.750 | 0.773 |
+| distance          | 8.404 | 0.792 | 0.825 |
+| mean growth error | 0.200 | 0.018 | 0.019 |
+| median fold moved | --    | 4.15  | 1.59  |
+
+Per condition the two are nearly indistinguishable: fructose 0.375
+against 0.370, ethanol 0.122 against 0.119, acetate 0.081 against
+0.080, maltose 0.401 against 0.402. **The penalty costs 2.4% of the
+fit and moves the parameters 2.6-fold less.** Everything the previous
+section charged to the penalty -- worse flux, worse growth, acetate
+given back -- belonged to the hinge.
+
+What it buys, comparing the two seeds of each setting and counting only
+parameters that moved more than two-fold:
+
+| | movers >2x | agree within 1.2x | median spread | worst spread |
+|------------------------|------:|-----:|------:|--------:|
+| symmetric, no penalty  | 119 | 11 | 4.61x | 27 773x |
+| symmetric + prior 0.01 |  73 | 18 | 2.03x |     17x |
+| hinge + prior 0.01     |  29 | 22 | 1.12x |      2x |
+
+**The worst cross-seed disagreement falls from twenty-seven thousand
+fold to seventeen fold, for 2.4% of the fit.** The penalised hinge
+reproduces better still, but costs 130% of the fit to do it.
+
+This changes what a tuning run can claim. Without a penalty the method
+identifies which kcats are wrong and returns an arbitrary point along a
+flat direction for what they should be -- lanosterol synthase spanning
+260-fold across seeds at distances differing by 0.009. With one, the
+answer is stable within 17x at worst and 2x typically, which is the
+difference between a corrections table that is a suggestion and one
+that is a finding.
+
+`prior_penalty_weight` is already a `BayesianParams` field. On this
+dataset 0.01 is the setting that pays for itself.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
