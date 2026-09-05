@@ -1207,6 +1207,78 @@ responsible for the drift. Whether reproducibility can be had at the
 symmetric objective's fit is a question about the penalty alone, and it
 needs the symmetric objective with the same penalty to answer.
 
+## How much data does this method actually need?
+
+ecYeastGEM ships 33 flux conditions and 8 carbon sources. Most adapters
+have far less, so the question is what the machinery produces when the
+data is one growth rate. Everything downstream was rebuilt on the
+reduced data -- the screen that decides which parameters are visible,
+the mask, the optimisation -- because a user holding one measurement
+does not have the full-data screen to select with. Conditions were
+removed by zeroing their weight rather than dropping rows: a dataset
+that drops rows also stops blocking those carbon sources and silently
+changes the simulation.
+
+**Visibility barely depends on how much data there is.**
+
+| data scored | conditions | parameters with non-zero leverage |
+|------------------|----:|-----:|
+| full dataset     | 41 | 3 407 of 4 218 |
+| glucose + flux   | 34 | 3 404 |
+| glucose alone    |  1 | 3 139 |
+
+Going from 41 conditions to one costs 8% of parameter visibility. In a
+protein-constrained model almost every enzyme reaches growth through
+the shared pool, so a single measurement still moves three quarters of
+the model.
+
+**This separates two properties that are easy to conflate.** The data
+can *see* nearly every parameter even in its most impoverished form;
+what it cannot do -- at 41 conditions or at one -- is *separate* them.
+The screen's threshold is therefore not what makes a hundred-kcat
+shortlist meaningful; the ranking is, and leverage is concentrated
+enough (11 groups carry 59%, 112 carry 85%) that the shortlist survives
+the threshold being nearly vacuous.
+
+**Fit degrades gracefully.** Two seeds each, scored on all 41
+conditions regardless of what they were fitted to:
+
+| | flux RMSE | max-growth RMSE | distance |
+|-------------------|------:|------:|------:|
+| untuned           | 8.796 | 8.208 | 8.404 |
+| fully tuned (41)  | 0.876 | 0.750 | 0.792 |
+| glucose + flux    | 0.806 | 1.627 | 1.353 |
+| glucose alone     | 1.254 | 1.719 | 1.564 |
+
+One growth measurement, with no flux data at all, fits the 33 unseen
+flux conditions seven-fold better than the prior and captures 90% of
+the distance improvement the full 41 conditions achieve. Tuning on
+glucose plus flux even beats the fully tuned model on flux, 0.806
+against 0.876, because with seven growth rates removed the flux term
+carries proportionally more weight. The full dataset is not uniformly
+better; it trades flux accuracy for growth accuracy.
+
+**The transfer works because the prior's error is systematic.** The
+untuned model reaches a near-constant fraction of every measured rate:
+
+| acetate | maltose | glucose | mannose | sucrose | galactose | fructose | ethanol |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.24 | 0.31 | 0.32 | 0.33 | 0.34 | 0.37 | 0.39 | 0.58 |
+
+Six of eight lie between 0.31 and 0.39. The dominant defect is a shared
+three-fold under-prediction, and one condition is enough to correct a
+shared offset. This is the scope of the result: the method degrades
+gracefully on small datasets *when prior error is systematic*, which is
+the normal case for kcats drawn from the same databases by the same
+rules. Independent per-reaction prior error would not transfer this
+way.
+
+The two outliers are the tell. Acetate at 0.24 and ethanol at 0.58
+carry condition-specific error on top of the systematic part, which is
+why acetate resists every objective tried and why ethanol is the
+condition that runs to 0.270 under a hinge. No reweighting fixes
+condition-specific error; only a corrected prior does.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
