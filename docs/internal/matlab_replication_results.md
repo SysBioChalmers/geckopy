@@ -1279,6 +1279,51 @@ why acetate resists every objective tried and why ethanol is the
 condition that runs to 0.270 under a hinge. No reweighting fixes
 condition-specific error; only a corrected prior does.
 
+## The penalty was free; the hinge was the cost
+
+Every penalised run in the previous section also carried the hinge, so
+the fit those runs gave up could not be attributed. Rerunning the same
+penalty on the plain symmetric objective separates them.
+
+| | untuned | symmetric | symmetric + prior 0.01 |
+|-------------------|-------:|-------:|-------:|
+| flux RMSE         | 8.796 | 0.876 | 0.928 |
+| max-growth RMSE   | 8.208 | 0.750 | 0.773 |
+| distance          | 8.404 | 0.792 | 0.825 |
+| mean growth error | 0.200 | 0.018 | 0.019 |
+| median fold moved | --    | 4.15  | 1.59  |
+
+Per condition the two are nearly indistinguishable: fructose 0.375
+against 0.370, ethanol 0.122 against 0.119, acetate 0.081 against
+0.080, maltose 0.401 against 0.402. **The penalty costs 2.4% of the
+fit and moves the parameters 2.6-fold less.** Everything the previous
+section charged to the penalty -- worse flux, worse growth, acetate
+given back -- belonged to the hinge.
+
+What it buys, comparing the two seeds of each setting and counting only
+parameters that moved more than two-fold:
+
+| | movers >2x | agree within 1.2x | median spread | worst spread |
+|------------------------|------:|-----:|------:|--------:|
+| symmetric, no penalty  | 119 | 11 | 4.61x | 27 773x |
+| symmetric + prior 0.01 |  73 | 18 | 2.03x |     17x |
+| hinge + prior 0.01     |  29 | 22 | 1.12x |      2x |
+
+**The worst cross-seed disagreement falls from twenty-seven thousand
+fold to seventeen fold, for 2.4% of the fit.** The penalised hinge
+reproduces better still, but costs 130% of the fit to do it.
+
+This changes what a tuning run can claim. Without a penalty the method
+identifies which kcats are wrong and returns an arbitrary point along a
+flat direction for what they should be -- lanosterol synthase spanning
+260-fold across seeds at distances differing by 0.009. With one, the
+answer is stable within 17x at worst and 2x typically, which is the
+difference between a corrections table that is a suggestion and one
+that is a finding.
+
+`prior_penalty_weight` is already a `BayesianParams` field. On this
+dataset 0.01 is the setting that pays for itself.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
