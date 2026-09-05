@@ -1150,6 +1150,63 @@ hinge formulation can pull a growth rate back toward its measurement,
 so a penalty term can only pull *parameters* toward their priors and
 lower the growth rates as a side effect.
 
+## The prior penalty buys uniqueness, not fit
+
+Adding `lambda * mean(((log k - log k0) / sigma0)^2)` to the hinge
+objective anchors each parameter to its prior, scaled by the width that
+source is trusted to. Two values of lambda, two seeds each, against the
+plain hinge and the plain symmetric objective:
+
+| | symmetric | hinge, l=0 | l=0.01 | l=0.1 |
+|--------------------|--------:|--------:|--------:|--------:|
+| flux RMSE          | 0.876 | 1.099 | 1.206 | 1.117 |
+| max-growth RMSE    | 0.750 | 1.818 | 2.163 | 1.489 |
+| distance           | 0.792 | 1.579 | 1.844 | 1.365 |
+| mean growth error  | 0.018 | 0.044 | 0.053 | 0.036 |
+| over-predicted     | 3/8   | 8/8   | 7/8   | 6/8   |
+| acetate (0.170)    | 0.080 | 0.170 | 0.154 | 0.094 |
+| median fold moved  | 4.15  | 6.68  | 1.26  | 1.18  |
+
+**Fit is not monotonic in lambda; acetate is.** 0.01 is the worst of
+the three, and reproducibly so -- its two seeds agree to 0.04. It is
+the awkward middle: penalty enough to spoil the flux fit, not enough to
+stop the chase after the growth floors, so it over-predicts seven of
+eight *and* fits flux worse than either neighbour. Acetate meanwhile
+degrades with every increment of anchoring, 0.170 to 0.154 to 0.094,
+giving back exactly the condition the hinge was introduced to fix. No
+setting in this family escapes that exchange, and the best of them sits
+72% above the plain symmetric objective.
+
+**What the penalty does buy is a unique answer.** Two seeds per
+setting, comparing only the parameters that actually moved:
+
+| | moved | of those >2x | agree within 1.2x | worst spread |
+|----------------------|------:|-------------:|------------------:|-------------:|
+| symmetric, no penalty | 144 | 119 | 11 | 27 773x |
+| hinge, no penalty     | 144 | 135 | 19 | 39 206x |
+| hinge + 0.01          | 142 |  29 | 22 |      2x |
+| hinge + 0.1           | 135 |  15 | 15 |      1x |
+
+The worst cross-seed disagreement collapses from thirty thousand-fold
+to two-fold. This is not the penalty suppressing movement into
+agreement: restricted to parameters that moved more than five-fold,
+the penalised runs still agree, 12 of 13 within 1.2x, where the
+unpenalised ones scatter across four orders of magnitude.
+
+That is the identifiability result of this document restated as a
+remedy. The objective has flat directions; many parameter sets fit
+equally well; an unpenalised optimiser lands anywhere along them, which
+is why one kcat spans 260-fold across seeds at distances differing by
+0.009. A prior penalty selects the prior-closest point on the flat
+direction, which is a well-posed problem, so independent runs converge
+on the same answer.
+
+**The cost and the benefit are separable, and have not been separated.**
+Every penalised run here also carries the hinge, which is independently
+responsible for the drift. Whether reproducibility can be had at the
+symmetric objective's fit is a question about the penalty alone, and it
+needs the symmetric objective with the same penalty to answer.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
