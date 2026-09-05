@@ -154,10 +154,20 @@ keeps impact share near 90%.
 
 ## Recommended method
 
-FVA-reachable mask, then prune the result by the sensitivity screen.
-`prior_penalty_weight` stays 0. No hyperparameter is added: the mask is
-derived from the model and conditions, and the pruning threshold is an
+FVA-reachable mask, then prune the result by the sensitivity screen,
+with `prior_penalty_weight` at its default of 0.03. The mask is derived
+from the model and conditions, and the pruning threshold is an
 operating point on a reported curve, not something tuned per model.
+
+The penalty is what makes an individual tuned kcat mean anything. The
+fit is flat along most directions, so an unpenalised search returns an
+arbitrary point along each: two seeds of the same run disagree by up to
+27 773-fold on individual kcats, and only 69% of their large
+corrections agree even on the direction of the change. At 0.03 the
+worst disagreement is 5.7x, all 14 corrections beyond two-fold agree in
+direction, and the fit gives up 4.6%. The cost is that it reports 14
+corrections where 0.01 reports 26 -- it declines the ones it cannot
+support, rather than making more of them trustworthy.
 
 The trust-weighted mask is the likely replacement and beats it on the
 numbers, but it carries a threshold of its own and rests on one seed
@@ -169,11 +179,16 @@ splits over conditions** (most adapters have far fewer than 41
 conditions) and **widening the prior widths** (stalls when coupled,
 loses when decoupled).
 
-Two mechanisms exist but are **not** recommended:
+`prior_penalty_weight` compresses how far kcats move rather than how
+many, which under ABC-SMC read as the opposite of the target shape and
+was dropped. Under CMA-ES that compression is the point: it is what
+makes the surviving corrections reproduce. Selection uses the penalised
+objective; `rmse_trace` stays the plain RMSE and `objective_trace`
+records what was minimised, so runs stay comparable across settings and
+against MATLAB.
 
-* `prior_penalty_weight` compresses how far kcats move rather than how
-  many, which is the opposite of the target shape (median fold 2.58,
-  only 61% beyond two-fold). Dropped.
+One mechanism exists but is **not** recommended:
+
 * `adapt_proposal_width` gives the best raw RMSE of any variant
   (0.8281) but scatters parameters badly. Off by default; do not enable
   without reporting all five criteria above.

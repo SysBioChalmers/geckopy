@@ -147,12 +147,23 @@ class BayesianParams(BaseModel):
     # already encodes per-source confidence, this charges more for
     # moving a trusted kcat than an unlabelled one, making parsimony
     # part of what the search optimises rather than something applied
-    # afterwards. 0 scores on RMSE alone.
+    # afterwards.
+    #
+    # The default is what makes a tuned kcat reproducible. The fit is
+    # flat along many directions, so an unpenalised search returns an
+    # arbitrary point along each: on ecYeastGEM two seeds of the same
+    # unpenalised run disagree by up to 27 773-fold on individual
+    # kcats, and only 69% of their large corrections even agree on the
+    # direction of the change. At 0.03 the worst disagreement is 5.7x,
+    # every correction beyond two-fold agrees in direction, and the fit
+    # gives up 4.6%. Set 0 to score on RMSE alone; a run reproducing
+    # MATLAB, which has no such term, must do so.
     prior_penalty_weight: float = Field(
-        default=0.0,
+        default=0.03,
         description=(
             "Weight on a prior term in the selection objective, "
-            "rmse + w * mean((log(k/k0) / sigma0_log)**2). 0 scores on RMSE alone."
+            "rmse + w * mean((log(k/k0) / sigma0_log)**2). Keeps large "
+            "corrections reproducible across seeds. 0 scores on RMSE alone."
         ),
     )
 

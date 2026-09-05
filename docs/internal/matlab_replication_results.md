@@ -353,6 +353,12 @@ added: the mask is derived from the model and the conditions, and the
 pruning threshold is an operating point on a reported curve rather than
 something tuned per model.
 
+> Superseded on the penalty. Under ABC-SMC the penalty bought nothing
+> that pruning did not buy more cheaply, which is what this section
+> measured. Under CMA-ES it buys something pruning cannot: corrections
+> that reproduce across seeds. See *Settled: symmetric objective, prior
+> penalty 0.03*. The mask and pruning recommendations stand.
+
 | operating point | RMSE | changed |
 |-----------------|------|---------|
 | MATLAB | 0.8715 | ~4804 |
@@ -1321,8 +1327,55 @@ answer is stable within 17x at worst and 2x typically, which is the
 difference between a corrections table that is a suggestion and one
 that is a finding.
 
-`prior_penalty_weight` is already a `BayesianParams` field. On this
-dataset 0.01 is the setting that pays for itself.
+`prior_penalty_weight` is already a `BayesianParams` field. What
+remains is which setting to ship.
+
+## Settled: symmetric objective, prior penalty 0.03
+
+The full sweep of the penalty weight. Two seeds each, CMA-ES at 6800
+evaluations, 112 free parameters covering 144 kcats, max-growth weight
+2, symmetric objective throughout. Fit cost is against the mean of the
+unpenalised seeds (0.7974).
+
+| lambda | distance, seed 0 / 1 | fit cost | changed | median fold | max fold |
+|--------|---------------------|---------|---------|-------------|----------|
+| 0      | 0.8011 / 0.7991 | --    | 144 / 144 | 2.80x | 14 663x |
+| 0.003  | 0.8039 / 0.8088 | +1.1% | 141 / 140 | 2.31x | 40.7x |
+| 0.01   | 0.8248 / 0.8142 | +2.8% | 139 / 142 | 1.59x | 15.0x |
+| 0.03   | 0.8384 / 0.8302 | +4.6% | 135 / 134 | 1.36x | 12.7x |
+
+The fit barely moves across the whole range -- 4.6% from end to end,
+against a cross-seed scatter of 0.25% at lambda 0. What moves is
+whether the answer is reproducible:
+
+| lambda | movers >2x | worst seed spread | >5x apart | agree on direction |
+|--------|-----------|-------------------|-----------|--------------------|
+| 0      | 119 | 27 773x | 57 | 69% (54 of 78) |
+| 0.003  | 115 |    72.8x | 39 | 66% (35 of 53) |
+| 0.01   |  73 |    16.7x |  6 | 85% (22 of 26) |
+| 0.03   |  29 |     5.7x |  1 | 100% (14 of 14) |
+
+The two counts have different denominators, deliberately. *Movers >2x*
+counts kcats that moved more than two-fold in **either** seed, which is
+the set whose spread is worth quoting. *Agree on direction* is over
+kcats that moved more than two-fold in **both**, since a kcat one seed
+left alone has no direction to agree about.
+
+**At 0.03 every correction the method reports beyond two-fold points
+the same way in both seeds, and the worst disagreement about magnitude
+is 5.7-fold.** That is the setting to ship.
+
+The honest cost is not the 4.6% of fit. It is that the stronger penalty
+reports *fewer* corrections: 14 beyond two-fold in both seeds against
+lambda 0.01's 26. The penalty does not make more corrections
+trustworthy; it declines to make the ones it cannot support. For a
+corrections table that is the right trade -- 14 findings beat 26
+suggestions. If the tuned model itself is the deliverable and nobody
+reads the individual kcats, 0.01 keeps 1.8% more fit and twice the
+change set.
+
+`prior_penalty_weight` therefore defaults to 0.03. Setting it to 0
+recovers the unpenalised behaviour and the earlier sections' results.
 
 ## Open items
 
