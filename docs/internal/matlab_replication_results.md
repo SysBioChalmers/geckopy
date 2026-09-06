@@ -1426,3 +1426,9 @@ recovers the unpenalised behaviour and the earlier sections' results.
    model's own leverage distribution earns, with a fixed-`N` cap kept
    as an explicit secondary knob for sizing the CMA-ES budget, not the
    primary criterion it is today.
+
+   **Addressed**: `cmaes_tuning.select_tunable_mask` implements the
+   relative cutoff -- keep the fewest highest-ranked groups whose
+   combined leverage reaches a `target_impact_share` of the total,
+   default 0.9. Not yet validated on a model unlike ecYeastGEM; 0.9 is
+   a starting point, not a calibrated constant.

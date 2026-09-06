@@ -253,6 +253,13 @@ One mechanism exists but is **not** recommended:
    with a fixed-`N` cap as an opt-in secondary knob for CMA-ES budget
    sizing.
 
+   **Addressed**: `cmaes_tuning.screen_kcat_leverage` +
+   `select_tunable_mask` implement this -- `bayesian_kcat_tuning`
+   (ABC-SMC) itself is untouched and still takes a plain array, but
+   `cmaes_kcat_tuning` builds one automatically at a relative
+   `target_impact_share` when none is given. Not yet validated beyond
+   ecYeastGEM.
+
 ## Running it
 
 See `matlab_replication_handoff.md` for the cluster environment: venv

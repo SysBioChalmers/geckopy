@@ -1,11 +1,10 @@
 # Tuning kcats against experimental data
 
-A first, brief protocol for using `bayesian_kcat_tuning` to fit an
-ecModel's kcats against measured growth rates and/or fluxes. This
-covers the shipped, one-call path end to end; it is not a full
-reference (see the docstrings in
-`geckopy.kcat_sensitivity_analysis.bayesian` for every option) and it
-does not build an ecModel from scratch (see
+A first, brief protocol for fitting an ecModel's kcats to measured
+growth rates and/or fluxes with `cmaes_kcat_tuning`. This covers one
+recommended path end to end; it is not a full reference (see the
+docstrings in `geckopy.kcat_sensitivity_analysis.bayesian` for every
+option) and it does not build an ecModel from scratch (see
 [migrating_from_gecko_matlab.md](migrating_from_gecko_matlab.md) for
 that).
 
@@ -13,20 +12,32 @@ that).
 
 An ecModel's kcats mostly come from databases (BRENDA), predictors
 (DLKcat, OpenKineticsPredictor), or manual curation, and they don't
-reproduce measured growth on their own. Bayesian kcat tuning searches
-for a kcat vector that does: it repeatedly perturbs kcats, simulates
-the model under each experimental condition, and keeps perturbations
-that improve the match to measured growth rates and fluxes, weighted
-by how much each kcat's source is trusted. It reports which kcats
-changed and by how much, not just a fitted model -- the point is
-usually the list of corrections, not the number.
+reproduce measured growth on their own. Three functions, used in
+sequence, turn measured data into corrections:
+
+1. **`screen_kcat_leverage`** reports which kcats the data can
+   actually speak to -- no optimisation, just "if this kcat were
+   different, how much would the fit change." Useful for curation on
+   its own, before any tuning run.
+2. **`select_tunable_mask`** turns that report into the set of kcats a
+   tuning run should search over, automatically if you skip it.
+3. **`cmaes_kcat_tuning`** searches that set with CMA-ES for the kcat
+   vector that best matches the data, weighted by how much each kcat's
+   source is trusted.
+
+The result is usually a short list of corrections, each with a
+before/after value and a source -- not a wholesale rewrite of the
+model. A run that changes nearly every kcat by a little has not found
+anything; a run that changes a handful by a lot, concentrated in the
+least-trusted sources, has.
 
 ## Before you start
 
 - A working ecModel and `ModelAdapter` project (an existing
   `model_adapter.toml` and `models/*.yml`).
-- `pip install geckopy[bayesian]` -- the ABC-SMC sampler (`pyabc`) is
-  an optional dependency, not part of the base install.
+- `pip install geckopy[bayesian]` -- the CMA-ES search (`cma`) and the
+  ABC-SMC sampler it replaced (`pyabc`) are optional dependencies, not
+  part of the base install.
 - Experimental data: at least one of a set of measured exchange fluxes
   per condition, or a set of measured maximum growth rates per carbon
   source. Both together works and is preferred -- flux data pins the
@@ -64,15 +75,12 @@ header, then one reaction ID per line.
 ## Step 2: Configure `[bayesian]` in `model_adapter.toml`
 
 Every field has a default, so this section can be omitted entirely to
-start; the defaults are conservative (every source trusted equally,
-no penalty). A configured example, in plain terms:
+start. A configured example, in plain terms:
 
 ```toml
 [bayesian]
 sigma0_log_default = 0.3   # trust for any source not listed below
 max_growth_weight = 2.0    # weight the growth-rate data double against flux data
-prior_penalty_weight = 0.03  # keep large corrections reproducible across seeds
-tie_isozymes = true         # isozyme copies of one reaction move together
 
 [bayesian.source_groups.okp]
 sources = ["OpenKineticsPredictor"]
@@ -97,74 +105,97 @@ What each knob means:
   origin, and give each group a standard deviation in log-space:
   smaller means more trusted, and the search needs stronger evidence
   before it moves that kcat far. `custom` (curated by hand) at 0.1 is
-  three times more trusted than an unlabelled prediction at 0.3.
-- **`max_growth_weight`**. The combined score is
+  three times more trusted than an unlabelled prediction at 0.3. This
+  is the one section with no universal default -- your model's own
+  source labels decide it.
+- **`max_growth_weight`** (default `1.0`). The combined score is
   `(rmse_flux + w * rmse_max_growth) / (w + 1)`. At `2`, growth-rate
   error counts double against flux error -- useful when growth rate is
   measured across many carbon sources but flux is mostly one.
-- **`prior_penalty_weight`**. Adds
+- **`prior_penalty_weight`** (default `0.03`, already on). Adds
   `w * mean(((log k - log k0) / sigma0)^2)` to the score: a charge for
   moving a kcat, scaled by how much you trust its prior. Without this
   the fit is often flat along many directions -- several very
   different kcat vectors fit equally well -- and the search returns an
   arbitrary point along that flat direction, which does not reproduce
-  if you rerun it with a different seed. The default (`0.03`) is
-  calibrated so that large corrections agree in direction and land
-  within a handful of fold of each other across seeds, at a small cost
-  in raw fit. Set it to `0` to score on fit alone (this is also what a
-  run reproducing GECKO MATLAB, which has no such term, must do).
-- **`tie_isozymes`**. Several ecModel reactions are one enzymatic
-  reaction split across isozyme copies. When copies share a prior
-  value and a source, no experimental condition can tell them apart,
-  so an untied search is free to invent a difference between them that
-  means nothing biologically. Tying gives such copies one shared kcat.
-- **`schedule_generations` / `schedule_samples` / `min_keep` /
-  `max_keep` / `rmse_threshold` / `max_generations`**. Control the
-  ABC-SMC sampler itself: how many candidate kcat vectors are drawn
-  per generation, what fraction survive each round, and when to stop.
-  The defaults are a reasonable starting point; see the `BayesianParams`
-  docstring if a run stalls or converges too slowly.
+  if you rerun it with a different seed. The default is calibrated so
+  that large corrections agree in direction and land within a handful
+  of fold of each other across seeds, at a small cost in raw fit. Set
+  it to `0` to score on fit alone (also what a run reproducing GECKO
+  MATLAB, which has no such term, must do).
+- **`tie_isozymes`** (default `true`). Several ecModel reactions are
+  one enzymatic reaction split across isozyme copies. When copies
+  share a prior value and a source, no experimental condition can tell
+  them apart, so an untied search is free to invent a difference
+  between them that means nothing biologically. Tying gives such
+  copies one shared kcat.
+- **`max_generations` / `rmse_threshold`**. Double as this search's
+  stopping conditions: run at most this many CMA-ES generations, or
+  stop earlier once the best RMSE reaches `rmse_threshold` (negative
+  never stops early).
 
-## Step 3: Decide which kcats are tunable
-
-By default every kcat with a value greater than zero is tunable. On a
-genome-scale model that is usually thousands of parameters, most of
-which no condition in your dataset can actually inform -- carrying no
-flux under any of them, or moving the score by an unmeasurable amount.
-Restricting to a smaller, well-chosen set both keeps the search
-honest (a change is only reported where the data could see it) and
-searches better (CMA-ES/ABC-SMC's step size grows with the square
-root of the dimension).
-
-There is no shipped, automatic policy for building this set yet -- it
-is a plain boolean array you construct and pass as `tunable_mask`.
-`geckopy.kcat_sensitivity_analysis.bayesian.parsimony.identifiability_mask`
-gives you the building block: keep a kcat when its one-at-a-time
-effect on the score, weighted by trust, clears a threshold you choose.
-Building and calibrating that threshold is model-specific work; start
-without a mask, and reach for one once you can see which kcats the
-unrestricted run leaves untouched or barely touches.
-
-## Step 4: Run it
+## Step 3: Find out what the data can see
 
 ```python
-from geckopy import ModelAdapter, load_ec_model, save_ec_model
-from geckopy.kcat_sensitivity_analysis.bayesian import bayesian_kcat_tuning
+from geckopy import ModelAdapter, load_ec_model
+from geckopy.kcat_sensitivity_analysis.bayesian import screen_kcat_leverage
 
 adapter = ModelAdapter.from_folder("path/to/project")
 model = load_ec_model(adapter=adapter)  # models/ecModel.yml by default
 
-result = bayesian_kcat_tuning(model, adapter=adapter, n_proc=8, seed=0)
+screen = screen_kcat_leverage(model, adapter=adapter, n_proc=8)
+screen.drop(columns="_positions").head(20)
+```
+
+This perturbs every tunable kcat (isozyme copies moved together, per
+`tie_isozymes`) up and down and measures how much the fit changes --
+no tuning happens yet. The result is a table, one row per kcat or tied
+group, ranked by that leverage weighted by trust: the reaction ID, how
+many isozyme copies it covers, its source group, its current value,
+its leverage, and `cum_leverage_share` -- the running fraction of
+total leverage carried by this row and every row above it. The top
+rows are what a curator should look at first, independent of whether
+you ever run a tuning search: on ecYeastGEM, a handful of kcats
+routinely carry the majority of what any tuning run could achieve, and
+they tend to be implausible database values rather than genuine
+biology.
+
+This costs one simulation per condition per kcat group, roughly
+comparable in scale to a full tuning run's budget -- expect tens of
+minutes on a genome-scale model, not a quick check. `n_proc`
+parallelises it the same way tuning does.
+
+## Step 4: Tune
+
+```python
+from geckopy import save_ec_model
+from geckopy.kcat_sensitivity_analysis.bayesian import cmaes_kcat_tuning
+
+result = cmaes_kcat_tuning(
+    model, adapter=adapter, screen=screen, n_proc=8, seed=0,
+)
 
 save_ec_model(model, "ecModel_tuned.yml", adapter=adapter)
 ```
 
+Passing the screen from Step 3 avoids recomputing it; omit `screen`
+entirely and `cmaes_kcat_tuning` runs one itself. Either way, the
+tunable set is built by `select_tunable_mask`, which keeps the fewest
+highest-ranked kcats whose combined leverage reaches
+`target_impact_share` (default `0.9`) of the total -- a cutoff
+relative to the model's own achievable improvement, not a fixed count
+or an absolute leverage value, so the same setting means a comparable
+thing on a different model. Pass `tunable_mask` directly instead if
+you want to fix the set yourself.
+
 `model` is mutated in place: on return, every tunable kcat carries the
-final generation's best-scoring value, and the model's kcat
-constraints are already applied -- nothing further is needed before
-simulating or saving it. `n_proc` parallelises scoring each
-generation's candidates across processes; omit it to use
-`cobra.Configuration().processes`, or pass `1` to run serially.
+best value CMA-ES found, and the model's kcat constraints are already
+applied -- nothing further is needed before simulating or saving it.
+Beyond `target_impact_share`, the only other knobs are `popsize`
+(CMA-ES's population size, defaulting to its own dimension-scaled
+choice rather than a value tuned for one particular model), `n_proc`,
+and `seed`; everything else comes from the same `BayesianParams` as
+Step 2, so there is nothing new to configure once you've read it.
 
 If growth needs special handling for your organism -- forcing
 anaerobic conditions, or scaling the protein pool with a
@@ -177,29 +208,30 @@ this repository for a worked example.
 
 `result` is a `BayesianTuningResult`:
 
-- `rmse_trace` / `objective_trace` -- best plain-fit RMSE and best
-  optimised-objective value, per generation (identical unless
-  `prior_penalty_weight` is nonzero). A flat trace for several
-  generations before the run ends means it stalled, not converged.
+- `rmse_trace` / `objective_trace` -- best-so-far plain-fit RMSE and
+  best-so-far optimised objective, per generation (identical unless
+  `prior_penalty_weight` is nonzero). A flat trace for many generations
+  before the run ends means it stalled, not converged.
 - `new_kcat` / `old_kcat` / `rxns` / `groups` -- the tuned and prior
-  kcats, parallel arrays, with each kcat's trust-tier source group.
+  kcats over the searched set, parallel arrays, with each kcat's trust
+  tier. Tied isozyme copies share one value in `new_kcat`.
 - `converged` -- whether `rmse_threshold` was reached, or
   `max_generations` was hit first.
-- `diagnostics_trace` -- per-generation, per-source-group summary
-  statistics, for watching how each trust tier moves over the run.
+- `diagnostics_trace` -- always empty here; CMA-ES has no
+  per-generation accepted-particle set to compute source-group
+  diagnostics over.
 
 Before trusting a tuned kcat, check more than the final RMSE:
 
 1. **How many kcats changed**, and by how much -- a result that moves
-   nearly everything by a little has not identified anything; a result
-   that changes a handful by a lot, concentrated in less-trusted
-   sources, is the useful shape.
+   nearly everything by a little has not identified anything.
    `geckopy.kcat_sensitivity_analysis.bayesian.parsimony` has the
    tools for this: `n_changed`, `fold_change`, `source_movement`.
 2. **Impact share** -- `parsimony.impact_share` reports what fraction
    of the total achievable improvement the changed kcats actually
    carry, distinguishing "few, large, and consequential" from mere
-   sparsity.
+   sparsity. This is a different, unweighted quantity from
+   `screen_kcat_leverage`'s trust-weighted `cum_leverage_share`.
 3. **Reproducibility.** Rerun with a different `seed`. Large
    corrections (say, beyond two-fold) should land in the same
    direction and within a small factor of each other; if they don't,
@@ -212,22 +244,18 @@ Before trusting a tuned kcat, check more than the final RMSE:
    elsewhere is a sign of overfitting to a thin dataset, not a fixed
    model.
 
-## A note on the search itself
+## Why CMA-ES, not ABC-SMC
 
-`bayesian_kcat_tuning` runs ABC-SMC (sequential Monte Carlo): it
-samples and truncates, rather than optimising directly. Internal
-validation on ecYeastGEM found that a separable CMA-ES search over the
-same screened parameters, same objective, same penalty, reaches a
-distinctly better fit (by several standard errors) with far tighter
-cross-seed reproducibility -- see
+geckopy also ships `bayesian_kcat_tuning`, an ABC-SMC sampler that
+predates the functions above. Internal validation on ecYeastGEM found
+that once a screen has reduced the problem to a manageable parameter
+set, CMA-ES reaches a distinctly better fit -- by several standard
+errors -- with far tighter cross-seed reproducibility (see
 `docs/internal/bayesian_tuning_handover.md`, "Three methods, one
-conclusion". That CMA-ES path is not yet wrapped as a single function
-in the package; today it means composing `priors`, `distance`,
-`simulate` and the tying/screening helpers directly, the way the
-project's own analysis scripts do. ABC-SMC via `bayesian_kcat_tuning`
-is the fully-supported entry point and a reasonable place to start;
-promoting the CMA-ES path to a shipped function is a natural next
-step, not yet done.
+conclusion"). No case has been found where ABC-SMC should be preferred
+for this task, so it is not part of this walkthrough; it remains in
+the package because it is what the CMA-ES path was validated against,
+not as a second option to choose between.
 
 ## Where to go from here
 
@@ -235,5 +263,5 @@ step, not yet done.
   findings behind the defaults above (why 0.03, why tying, what
   doesn't work).
 - `docs/internal/matlab_replication_results.md` -- the underlying
-  experiments, including the still-open question of how to build a
-  `tunable_mask` that generalises across models (Open items #6).
+  experiments, including how `target_impact_share` was chosen and what
+  is still unvalidated about it on a model unlike ecYeastGEM.
