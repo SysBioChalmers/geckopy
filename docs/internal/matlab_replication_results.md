@@ -1417,29 +1417,53 @@ seeds to three decimals). With one measurement to fit, parameter count
 stops being the constraint; the ceiling is what one number can
 possibly tell you about eight.
 
-### Lambda: 0.03 still beats 0.01, but 0.1 is not simply worse
+### Lambda: 0.03 confirmed, 0.04 is the more interesting finding
 
-Same 112-parameter, mgw-2 setting, lambda swept directly (movers/
-agreement/spread computed fresh from this run's saved vectors, same
-convention as the earlier sweep -- movers counts kcats past 2-fold in
-*either* seed, agreement is over kcats past 2-fold in *both*):
+Same 112-parameter, mgw-2 setting, lambda swept directly, then
+bisected once the first pass showed the curve wasn't flat past 0.03
+(movers/agreement/spread computed fresh from this run's saved vectors,
+same convention as the earlier sweep -- movers counts kcats past
+2-fold in *either* seed, agreement is over kcats past 2-fold in
+*both*). The bisection was adaptive: 0.05 came back worse than 0.03,
+so the next point was 0.04 (between them) rather than 0.07 (further
+out), to resolve where the bend actually is rather than extend a curve
+that was already trending the wrong way.
 
 | lambda | distance (seed 0 / 1) | fit cost vs 0.01 | movers >2x | both-moved | direction agree | median spread | max spread |
 |---|---|---|---|---|---|---|---|
 | 0.01 | 0.8248 / 0.8142 | -- | 73 | 26 | 84.6% | 2.03x | 16.7x |
 | 0.03 | 0.8384 / 0.8302 | +1.8% | 29 | 14 | 100% | 1.84x | 5.7x |
-| 0.1 | 1.0575 / 1.1624 | +33.7% | 15 | 10 | 100% | 1.13x | 2.2x |
+| 0.04 | 0.8514 / 0.9239 | +8.3% | 21 | 15 | 100% | 1.12x | 6.6x |
+| 0.05 | 0.9465 / 0.9462 | +15.5% | 18 | 15 | 100% | 1.20x | 4.6x |
+| 0.1 | 1.0575 / 1.1624 | +35.4% | 15 | 10 | 100% | 1.13x | 2.2x |
 
-0.03 confirms as the point where direction agreement first reaches
-100% for a small fit cost -- consistent with the earlier sweep. What's
-new: reproducibility keeps improving well past that point. 0.1 pushes
-worst-case spread down further, from 5.7x to 2.2x, at real cost this
-time (+33.7%, against +1.8% for 0.01-to-0.03). That means the earlier
-picture -- "0.03 is where it levels off" -- was drawn from a curve that
-stopped at 0.03; whether the honest bend sits closer to 0.03 or further
-out is genuinely open. A bisection at 0.05 and 0.07 is running to
-locate it; **do not revise the shipped default from this table alone**,
-the section below will be updated once it lands.
+Direction agreement reaches 100% at 0.03 and stays there -- that part
+of the earlier finding holds exactly. What the finer curve adds:
+*median* spread keeps improving after 0.03 (1.84x -> 1.12x from 0.03
+to 0.04) but then goes essentially flat (1.12x, 1.20x, 1.13x from 0.04
+through 0.1) while fit cost keeps climbing the whole way (+8.3% ->
++15.5% -> +35.4%). Once direction agreement is saturated, 0.04 is
+close to where the typical corrected kcat's cross-seed agreement also
+saturates -- pushing to 0.05 or 0.1 buys little further tightening for
+a steadily worse fit.
+
+*Worst*-case spread does not tell the same clean story: 6.6x at 0.04
+is the highest of the four penalised settings, worse than 0.03's 5.7x.
+With only 15 both-moved kcats at 0.04, one outlier kcat is enough to
+move that number, and reading a single worst-case value as a trend
+across two-seed runs is exactly the kind of small-sample noise this
+document has flagged elsewhere (see "Report the trust-ordering check
+as inconclusive on small samples"). The median is the more stable
+statistic here and it points at 0.04, not the max.
+
+**0.03 remains the shipped default.** It is still where direction
+agreement first saturates, at the smallest fit cost of any penalised
+setting (+1.8%). 0.04 is a genuine candidate for a stronger default --
+it captures most of the achievable *magnitude* agreement that 0.03
+misses -- but the case rests on a median computed over 15 kcats from
+two seeds, and the max-spread result cuts the other way. Confirm with
+a third seed at 0.03 and 0.04 before changing the default; do not
+change it on this table alone.
 
 ### Max-growth weight: 2 is defensible, 1 reproduces tighter
 
@@ -1537,11 +1561,14 @@ lambda as settled.
    default 0.9. Not yet validated on a model unlike ecYeastGEM; 0.9 is
    a starting point, not a calibrated constant.
 
-7. **Lambda's upper bend is unresolved.** "Checking the settled
-   configuration directly" found 0.1 still buying reproducibility
-   (worst spread 5.7x -> 2.2x) for 33.7% of fit, well past where 0.03
-   was thought to level off. A bisection at 0.05/0.07 is running; fold
-   the result into that section and revisit the shipped default once
-   it lands -- `tune_prior_penalty_weight` now automates exactly this
-   sweep, including the reproducibility columns, so this need not be
-   hand-rolled again.
+7. **Lambda's bend is located, but not conclusively resolved.**
+   "Checking the settled configuration directly" found 0.03->0.04 is
+   where median cross-seed spread saturates (1.84x -> 1.12x); further
+   increases past that mostly spend fit for no further median
+   improvement. 0.03 stays the default -- the case for 0.04 rests on a
+   median over 15 kcats from two seeds, and 0.04's worst-case spread
+   (6.6x) is actually the highest of the penalised settings tested,
+   plausibly a single-outlier artifact at this sample size but not
+   ruled out as real. A third seed at 0.03 and 0.04 would settle it.
+   `tune_prior_penalty_weight` automates this exact sweep, including
+   the reproducibility columns, so a re-run needs no hand-rolling.
