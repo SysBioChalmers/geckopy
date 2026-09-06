@@ -22,14 +22,6 @@ def test_mismatched_source_dict_raises():
         )
 
 
-def test_mismatched_schedule_lengths_raises():
-    with pytest.raises(ValidationError, match="schedule_generations"):
-        BayesianParams(
-            schedule_generations=[1, 2, 9],
-            schedule_samples=[1000, 800],
-        )
-
-
 def test_consistent_custom_groups_ok():
     bp = BayesianParams(
         source_groups={
@@ -50,7 +42,3 @@ def test_dropped_fields_are_rejected():
         BayesianParams(target_accept=10.0)
     with pytest.raises(ValidationError):
         BayesianParams(variance_cap_default=10.0)
-
-
-def test_sparsity_threshold_default_is_not_the_confirmed_bad_range():
-    bp = BayesianParams()

@@ -244,21 +244,10 @@ Before trusting a tuned kcat, check more than the final RMSE:
    elsewhere is a sign of overfitting to a thin dataset, not a fixed
    model.
 
-## Why CMA-ES, not ABC-SMC
-
-geckopy also ships `bayesian_kcat_tuning`, an ABC-SMC sampler that
-predates the functions above. Internal validation on ecYeastGEM found
-that once a screen has reduced the problem to a manageable parameter
-set, CMA-ES reaches a distinctly better fit -- by several standard
-errors -- with far tighter cross-seed reproducibility (see
-`docs/internal/bayesian_tuning_handover.md`, "Three methods, one
-conclusion"). No case has been found where ABC-SMC should be preferred
-for this task, so it is not part of this walkthrough; it remains in
-the package because it is what the CMA-ES path was validated against,
-not as a second option to choose between.
-
 ## Where to go from here
 
+- `docs/cmaes_vs_abc_smc.md` -- why this method is CMA-ES rather than
+  the ABC-SMC sampler used elsewhere for the same problem.
 - `docs/internal/bayesian_tuning_handover.md` -- the fuller set of
   findings behind the defaults above (why 0.03, why tying, what
   doesn't work).

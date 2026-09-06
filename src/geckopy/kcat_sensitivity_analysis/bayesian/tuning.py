@@ -1,40 +1,25 @@
-"""End-to-end Bayesian (ABC-SMC) kcat tuning.
+"""CMA-ES kcat tuning: fitting kcats to experimental data.
 
-Ported from GECKO MATLAB:
-src/geckomat/kcat_sensitivity_analysis/Bayesian/bayesianSensitivityTuning.m,
-using pyABC's ``Distribution``/``Transition`` classes as components
-inside a custom generation loop this module owns (not
-``pyabc.ABCSMC.run()`` -- see
-``docs/internal/bayesian_tuning_plan.md``'s Architecture decision for
-why: MATLAB's fixed-batch-then-truncate selection and pyABC's
-streaming-until-N-accepted mechanism don't map onto each other without
-fighting one or the other).
+Three functions, normally called in this order:
 
-Parameterised by one swappable axis:
-
-- ``selection="truncation"`` (MATLAB-faithful: combine this
-  generation's new proposals with the previous generation's accepted
-  set, keep the top ``min_keep`` fraction by distance) or
-  ``"quantile_epsilon"`` (pyABC-native: draw a fresh batch each
-  generation -- no carry-over -- and accept against a fixed,
-  prospective epsilon derived from the *previous* generation).
-Particles carry uniform weights, and per-source regularization is
-carried entirely by the priors: each source group's ``sigma0_log``
-sets how far a kcat can drift, and
-MATLAB: the final ``ecModel.ec.kcat`` is the best raw accepted
-particle, and the next generation samples from the raw accepted
-particle set rather than from the blended point estimate.
-
-One MATLAB quirk is deliberately *not* ported: MATLAB drops any
-proposal whose RMSE is *exactly* 0.0 ("often signals infeasibility").
-This port's infeasibility is an explicit flag
-(``simulate.ConditionSimResult.feasible``), never inferred from a
-suspicious-looking distance value, so a genuinely perfect-fit proposal
-(RMSE == 0) is kept rather than discarded.
+- :func:`screen_kcat_leverage` -- report which kcats the data can
+  actually speak to, with no optimisation involved. Perturbs each
+  tie-group by +-``fold`` and measures the resulting change in RMSE,
+  ranked by that leverage weighted by how much the source is trusted.
+  Useful on its own for curation, independent of any tuning run.
+- :func:`select_tunable_mask` -- turn a screen report into a boolean
+  ``tunable_mask``, by keeping the fewest highest-ranked groups whose
+  combined leverage reaches ``target_impact_share`` of the total. A
+  *relative* cutoff, so the same ``target_impact_share`` selects a
+  comparable quality of parameter set on a model with a different
+  leverage scale, unlike an absolute threshold or a fixed count (see
+  ``docs/internal/matlab_replication_results.md``, Open items #6).
+- :func:`cmaes_kcat_tuning` -- the tuning run. Screens and selects
+  automatically when no mask is given.
 
 Parallel scoring (``n_proc``)
 ------------------------------
-Each generation's new particles are scored independently of each
+Each generation's new candidates are scored independently of each
 other, so they parallelise across a process pool -- using
 ``cobra.util.process_pool.ProcessPool`` (the same primitive cobrapy's
 own ``single_gene_deletion``/``single_reaction_deletion``/etc. use for
@@ -53,18 +38,17 @@ of ``docs/internal/bayesian_tuning_plan.md`` for why a per-particle
 ``EcModel.copy()`` is not used either way (~225x an FBA solve on a
 real-scale model).
 
-Sampling itself (``build_kcat_prior``/``GeckoTransition.rvs_single``)
-stays single-threaded in the main process -- it's cheap relative to
-FBA and, more importantly, doing it there keeps the *sequence* of
-particles proposed each generation deterministic given ``seed``,
-independent of ``n_proc`` or how work happens to be chunked across
-workers. Only the scoring of an already-fixed batch of particles is
-parallelised, and scoring is a pure function of the kcat vector --
-each particle's solves start from a cold basis
-(:func:`_reset_solver_basis`), so a worker's result does not depend on
-which particle it scored before. A run with ``n_proc=1`` and the same
-``seed`` therefore reproduces bit-for-bit identical results to one
-with ``n_proc>1``.
+CMA-ES's own ``ask``/``tell`` sequence stays single-threaded in the
+main process -- it's cheap relative to FBA and, more importantly,
+doing it there keeps the *sequence* of candidates proposed each
+generation deterministic given ``seed``, independent of ``n_proc`` or
+how work happens to be chunked across workers. Only the scoring of an
+already-fixed batch of candidates is parallelised, and scoring is a
+pure function of the kcat vector -- each candidate's solves start from
+a cold basis (:func:`_reset_solver_basis`), so a worker's result does
+not depend on which candidate it scored before. A run with ``n_proc=1``
+and the same ``seed`` therefore reproduces bit-for-bit identical
+results to one with ``n_proc>1``.
 
 ``make_anaerobic``/``change_protein_biomass``, if supplied, must be
 importable top-level functions (not lambdas/closures) when running
@@ -75,11 +59,12 @@ no such restriction.
 """
 from __future__ import annotations
 
-import contextlib
 import logging
+from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
+import cma
 import cobra
 import numpy as np
 import pandas as pd
@@ -87,13 +72,10 @@ from cobra.util import ProcessPool
 
 from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
 from .data import BayesianData, load_bayesian_data
-from .diagnostics import GenerationDiagnostics, compute_generation_diagnostics
 from .distance import bayesian_distance, compute_excarbon
-from .priors import (build_kcat_prior, build_sigma0_log,
-                     classify_kcat_sources)
-from .selection import next_quantile_epsilon, quantile_epsilon_select, truncation_select
+from .priors import build_sigma0_log, classify_kcat_sources
 from .simulate import simulate_bayesian_dataset
-from .transition import GeckoTransition
+from .tying import isozyme_tie_map
 
 if TYPE_CHECKING:
     from ...adapter import ModelAdapter
@@ -102,40 +84,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SelectionVariant = Literal["truncation", "quantile_epsilon"]
-
 
 @dataclass
 class BayesianTuningResult:
-    """Outcome of a :func:`bayesian_kcat_tuning` run.
+    """Outcome of a :func:`cmaes_kcat_tuning` run.
 
-    Matches the ``TunedKcatsResult``/``SigmaFitterResult`` precedent:
-    the model is mutated in place (the final generation's best-RMSE
-    particle is applied to ``model.ec.kcat``), and this result records
-    the run's history for inspection.
+    The model is mutated in place (the best kcat vector found is
+    applied to ``model.ec.kcat``), and this result records the run's
+    history for inspection.
 
     Attributes
     ----------
     rxns
         Tunable ``ec.rxns`` IDs, in the column order used throughout
         (``rxns[i]`` corresponds to ``old_kcat[i]``/``new_kcat[i]``/
-        ``groups[i]``).
+        ``groups[i]``). Tied isozyme copies are all listed, sharing one
+        value in ``new_kcat``.
     old_kcat, new_kcat
         kcat values before/after tuning, parallel to ``rxns``.
     groups
         Source-group name per tunable row (from
         ``priors.classify_kcat_sources``).
     rmse_trace
-        Best (lowest) RMSE in the accepted set, per generation. Always
-        the plain RMSE, so runs stay comparable across penalties and
-        against MATLAB even when selection used a penalised objective.
+        Best-so-far plain RMSE, per generation. Always the plain RMSE,
+        so runs stay comparable across penalties and against MATLAB
+        even when the search used a penalised objective.
     objective_trace
-        Best (lowest) value of the quantity selection actually
+        Best-so-far value of the quantity the search actually
         minimised, per generation. Identical to ``rmse_trace`` when
         ``params.prior_penalty_weight`` is 0.
-    diagnostics_trace
-        Per-generation, per-source-group diagnostics (see
-        ``diagnostics.py``).
     n_generations
         Number of generations actually run.
     converged
@@ -149,92 +126,13 @@ class BayesianTuningResult:
     groups: list[str] = field(default_factory=list)
     rmse_trace: list[float] = field(default_factory=list)
     objective_trace: list[float] = field(default_factory=list)
-    diagnostics_trace: list[GenerationDiagnostics] = field(default_factory=list)
     n_generations: int = 0
     converged: bool = False
 
 
-def bayesian_kcat_tuning(
-    model: "EcModel",
-    *,
-    adapter: Optional["ModelAdapter"] = None,
-    params: Optional["BayesianParams"] = None,
-    bay_data: Optional[BayesianData] = None,
-    selection: SelectionVariant = "truncation",
-    okp_method: Optional[str] = None,
-    bio_rxn: Optional[str] = None,
-    make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
-    change_protein_biomass: Optional[Callable[["EcModel", float], None]] = None,
-    tunable_mask: Optional[np.ndarray] = None,
-    n_proc: Optional[int] = None,
-    seed: Optional[int] = None,
-    verbose: bool = True,
-) -> BayesianTuningResult:
-    """Run ABC-SMC Bayesian kcat tuning.
-
-    Parameters
-    ----------
-    model
-        EcModel with a populated ``ec.kcat``. Mutated in place: on
-        return, tunable rows carry the final generation's best-RMSE
-        particle.
-    adapter
-        Used to resolve ``params``/``bay_data``/``bio_rxn``/
-        ``okp_method`` when not given explicitly. Defaults to
-        ``model.adapter``.
-    params
-        Hyperparameters. Defaults to ``adapter.params.bayesian``.
-    bay_data
-        Experimental data. Defaults to ``load_bayesian_data(adapter)``.
-    selection
-        Selection variant (see module docstring).
-    okp_method
-        The project's configured OpenKineticsPredictor method, for
-        source classification. Defaults to ``adapter.params.okp.method``
-        if an adapter is available.
-    bio_rxn
-        Biomass reaction ID. Defaults to ``adapter.params.bio_rxn``.
-    make_anaerobic, change_protein_biomass
-        Forwarded to ``simulate.simulate_bayesian_dataset`` -- see its
-        docstring; geckopy has no generic organism-agnostic
-        implementation of these yet. See the module docstring's
-        "Parallel scoring" section for a picklability caveat when
-        ``n_proc>1``.
-    tunable_mask
-        Boolean array over ``model.ec.rxns`` selecting which kcats to
-        tune; the rest are held at their prior values and reported as
-        unchanged. Use it to exclude parameters the data cannot speak
-        to -- reactions that carry no flux in any condition, or whose
-        kcat does not measurably move the distance. On the full
-        ecYeastGEM dataset 879 of 4834 kcats can never carry flux, and
-        an unrestricted run changes essentially all of them, which no
-        weighting of the objective can justify. Restricting also
-        shrinks the proposal's step length, which grows with the square
-        root of the dimension.
-    n_proc
-        Number of worker processes for scoring each generation's
-        particles. Defaults to ``cobra.Configuration().processes``.
-        ``1`` runs the original serial path (no ``Pool`` at all). See
-        the module docstring's "Parallel scoring" section.
-    seed
-        If given, seeds ``numpy.random`` before sampling starts, for
-        reproducible runs.
-    verbose
-        Whether per-generation progress is logged at INFO.
-
-    Returns
-    -------
-    BayesianTuningResult
-
-    Raises
-    ------
-    ValueError
-        If there are no tunable kcats (``ec.kcat`` all ``<= 0``), or
-        ``bay_data`` has neither ``flux_data`` nor ``max_grate``.
-    """
-    if seed is not None:
-        np.random.seed(seed)
-
+def _resolve_context(model, adapter, params, bay_data, bio_rxn, okp_method):
+    """Resolve every optional input against ``model``'s adapter, or
+    raise if it can't be and none was given explicitly."""
     if adapter is None:
         adapter = getattr(model, "adapter", None)
     if params is None:
@@ -261,7 +159,16 @@ def bayesian_kcat_tuning(
         bio_rxn = adapter.params.bio_rxn
     if okp_method is None and adapter is not None:
         okp_method = adapter.params.okp.method
+    return params, bay_data, bio_rxn, okp_method
 
+
+def _tunable_context(
+    model, params, bay_data, bio_rxn, okp_method, tunable_mask,
+):
+    """The tunable subset plus everything derived from it: tie groups,
+    trust weights, and the excarbon table. Shared by every function in
+    this module so a screen and the run it feeds are always looking at
+    exactly the same parameters."""
     is_tunable = model.ec.kcat > 0
     if tunable_mask is not None:
         tunable_mask = np.asarray(tunable_mask, dtype=bool)
@@ -283,8 +190,6 @@ def bayesian_kcat_tuning(
     sources = [model.ec.source[i] for i in tunable_idx]
     groups = classify_kcat_sources(sources, params, okp_method=okp_method)
     sigma0_log = build_sigma0_log(groups, params)
-    n_params = len(kcat0)
-    columns = [f"k{i}" for i in range(n_params)]
 
     excarbon_rxn_ids: set[str] = {bio_rxn}
     for data in (bay_data.flux_data, bay_data.max_grate):
@@ -292,178 +197,376 @@ def bayesian_kcat_tuning(
             excarbon_rxn_ids.update(data.exch_rxn_ids)
     excarbon_rxn_ids.update(bay_data.zero_flux)
     excarbon = compute_excarbon(model, excarbon_rxn_ids, bio_rxn_id=bio_rxn)
-    kcat_lo, kcat_hi = kcat_bounds(kcat0)
+
+    tie_map = (
+        isozyme_tie_map(ec_rxn_ids_tunable, kcat0, list(groups))
+        if params.tie_isozymes else np.arange(len(kcat0))
+    )
+    return (tunable_idx, ec_rxn_ids_tunable, kcat0, groups, sigma0_log,
+            excarbon, tie_map)
+
+
+def screen_kcat_leverage(
+    model: "EcModel",
+    *,
+    adapter: Optional["ModelAdapter"] = None,
+    params: Optional["BayesianParams"] = None,
+    bay_data: Optional[BayesianData] = None,
+    okp_method: Optional[str] = None,
+    bio_rxn: Optional[str] = None,
+    make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
+    change_protein_biomass: Optional[Callable[["EcModel", float], None]] = None,
+    tunable_mask: Optional[np.ndarray] = None,
+    fold: float = 2.0,
+    n_proc: Optional[int] = None,
+) -> pd.DataFrame:
+    """Report which kcats the data can actually speak to.
+
+    No optimisation happens here -- this only says which parameters
+    are worth curating or tuning, and can be read on its own well
+    before any tuning run. Each tie-group (isozyme copies sharing a
+    prior and a source move together when ``params.tie_isozymes``) is
+    perturbed up and down by ``fold``, and its leverage is the largest
+    resulting change in plain RMSE -- always the plain fit, never the
+    ``prior_penalty_weight``-penalised objective, since leverage asks
+    what the data supports, independent of how much a move is charged
+    for. Groups are ranked by that leverage weighted by
+    ``sigma0_log`` -- :func:`~.parsimony.identifiability_mask`'s
+    convention, where a trusted source needs proportionally more
+    measured effect to rank alongside an untrusted one. This
+    trust-weighting means the reported ``cum_leverage_share`` is a
+    different quantity from :func:`~.parsimony.impact_share`, which is
+    unweighted.
+
+    Costs one simulation per condition per tie-group probed (two
+    probes each, up and down) plus one baseline -- comparable in scale
+    to a full tuning run's evaluation budget, not a cheap pre-check.
+    FVA-unreachable kcats are not filtered out beforehand: a kcat that
+    cannot carry flux under any condition shows zero leverage here by
+    construction and simply sorts to the bottom, which is a more
+    direct test than a separately computed static reachability mask.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per tie-group, sorted by ``rank`` descending:
+        ``rxn_id`` (the group's representative), ``n_isozymes``,
+        ``source_group``, ``kcat0``, ``leverage``, ``sigma0_log``,
+        ``rank`` (``leverage * sigma0_log``), and ``cum_leverage_share``
+        (the running total of ``rank``, as a fraction of its sum over
+        every row). An internal ``_positions`` column (a tuple of
+        indices into ``model.ec.rxns``) is what
+        :func:`select_tunable_mask` needs to expand a row back into a
+        mask; drop it before showing the table to a person.
+    """
+    params, bay_data, bio_rxn, okp_method = _resolve_context(
+        model, adapter, params, bay_data, bio_rxn, okp_method)
+    (tunable_idx, ec_rxn_ids_tunable, kcat0, groups, sigma0_log, excarbon,
+     tie_map) = _tunable_context(
+        model, params, bay_data, bio_rxn, okp_method, tunable_mask)
+
+    reps = np.flatnonzero(tie_map == np.arange(len(tie_map)))
+    members_of = {int(r): np.flatnonzero(tie_map == r) for r in reps}
 
     if n_proc is None:
         n_proc = cobra.Configuration().processes
     n_proc = max(1, int(n_proc))
 
+    pairs = []
+    vectors = [kcat0]
+    for rep in reps:
+        members = members_of[int(rep)]
+        up = kcat0.copy(); up[members] = up[members] * fold
+        dn = kcat0.copy(); dn[members] = dn[members] / fold
+        pairs.append(int(rep))
+        vectors.append(up)
+        vectors.append(dn)
+
     if n_proc == 1:
-        pool_cm = contextlib.nullcontext(None)
+        rmses = [
+            _score_kcat_vector(
+                model, tunable_idx, ec_rxn_ids_tunable, bay_data, excarbon,
+                bio_rxn, v, make_anaerobic=make_anaerobic,
+                change_protein_biomass=change_protein_biomass,
+                max_growth_weight=params.max_growth_weight,
+            )[1]
+            for v in vectors
+        ]
     else:
-        # ProcessPool (cobra.util.process_pool) handles serialising the
-        # model to each worker -- including a Windows-specific
-        # performance workaround -- so `model` is passed as-is, not
-        # pre-pickled.
-        pool_cm = ProcessPool(
+        with ProcessPool(
             n_proc, initializer=_init_worker,
-            initargs=(
-                model, tunable_idx, ec_rxn_ids_tunable, bay_data,
-                excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
-                params.max_growth_weight, params.prior_penalty_weight,
-                kcat0, sigma0_log,
-            ),
-        )
+            initargs=(model, tunable_idx, ec_rxn_ids_tunable, bay_data,
+                     excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
+                     params.max_growth_weight, 0.0, None, None),
+        ) as pool:
+            chunk = max(1, len(vectors) // (n_proc * 4))
+            rmses = [r for _, r in pool.map(_score_worker, vectors, chunksize=chunk)]
 
-    with pool_cm as pool:
-        if pool is None:
-            def score_batch(kcat_matrix: np.ndarray) -> np.ndarray:
-                return np.array([
-                    _score_kcat_vector(
-                        model, tunable_idx, ec_rxn_ids_tunable, bay_data,
-                        excarbon, bio_rxn, kcat_matrix[:, j],
-                        make_anaerobic=make_anaerobic,
-                        change_protein_biomass=change_protein_biomass,
-                        max_growth_weight=params.max_growth_weight,
-                        prior_penalty_weight=params.prior_penalty_weight,
-                        kcat0=kcat0, sigma0_log=sigma0_log,
-                    )
-                    for j in range(kcat_matrix.shape[1])
-                ])
-        else:
-            def score_batch(kcat_matrix: np.ndarray) -> np.ndarray:
-                cols = [kcat_matrix[:, j] for j in range(kcat_matrix.shape[1])]
-                chunk = max(1, len(cols) // (n_proc * 4))
-                return np.array(pool.map(_score_worker, cols, chunksize=chunk))
-
-        # Seed the accepted pool with the model's own starting point --
-        # MATLAB: `kcats = ecModel.ec.kcat; kcat0 = kcats; rmse =
-        # abc_max(...); rmseTop = rmse; kcatTop = kcats;`.
-        kcat_top = kcat0.reshape(-1, 1)
-        # score_batch returns one (objective, rmse) row per particle:
-        # selection runs on the objective, reporting on the plain RMSE.
-        seed_scores = score_batch(kcat_top)
-        obj_top, rmse_top = seed_scores[:, 0], seed_scores[:, 1]
-        weights_top = np.array([1.0])
-        epsilon: Optional[float] = None
-
-        result = BayesianTuningResult(
-            rxns=ec_rxn_ids_tunable, old_kcat=kcat0.copy(), groups=list(groups),
-        )
-
-        # Persistent multiplier on the fitted proposal bandwidth. Stays
-
-        generation = 0
-        while True:
-            generation += 1
-            schedule_idx = [
-                i for i, sg in enumerate(params.schedule_generations)
-                if generation >= sg
-            ]
-            n_new = params.schedule_samples[schedule_idx[-1] if schedule_idx else 0]
-
-            # One draw per particle, read every column out of that single
-            # draw: both samplers return a full parameter vector per call,
-            # and the transition kernel's vector is a single parent
-            # perturbed as a unit. Cost is linear in particles, not in
-            # particles x parameters.
-            if generation == 1:
-                prior = build_kcat_prior(kcat0, sigma0_log)
-                draws = [prior.rvs() for _ in range(n_new)]
-                new_particles = np.array(
-                    [[draw[c] for c in columns] for draw in draws]
-                ).T
-                transition: Optional[GeckoTransition] = None
-            else:
-                X_df = pd.DataFrame(kcat_top.T, columns=columns)
-                transition = GeckoTransition(sigma0_log)
-                transition.fit(X_df, weights_top)
-                new_particles = transition.rvs_batch(n_new)
-            new_particles = np.clip(new_particles, kcat_lo[:, None], kcat_hi[:, None])
-            new_scores = score_batch(new_particles)
-            new_obj, new_rmse = new_scores[:, 0], new_scores[:, 1]
-
-            if selection == "truncation":
-                combined_particles = np.concatenate([new_particles, kcat_top], axis=1)
-                combined_obj = np.concatenate([new_obj, obj_top])
-                combined_rmse = np.concatenate([new_rmse, rmse_top])
-                sel = truncation_select(combined_obj, min_keep=params.min_keep)
-            else:
-                combined_particles = new_particles
-                combined_obj = new_obj
-                combined_rmse = new_rmse
-                if epsilon is None:  # generation 1: bootstrap from this batch
-                    epsilon = next_quantile_epsilon(combined_obj)
-                sel = quantile_epsilon_select(combined_obj, epsilon=epsilon)
-                if sel.accepted_idx.size == 0:
-                    sel.accepted_idx = np.array([int(np.argmin(combined_obj))])
-
-            # Fraction of *this* generation's proposals that survived
-            # selection: how many of the n_new draws got in, over n_new.
-            # Columns 0..n_new-1 of combined_particles are the new draws
-            # and the rest are the carried-over accepted set, so the
-            # numerator counts accepted indices below that boundary.
-            # Note this is measured at the min_keep threshold, unlike
-            # MATLAB's propAccRate, which is measured at its
-            # targetAccept percentile before the minKeep clamp -- the
-            # two are not on the same scale.
-            proposal_accept_rate = proposal_acceptance_rate(
-                sel.accepted_idx, new_particles.shape[1]
-            )
-
-            n_total_this_gen = len(combined_rmse)
-            new_kcat_top = combined_particles[:, sel.accepted_idx]
-            new_rmse_top = combined_rmse[sel.accepted_idx]
-            new_obj_top = combined_obj[sel.accepted_idx]
-
-            new_weights_top = np.full(
-                len(sel.accepted_idx), 1.0 / len(sel.accepted_idx),
-            )
-
-
-            diag = compute_generation_diagnostics(
-                generation, new_kcat_top, new_weights_top, new_rmse_top,
-                n_total_this_gen, kcat0, sigma0_log, groups,
-            )
-            result.diagnostics_trace.append(diag)
-            result.rmse_trace.append(diag.best_rmse)
-
-            result.objective_trace.append(float(new_obj_top.min()))
-
-            if selection == "quantile_epsilon":
-                epsilon = next_quantile_epsilon(new_obj_top)
-
-            if verbose:
-                logger.info(
-                    "bayesian_kcat_tuning: generation %d, best RMSE = %g, "
-                    "accepted %d/%d, proposal accept %.4f, scale %.4f",
-                    generation, diag.best_rmse, diag.n_accepted, diag.n_total,
-                    proposal_accept_rate,
-                )
-
-            kcat_top, rmse_top, weights_top = new_kcat_top, new_rmse_top, new_weights_top
-            obj_top = new_obj_top
-
-            if diag.best_rmse <= params.rmse_threshold:
-                result.converged = True
-                break
-            if generation >= params.max_generations:
-                result.converged = False
-                break
-
-    result.n_generations = generation
-    # Consistent with what selection optimised: at prior_penalty_weight
-    # 0 the objective is the RMSE and this is unchanged.
-    best_idx = int(np.argmin(obj_top))
-    result.new_kcat = kcat_top[:, best_idx].copy()
-    model.ec.kcat[tunable_idx] = result.new_kcat
+    # The n_proc==1 path scores directly against `model`, leaving its
+    # ec.kcat at whichever probe vector was scored last; a pool worker
+    # scores its own copy instead, so this is a no-op there. Either
+    # way, `model` must come out holding the prior it went in with.
+    model.ec.kcat[tunable_idx] = kcat0
     apply_kcat_constraints(model, update_rxns=ec_rxn_ids_tunable)
 
-    return result
+    base_rmse = rmses[0]
+    rows = []
+    for i, rep in enumerate(pairs):
+        up_rmse, dn_rmse = rmses[1 + 2 * i], rmses[2 + 2 * i]
+        leverage = max(abs(up_rmse - base_rmse), abs(dn_rmse - base_rmse))
+        members = members_of[rep]
+        rows.append({
+            "rxn_id": ec_rxn_ids_tunable[rep],
+            "n_isozymes": int(len(members)),
+            "source_group": str(groups[rep]),
+            "kcat0": float(kcat0[rep]),
+            "leverage": float(leverage),
+            "sigma0_log": float(sigma0_log[rep]),
+            "_positions": tuple(int(tunable_idx[m]) for m in members),
+        })
+
+    df = pd.DataFrame(rows)
+    df["rank"] = df["leverage"] * df["sigma0_log"]
+    df = df.sort_values("rank", ascending=False, ignore_index=True)
+    total = float(df["rank"].sum())
+    df["cum_leverage_share"] = (
+        (df["rank"].cumsum() / total) if total > 0 else 0.0
+    )
+    return df
+
+
+def select_tunable_mask(
+    model: "EcModel",
+    screen: pd.DataFrame,
+    *,
+    target_impact_share: float = 0.9,
+) -> np.ndarray:
+    """Build a ``tunable_mask`` from a :func:`screen_kcat_leverage` report.
+
+    Keeps the fewest highest-ranked groups whose combined leverage
+    reaches ``target_impact_share`` of the total -- a relative cutoff,
+    so the same ``target_impact_share`` selects a comparable quality of
+    parameter set on any model, rather than an absolute leverage value
+    or a fixed count calibrated on a different model's scale.
+    ``target_impact_share=0.9`` is a starting point, not a validated
+    universal constant; check the resulting mask's size against
+    :func:`screen_kcat_leverage`'s own curve before trusting it on a
+    new model.
+
+    Pure and cheap -- no simulation, only ``screen`` is read.
+    """
+    mask = np.zeros(len(model.ec.rxns), dtype=bool)
+    if screen.empty:
+        return mask
+    prev_cum = screen["cum_leverage_share"].shift(1, fill_value=0.0)
+    keep = prev_cum < target_impact_share
+    for positions in screen.loc[keep, "_positions"]:
+        mask[list(positions)] = True
+    return mask
+
+
+def cmaes_kcat_tuning(
+    model: "EcModel",
+    *,
+    adapter: Optional["ModelAdapter"] = None,
+    params: Optional["BayesianParams"] = None,
+    bay_data: Optional[BayesianData] = None,
+    okp_method: Optional[str] = None,
+    bio_rxn: Optional[str] = None,
+    make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
+    change_protein_biomass: Optional[Callable[["EcModel", float], None]] = None,
+    tunable_mask: Optional[np.ndarray] = None,
+    screen: Optional[pd.DataFrame] = None,
+    target_impact_share: float = 0.9,
+    popsize: Optional[int] = None,
+    n_proc: Optional[int] = None,
+    seed: Optional[int] = None,
+    verbose: bool = True,
+) -> BayesianTuningResult:
+    """Tune kcats against experimental data with CMA-ES.
+
+    Configuration comes entirely from ``BayesianParams``: trust tiers,
+    ``max_growth_weight``, ``prior_penalty_weight`` and ``tie_isozymes``
+    control the search, and ``max_generations``/``rmse_threshold`` are
+    its stopping conditions.
+
+    Parameters
+    ----------
+    model
+        EcModel with a populated ``ec.kcat``. Mutated in place: on
+        return, tunable rows carry the best kcat vector CMA-ES found,
+        with kcat constraints already applied.
+    tunable_mask, screen, target_impact_share
+        Control which kcats are searched over, in order of precedence.
+        Pass ``tunable_mask`` to fix the set yourself. Otherwise, a
+        mask is built by :func:`select_tunable_mask` at
+        ``target_impact_share``, from ``screen`` if given (so a
+        previously computed :func:`screen_kcat_leverage` report need
+        not be recomputed) or from a fresh screen otherwise.
+    popsize
+        CMA-ES population size. Defaults to ``cma``'s own
+        dimension-scaled default (``4 + floor(3 ln n)``), so it adapts
+        to however many free parameters the mask/tying produced rather
+        than a value calibrated on one particular model.
+    n_proc
+        Number of worker processes for scoring each generation's
+        candidates. Defaults to ``cobra.Configuration().processes``.
+        ``1`` runs the original serial path (no ``Pool`` at all). See
+        the module docstring's "Parallel scoring" section.
+    seed
+        If given, seeds the search, for reproducible runs.
+    verbose
+        Whether per-generation progress is logged at INFO.
+    make_anaerobic, change_protein_biomass
+        Forwarded to ``simulate.simulate_bayesian_dataset`` -- see its
+        docstring; geckopy has no generic organism-agnostic
+        implementation of these yet. See the module docstring's
+        "Parallel scoring" section for a picklability caveat when
+        ``n_proc>1``.
+
+    Returns
+    -------
+    BayesianTuningResult
+        ``rxns``/``old_kcat``/``new_kcat``/``groups`` cover the
+        selected tunable set, tied groups included (their members share
+        one value in ``new_kcat``). ``rmse_trace``/``objective_trace``
+        record the best-so-far plain RMSE and optimised objective per
+        generation.
+
+    Raises
+    ------
+    ValueError
+        If there are no tunable kcats, or fewer than two free
+        parameters remain after masking and tying -- too little for
+        CMA-ES to search over.
+    """
+    params, bay_data, bio_rxn, okp_method = _resolve_context(
+        model, adapter, params, bay_data, bio_rxn, okp_method)
+
+    if tunable_mask is None:
+        if screen is None:
+            screen = screen_kcat_leverage(
+                model, adapter=adapter, params=params, bay_data=bay_data,
+                okp_method=okp_method, bio_rxn=bio_rxn,
+                make_anaerobic=make_anaerobic,
+                change_protein_biomass=change_protein_biomass,
+                n_proc=n_proc,
+            )
+        tunable_mask = select_tunable_mask(
+            model, screen, target_impact_share=target_impact_share)
+
+    (tunable_idx, ec_rxn_ids_tunable, kcat0, groups, sigma0_log, excarbon,
+     tie_map) = _tunable_context(
+        model, params, bay_data, bio_rxn, okp_method, tunable_mask)
+
+    reps = np.flatnonzero(tie_map == np.arange(len(tie_map)))
+    if len(reps) < 2:
+        raise ValueError(
+            f"Only {len(reps)} free parameter(s) after masking and tying; "
+            "too few for CMA-ES. Widen tunable_mask/target_impact_share."
+        )
+    assign = np.searchsorted(reps, tie_map)
+    x0 = np.log(kcat0[reps])
+    sig = sigma0_log[reps]
+    lo, hi = kcat_bounds(kcat0)
+    bounds = ([float(np.log(v)) for v in lo[reps]],
+              [float(np.log(v)) for v in hi[reps]])
+
+    def expand(xm: np.ndarray) -> np.ndarray:
+        """(n_free, n_particles) log-space matrix -> (n_tunable,
+        n_particles) kcat matrix, tied rows sharing their rep's value."""
+        return np.exp(xm[assign, :])
+
+    if n_proc is None:
+        n_proc = cobra.Configuration().processes
+    n_proc = max(1, int(n_proc))
+
+    options = {
+        "verbose": -9, "maxiter": params.max_generations,
+        "CMA_diagonal": True, "bounds": bounds,
+        "scaling_of_variables": (sig / np.median(sig)).tolist(),
+    }
+    if popsize is not None:
+        options["popsize"] = int(popsize)
+    if seed is not None:
+        # cma treats seed=0 as falsy and falls back to an unseeded,
+        # time-based draw instead of raising -- verified directly
+        # against this cma version, not assumed. +1 keeps every
+        # caller-facing seed (0, 1, 2, ...) off that value.
+        options["seed"] = int(seed) + 1
+    es = cma.CMAEvolutionStrategy(x0, float(np.median(sig)), options)
+
+    pool_cm = (
+        nullcontext(None) if n_proc == 1 else
+        ProcessPool(
+            n_proc, initializer=_init_worker,
+            initargs=(model, tunable_idx, ec_rxn_ids_tunable, bay_data,
+                     excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
+                     params.max_growth_weight, params.prior_penalty_weight,
+                     kcat0, sigma0_log),
+        )
+    )
+
+    def _score_batch(kcat_matrix, pool):
+        if pool is None:
+            return np.array([
+                _score_kcat_vector(
+                    model, tunable_idx, ec_rxn_ids_tunable, bay_data,
+                    excarbon, bio_rxn, kcat_matrix[:, j],
+                    make_anaerobic=make_anaerobic,
+                    change_protein_biomass=change_protein_biomass,
+                    max_growth_weight=params.max_growth_weight,
+                    prior_penalty_weight=params.prior_penalty_weight,
+                    kcat0=kcat0, sigma0_log=sigma0_log,
+                )
+                for j in range(kcat_matrix.shape[1])
+            ])
+        cols = [kcat_matrix[:, j] for j in range(kcat_matrix.shape[1])]
+        chunk = max(1, len(cols) // (n_proc * 4))
+        return np.array(pool.map(_score_worker, cols, chunksize=chunk))
+
+    with pool_cm as pool:
+        obj0, rmse0 = _score_batch(kcat0.reshape(-1, 1), pool)[0]
+        best_obj, best_rmse, best_vec = float(obj0), float(rmse0), kcat0.copy()
+
+        rmse_trace: list[float] = []
+        objective_trace: list[float] = []
+        generation = 0
+        while not es.stop():
+            asks = es.ask()
+            xm = np.array(asks).T
+            scores = _score_batch(expand(xm), pool)
+            es.tell(asks, list(scores[:, 0]))
+            generation += 1
+
+            j = int(np.argmin(scores[:, 0]))
+            if scores[j, 0] < best_obj:
+                best_obj = float(scores[j, 0])
+                best_rmse = float(scores[j, 1])
+                best_vec = expand(xm[:, [j]])[:, 0].copy()
+            rmse_trace.append(best_rmse)
+            objective_trace.append(best_obj)
+            if verbose:
+                logger.info(
+                    "generation %d: objective %.4f, rmse %.4f",
+                    generation, best_obj, best_rmse,
+                )
+            if best_rmse <= params.rmse_threshold:
+                break
+
+    model.ec.kcat[tunable_idx] = best_vec
+    apply_kcat_constraints(model, update_rxns=ec_rxn_ids_tunable)
+
+    return BayesianTuningResult(
+        rxns=ec_rxn_ids_tunable, old_kcat=kcat0.copy(), new_kcat=best_vec,
+        groups=list(groups), rmse_trace=rmse_trace,
+        objective_trace=objective_trace, n_generations=generation,
+        converged=best_rmse <= params.rmse_threshold,
+    )
 
 
 # --------------------------------------------------------------------------- #
-# Scoring core, shared by the serial and parallel paths
+# Scoring core, shared by the screen and the search above.
 # --------------------------------------------------------------------------- #
 
 def kcat_bounds(kcat0: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -475,13 +578,6 @@ def kcat_bounds(kcat0: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     margin either side, so an unusually slow or fast enzyme keeps a
     window around itself rather than being clipped towards the generic
     range.
-
-    That last part matters more than it sounds. MATLAB's
-    ``proposeSimple`` widens only upwards, which leaves any prior below
-    1e-2 outside its own bounds: on ecYeastGEM that is 350 kcats, and
-    every proposal for them is clipped up to 1e-2 before it is scored --
-    a 62-fold increase for the slowest, applied before any evidence is
-    considered. A prior must always be a proposable value.
 
     Parameters
     ----------
@@ -507,9 +603,9 @@ def _reset_solver_basis(model: "EcModel") -> None:
     alternate optima: resuming from a basis that is already optimal
     for the new problem returns that vertex in zero iterations, so the
     reported exchange fluxes -- and hence the RMSE -- would otherwise
-    depend on which particle this model scored before. That would make
-    the accepted set depend on ``n_proc`` and on how the pool happened
-    to schedule particles across workers.
+    depend on which candidate this model scored before. That would
+    make the result depend on ``n_proc`` and on how the pool happened
+    to schedule candidates across workers.
 
     A no-op for solver interfaces whose problem object exposes no
     ``reset`` (only the model's own state then determines the solve,
@@ -519,26 +615,6 @@ def _reset_solver_basis(model: "EcModel") -> None:
     reset = getattr(problem, "reset", None)
     if callable(reset):
         reset()
-
-
-def proposal_acceptance_rate(accepted_idx: np.ndarray, n_new: int) -> float:
-    """Fraction of a generation's *new* proposals that survived selection.
-
-    The selection step ranks ``[new_particles, kcat_top]`` as one pool,
-    so accepted indices below ``n_new`` are the new draws and the rest
-    are carried-over particles. The denominator is ``n_new`` -- the
-    number of proposals made -- not the size of the accepted set, which
-    would instead measure the accepted set's composition and sits near
-    1.0 in early generations whatever the proposals are worth.
-
-    Measured at the ``min_keep`` truncation threshold. MATLAB's
-    ``propAccRate`` is measured at its ``targetAccept`` percentile
-    before the ``minKeep`` clamp, so the two are not on the same scale
-    and their targets are not interchangeable.
-    """
-    if n_new <= 0:
-        return 0.0
-    return float(np.count_nonzero(np.asarray(accepted_idx) < n_new) / n_new)
 
 
 def _score_kcat_vector(
@@ -561,13 +637,13 @@ def _score_kcat_vector(
 
     Writes the candidate kcat vector into ``model.ec.kcat`` and
     rewrites just the tunable rows' stoichiometry via
-    ``apply_kcat_constraints(update_rxns=...)`` -- no per-particle
+    ``apply_kcat_constraints(update_rxns=...)`` -- no per-candidate
     ``EcModel.copy()`` (prohibitively expensive; see the "Spike
     results" section of ``docs/internal/bayesian_tuning_plan.md``).
     Called directly (looped in-process) for the serial path, or via
     :func:`_score_worker` from inside a pool worker for the parallel
     path -- either way, ``model`` is one persistent object reused
-    across every particle it's asked to score.
+    across every candidate it's asked to score.
     """
     model.ec.kcat[tunable_idx] = kcat_vec
     apply_kcat_constraints(model, update_rxns=ec_rxn_ids_tunable)
@@ -596,9 +672,9 @@ def _score_kcat_vector(
         excarbon=excarbon, bio_rxn_id=bio_rxn_id,
         max_growth_weight=max_growth_weight,
     )
-    # Selection may run on a penalised objective, but the plain RMSE is
-    # always carried alongside it so a run stays comparable to MATLAB's
-    # and to runs at other penalties.
+    # The search may run on a penalised objective, but the plain RMSE
+    # is always carried alongside it so a run stays comparable to
+    # MATLAB's and to runs at other penalties.
     objective = rmse
     if prior_penalty_weight and kcat0 is not None and sigma0_log is not None:
         dev = np.log(np.asarray(kcat_vec, dtype=float) / kcat0) / sigma0_log
@@ -608,7 +684,7 @@ def _score_kcat_vector(
 
 # --------------------------------------------------------------------------- #
 # Parallel scoring (n_proc > 1): worker-process globals, populated once
-# by _init_worker and reused for every particle that worker scores.
+# by _init_worker and reused for every candidate that worker scores.
 # --------------------------------------------------------------------------- #
 
 _WORKER_MODEL: Optional["EcModel"] = None
@@ -641,7 +717,7 @@ def _init_worker(
 ) -> None:
     """Pool initializer: stash this worker process's own EcModel copy
     (deserialised by ``ProcessPool``, not by us) and everything else
-    needed to score a particle."""
+    needed to score a candidate."""
     global _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE
     global _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
     global _WORKER_MAKE_ANAEROBIC, _WORKER_CHANGE_PROTEIN_BIOMASS

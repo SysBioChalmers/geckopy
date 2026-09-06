@@ -62,7 +62,6 @@ tutorial = [
     "matplotlib>=3.5",
 ]
 bayesian = [
-    "pyabc>=0.13",
     "cma>=3.3",
 ]
 

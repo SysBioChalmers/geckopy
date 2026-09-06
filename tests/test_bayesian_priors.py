@@ -5,7 +5,6 @@ import pytest
 from geckopy.adapter.params import BayesianParams, SourceGroupRule
 from geckopy.kcat_sensitivity_analysis.bayesian.priors import (
     UNLABELLED_GROUP,
-    build_kcat_prior,
     build_sigma0_log,
     classify_kcat_source,
     classify_kcat_sources,
@@ -68,53 +67,4 @@ def test_build_sigma0_log_uses_group_values_and_default_fallback():
     sigma0_log = build_sigma0_log(groups, params)
 
     assert sigma0_log.tolist() == pytest.approx([0.4, 0.2, 0.5, 0.3])
-
-
-# --------------------------------------------------------------------------- #
-# build_kcat_prior
-# --------------------------------------------------------------------------- #
-
-def test_build_kcat_prior_mean_matches_kcat0():
-    kcat0 = np.array([1.0, 10.0])
-    sigma0_log = np.array([0.4, 0.2])
-
-    prior = build_kcat_prior(kcat0, sigma0_log)
-
-    # The prior's mean (not median) should sit at kcat0 -- this is
-    # MATLAB's `muLog = log(kcats) - 0.5*sigma0log^2` bias correction,
-    # verified via the underlying scipy distribution's .mean().
-    for i, k0 in enumerate(kcat0):
-        rv = prior[f"k{i}"]
-        assert rv.distribution.mean() == pytest.approx(k0, rel=1e-6)
-        # And the median sits strictly below the mean (a lognormal is
-        # right-skewed), confirming the correction isn't a no-op.
-        assert rv.distribution.median() < k0
-
-
-def test_build_kcat_prior_sampling_is_lognormal_and_positive():
-    rng_state = np.random.get_state()
-    try:
-        np.random.seed(0)
-        kcat0 = np.array([5.0])
-        sigma0_log = np.array([0.3])
-        prior = build_kcat_prior(kcat0, sigma0_log)
-        samples = np.array([prior.rvs()["k0"] for _ in range(2000)])
-    finally:
-        np.random.set_state(rng_state)
-
-    assert np.all(samples > 0)
-    # log-samples should be approximately normal around log(kcat0) - 0.5*sigma^2.
-    expected_mu = np.log(5.0) - 0.5 * 0.3**2
-    assert np.mean(np.log(samples)) == pytest.approx(expected_mu, abs=0.05)
-    assert np.std(np.log(samples)) == pytest.approx(0.3, abs=0.05)
-
-
-def test_build_kcat_prior_rejects_nonpositive_kcat0():
-    with pytest.raises(ValueError, match="strictly positive"):
-        build_kcat_prior(np.array([1.0, 0.0]), np.array([0.4, 0.4]))
-
-
-def test_build_kcat_prior_rejects_shape_mismatch():
-    with pytest.raises(ValueError, match="same shape"):
-        build_kcat_prior(np.array([1.0, 2.0]), np.array([0.4]))
 

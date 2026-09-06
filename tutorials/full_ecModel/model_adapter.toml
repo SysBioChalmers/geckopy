@@ -29,12 +29,13 @@ taxonomic_id = 559292
 
 [bayesian]
 sigma0_log_default = 0.3
-schedule_generations = [1, 2, 9, 15]
-schedule_samples = [1000, 800, 600, 400]
-min_keep = 0.3
-max_keep = 0.6
 rmse_threshold = 0.2
-max_generations = 50
+# CMA-ES generations. 212 approximates the 6800-evaluation budget this
+# was validated at (docs/internal/matlab_replication_results.md), at
+# cmaes_kcat_tuning's own default population size for ~110 free
+# parameters; a different tunable-set size changes that population
+# size and so the evaluation count this actually spends.
+max_generations = 212
 # Weights the max-growth term: the eight max-growth conditions count double
 # against the 33 flux conditions, which are 30 parts glucose. MATLAB weights
 # the flux term with this field instead, so its maxGrowthWeight = 2 is 0.5 here.

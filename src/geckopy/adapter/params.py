@@ -74,7 +74,7 @@ class SourceGroupRule(BaseModel):
 
 
 class BayesianParams(BaseModel):
-    """Hyperparameters for Bayesian kcat fitting (ABC-SMC).
+    """Hyperparameters for kcat tuning against experimental data.
 
     Sources not matched by any ``source_groups`` entry fall back to the
     ``*_default`` fields (matching MATLAB's ``noKcatSource`` behaviour:
@@ -106,30 +106,12 @@ class BayesianParams(BaseModel):
         ),
     )
 
-    schedule_generations: list[int] = Field(
-        default_factory=lambda: [1, 2, 9, 15],
-        description="Generations at which the per-generation sample count changes.",
-    )
-    schedule_samples: list[int] = Field(
-        default_factory=lambda: [1000, 800, 600, 400],
-        description="Samples drawn per generation, one entry per schedule_generations entry.",
-    )
-
-    min_keep: float = Field(
-        default=0.3,
-        description="Smallest fraction of scored samples truncation selection keeps.",
-    )
-    max_keep: float = Field(
-        default=0.6,
-        description="Largest fraction of scored samples truncation selection keeps.",
-    )
-
     rmse_threshold: float = Field(
         default=0.2,
         description="Stop once the best RMSE reaches this; negative never stops early.",
     )
     max_generations: int = Field(
-        default=150, description="Hard cap on ABC-SMC generations.",
+        default=150, description="Hard cap on CMA-ES generations.",
     )
 
     max_growth_weight: float = Field(
@@ -179,11 +161,10 @@ class BayesianParams(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_group_keys_and_schedule_lengths(self) -> "BayesianParams":
+    def _check_group_keys(self) -> "BayesianParams":
         """The per-source dicts must have exactly ``source_groups``'
-        keys, and the ABC-SMC schedule lists must line up with each
-        other; otherwise a downstream lookup silently falls back to a
-        default or a positional zip silently mismatches."""
+        keys, otherwise a downstream lookup silently falls back to a
+        default."""
         group_names = set(self.source_groups)
         for name in ("sigma0_log_source",):
             keys = set(getattr(self, name))
@@ -192,11 +173,6 @@ class BayesianParams(BaseModel):
                     f"BayesianParams.{name} keys {sorted(keys)} must match "
                     f"source_groups keys {sorted(group_names)}."
                 )
-        if len(self.schedule_generations) != len(self.schedule_samples):
-            raise ValueError(
-                "BayesianParams.schedule_generations and schedule_samples "
-                "must have equal length."
-            )
         return self
 
 
