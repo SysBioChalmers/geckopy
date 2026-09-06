@@ -63,6 +63,7 @@ tutorial = [
 ]
 bayesian = [
     "pyabc>=0.13",
+    "cma>=3.3",
 ]
 
 [project.urls]
