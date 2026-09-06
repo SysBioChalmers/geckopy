@@ -1377,6 +1377,110 @@ change set.
 `prior_penalty_weight` therefore defaults to 0.03. Setting it to 0
 recovers the unpenalised behaviour and the earlier sections' results.
 
+## Checking the settled configuration directly
+
+Everything above rests on one operating point (112 free parameters,
+lambda 0.03, max-growth weight 2) reached by separate investigations
+at different times. `run_benchmark.py` checks it directly: one script,
+two data regimes, always scored on all 41 conditions regardless of
+what a cell was fitted on, sweeping parameter count, lambda, and the
+max-growth weight one at a time against that same fixed yardstick. Two
+seeds per cell throughout -- a floor for "does this reproduce at all,"
+not a rigorous spread estimate.
+
+### Parameter count: 112 confirmed, not just convenient
+
+Full 41-condition data, lambda 0.03, mgw 2:
+
+| free params | distance (seed 0 / 1) | changed | median fold | max fold |
+|---|---|---|---|---|
+| 224 | 0.8295 / 0.9235 | 268 / 271 | 1.49 / 1.52x | 13-15x |
+| **112** | 0.8384 / 0.8302 | 135 / 134 | 1.38 / 1.35x | 13-15x |
+| 56 | 1.0105 / 1.0080 | 78 / 76 | 1.56 / 1.59x | 18x |
+| 28 | 1.3844 / 1.3915 | 41 / 42 | 1.83 / 1.78x | 13x |
+| 14 | 1.7455 / 1.7457 | 24 / 24 | 2.39 / 2.41x | 18x |
+
+Fit degrades smoothly all the way down -- no cliff, no plateau -- and
+112 sits at the top of that curve: 224 doesn't fit better (0.8295 is
+within noise of 112's 0.8384) but reproduces far worse (11% apart
+against 1%), doubling the change set for nothing. Growth-rate fit
+tells the same story: six of eight sources track measured values
+within a few percent at both 112 and 56 parameters; acetate misses by
+roughly the same margin (54-57% shortfall) at every parameter count
+tested, confirming it as a model ceiling rather than a search-budget
+one. Below 56, mannose and maltose start missing too, joining acetate.
+
+On a single growth-rate measurement (glucose only, nothing else), the
+same sweep barely moves at all -- full-41 distance sits in a flat
+1.57-1.73 band from 112 down to 14 parameters, tightest at 14 (both
+seeds to three decimals). With one measurement to fit, parameter count
+stops being the constraint; the ceiling is what one number can
+possibly tell you about eight.
+
+### Lambda: 0.03 still beats 0.01, but 0.1 is not simply worse
+
+Same 112-parameter, mgw-2 setting, lambda swept directly (movers/
+agreement/spread computed fresh from this run's saved vectors, same
+convention as the earlier sweep -- movers counts kcats past 2-fold in
+*either* seed, agreement is over kcats past 2-fold in *both*):
+
+| lambda | distance (seed 0 / 1) | fit cost vs 0.01 | movers >2x | both-moved | direction agree | median spread | max spread |
+|---|---|---|---|---|---|---|---|
+| 0.01 | 0.8248 / 0.8142 | -- | 73 | 26 | 84.6% | 2.03x | 16.7x |
+| 0.03 | 0.8384 / 0.8302 | +1.8% | 29 | 14 | 100% | 1.84x | 5.7x |
+| 0.1 | 1.0575 / 1.1624 | +33.7% | 15 | 10 | 100% | 1.13x | 2.2x |
+
+0.03 confirms as the point where direction agreement first reaches
+100% for a small fit cost -- consistent with the earlier sweep. What's
+new: reproducibility keeps improving well past that point. 0.1 pushes
+worst-case spread down further, from 5.7x to 2.2x, at real cost this
+time (+33.7%, against +1.8% for 0.01-to-0.03). That means the earlier
+picture -- "0.03 is where it levels off" -- was drawn from a curve that
+stopped at 0.03; whether the honest bend sits closer to 0.03 or further
+out is genuinely open. A bisection at 0.05 and 0.07 is running to
+locate it; **do not revise the shipped default from this table alone**,
+the section below will be updated once it lands.
+
+### Max-growth weight: 2 is defensible, 1 reproduces tighter
+
+The untuned baseline itself shifts with mgw (the same errors, weighted
+differently), so raw distances aren't comparable across this table
+directly -- compare the normalized improvement instead. Untuned flux
+RMSE 8.796, growth RMSE 8.208 (back-solved from the three baselines,
+consistent with the untuned values reported earlier in this document).
+
+| mgw | flux improvement | growth improvement | changed | both-moved | direction agree | median spread | max spread |
+|---|---|---|---|---|---|---|---|
+| 1 | 89.7% / 89.4% | 89.7% / 89.6% | 149 / 140 | 17 | 100% | 1.11x | 4.0x |
+| **2** | 89.6% / 90.8% | 90.2% / 89.8% | 135 / 134 | 14 | 100% | 1.84x | 5.7x |
+| 4 | 89.4% / 87.4% | 90.4% / 90.3% | 138 / 143 | 16 | 100% | 1.30x | 11.7x |
+
+The intended effect is present but small: growth improvement rises
+gently from 1 to 4 (~89.6% to ~90.4% average) while flux improvement
+drifts down, most visibly at mgw 4's second seed (87.4%, the worst
+flux fit of any of the three settings). mgw 4 also has the widest
+worst-case cross-seed spread (11.7x, against 4.0-5.7x for 1 and 2) for
+the smallest further gain -- worse on reproducibility, for a growth
+emphasis barely distinguishable from mgw 2's. mgw 1 has the tightest
+reproducibility of the three, but that is because it asks for no
+growth emphasis at all, which the design intent (growth measured
+across eight diverse carbon sources against a flux dataset that is 30
+of 33 conditions glucose) argues against. **2 stays the default**: it
+delivers the intended emphasis at a reproducibility cost that is real
+but modest next to 4's, not because it wins the fit numbers outright --
+it does not, they are a tie within noise across all three.
+
+### What this changes
+
+Parameter count (112) and the max-growth weight (2) are confirmed, not
+merely convenient carry-overs -- the first has a clear optimum on this
+curve, the second is a defensible design choice with a bounded
+reproducibility cost. The penalty weight is the one open question:
+0.03 is not wrong, but this benchmark found headroom for a stronger
+penalty that the original calibration curve did not have a data point
+to rule out. Resolve with the 0.05/0.07 bisection before treating
+lambda as settled.
+
 ## Open items
 
 0. **Seed spread**, in flight: three seeds per mask at 15 generations.
@@ -1432,3 +1536,12 @@ recovers the unpenalised behaviour and the earlier sections' results.
    combined leverage reaches a `target_impact_share` of the total,
    default 0.9. Not yet validated on a model unlike ecYeastGEM; 0.9 is
    a starting point, not a calibrated constant.
+
+7. **Lambda's upper bend is unresolved.** "Checking the settled
+   configuration directly" found 0.1 still buying reproducibility
+   (worst spread 5.7x -> 2.2x) for 33.7% of fit, well past where 0.03
+   was thought to level off. A bisection at 0.05/0.07 is running; fold
+   the result into that section and revisit the shipped default once
+   it lands -- `tune_prior_penalty_weight` now automates exactly this
+   sweep, including the reproducibility columns, so this need not be
+   hand-rolled again.
