@@ -168,11 +168,13 @@ class BayesianParams(BaseModel):
     )
 
     tie_isozymes: bool = Field(
-        default=False,
+        default=True,
         description=(
             "Give isozyme copies of one reaction a single kcat when they "
             "share a prior value and a source, so the search cannot invent "
-            "a distinction the kcat assignment never made."
+            "a distinction the kcat assignment never made. Tying must "
+            "happen before the first generation is sampled, not applied "
+            "to an already-tuned result."
         ),
     )
 
