@@ -1404,3 +1404,25 @@ recovers the unpenalised behaviour and the earlier sections' results.
    rebuilding caches and issuing ~9700 `add_metabolites` calls per
    particle. Neither changes any result, so both are verifiable by
    reproducing a trace exactly.
+6. **The tunable-mask cutoff is not portable to a new model.** Every
+   run in this document, including the benchmark sweep, selects the
+   parameter set with `TARGET`: take the top `N` kcats by
+   `leverage * sigma0_log`, where `N` is a hardcoded integer (112).
+   That count came from sweeping a *different* mechanism --
+   `identifiability_mask`'s absolute threshold `THR` -- on this model's
+   own leverage distribution and picking the bend in the curve (3e-5 ->
+   1461 kcats, 9.36e-4 -> 112, 3.07e-3 -> 63). Neither number carries
+   over: `THR` is in units of raw RMSE-change, which scales with a
+   model's condition count and distance normalisation, so the same
+   `THR` admits an unpredictable count on a different model; `TARGET`
+   sidesteps that but is then just as arbitrary a constant, chosen once
+   for ecYeastGEM's ~4834-kcat structure. `identifiability_mask` and
+   `impact_share` are already shipped in `parsimony.py` but nothing
+   wires them into a default -- every mask so far has been hand-built
+   in a scratch script. A portable default needs a *relative* cutoff
+   (e.g. a percentile of `leverage * sigma0_log`, or an impact-share
+   target the way `best_parsimonious`'s 2% tolerance already
+   self-normalises post-hoc) so the admitted count is whatever a new
+   model's own leverage distribution earns, with a fixed-`N` cap kept
+   as an explicit secondary knob for sizing the CMA-ES budget, not the
+   primary criterion it is today.

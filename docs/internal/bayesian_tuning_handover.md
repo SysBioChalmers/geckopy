@@ -240,6 +240,18 @@ One mechanism exists but is **not** recommended:
    caches and issuing ~9700 `add_metabolites` calls per particle.
    Neither changes any result, so both are verifiable by reproducing a
    trace exactly.
+7. **The tunable-mask cutoff does not generalise across models.**
+   `bayesian_kcat_tuning` takes `tunable_mask` as a plain externally-
+   supplied array; the package has no default policy for building one.
+   Every mask used in this project's runs was a top-`N` cutoff
+   (`TARGET`, hardcoded at 112) on `leverage * sigma0_log`, and `N`
+   itself came from sweeping `identifiability_mask`'s absolute
+   threshold on ecYeastGEM and picking its bend point -- a value with
+   no meaning on a different model's leverage scale. See
+   *matlab_replication_results.md*, Open items #6, for the fix: a
+   relative cutoff (percentile or impact-share target) as the default,
+   with a fixed-`N` cap as an opt-in secondary knob for CMA-ES budget
+   sizing.
 
 ## Running it
 
