@@ -122,7 +122,14 @@ What each knob means:
   that large corrections agree in direction and land within a handful
   of fold of each other across seeds, at a small cost in raw fit. Set
   it to `0` to score on fit alone (also what a run reproducing GECKO
-  MATLAB, which has no such term, must do).
+  MATLAB, which has no such term, must do). The right strength is
+  model- and data-specific, since it depends on the scale of
+  `sigma0_log` and of the objective itself --
+  `tune_prior_penalty_weight` runs a candidate sweep and reports fit
+  cost against cross-seed reproducibility so it doesn't have to be
+  picked blind (see its docstring; it costs one full tuning run per
+  candidate per seed, so treat it as an occasional calibration step,
+  not part of routine tuning).
 - **`tie_isozymes`** (default `true`). Several ecModel reactions are
   one enzymatic reaction split across isozyme copies. When copies
   share a prior value and a source, no experimental condition can tell

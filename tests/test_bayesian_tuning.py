@@ -25,6 +25,7 @@ from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
     cmaes_kcat_tuning,
     screen_kcat_leverage,
     select_tunable_mask,
+    tune_prior_penalty_weight,
 )
 from geckopy.kcat_sensitivity_analysis.bayesian.data import BayesianData
 from geckopy.kcat_sensitivity_analysis.bayesian.tuning import BayesianTuningResult
@@ -365,3 +366,60 @@ def test_too_few_free_parameters_raises(tmp_path):
             model, adapter=adapter, bay_data=bay_data,
             tunable_mask=mask, n_proc=1,
         )
+
+
+def test_tune_prior_penalty_weight_shape_and_fit_cost(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    bay_data = _bay_data()
+    params = BayesianParams(max_generations=6, rmse_threshold=-1.0)
+
+    report = tune_prior_penalty_weight(
+        model, adapter=adapter, params=params, bay_data=bay_data,
+        candidates=(0.0, 1000.0), seeds=(0, 1), n_proc=1, verbose=False,
+    )
+
+    assert len(report) == 2
+    assert list(report["prior_penalty_weight"]) == [0.0, 1000.0]
+    assert (report["n_seeds"] == 2).all()
+    # The best (lowest-distance) candidate has zero fit cost by construction.
+    assert report["fit_cost"].min() == pytest.approx(0.0)
+    assert (report["fit_cost"] >= 0.0).all()
+    # A crushing penalty should move fewer kcats than none at all.
+    unpenalised = report.loc[report["prior_penalty_weight"] == 0.0].iloc[0]
+    crushed = report.loc[report["prior_penalty_weight"] == 1000.0].iloc[0]
+    assert crushed["n_changed_mean"] <= unpenalised["n_changed_mean"]
+
+
+def test_tune_prior_penalty_weight_restores_model(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    bay_data = _bay_data()
+    before = model.ec.kcat.copy()
+    params = BayesianParams(max_generations=4, rmse_threshold=-1.0)
+
+    tune_prior_penalty_weight(
+        model, adapter=adapter, params=params, bay_data=bay_data,
+        candidates=(0.0,), seeds=(0,), n_proc=1, verbose=False,
+    )
+
+    # Unlike cmaes_kcat_tuning, this only reports -- it leaves the model
+    # exactly as it found it.
+    assert np.array_equal(model.ec.kcat, before)
+
+
+def test_tune_prior_penalty_weight_single_seed_gives_nan_reproducibility(tmp_path):
+    adapter = _adapter(tmp_path)
+    model = _build_toy(adapter)
+    bay_data = _bay_data()
+    params = BayesianParams(max_generations=4, rmse_threshold=-1.0)
+
+    report = tune_prior_penalty_weight(
+        model, adapter=adapter, params=params, bay_data=bay_data,
+        candidates=(0.0,), seeds=(0,), n_proc=1, verbose=False,
+    )
+
+    row = report.iloc[0]
+    assert row["n_both_moved"] == 0
+    assert np.isnan(row["pct_direction_agree"])
+    assert np.isnan(row["median_fold_spread"])

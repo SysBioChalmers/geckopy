@@ -31,6 +31,7 @@ from .tuning import (
     cmaes_kcat_tuning,
     screen_kcat_leverage,
     select_tunable_mask,
+    tune_prior_penalty_weight,
 )
 
 __all__ = [
@@ -51,4 +52,5 @@ __all__ = [
     "screen_kcat_leverage",
     "select_tunable_mask",
     "simulate_bayesian_dataset",
+    "tune_prior_penalty_weight",
 ]

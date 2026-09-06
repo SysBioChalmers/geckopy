@@ -62,7 +62,8 @@ from __future__ import annotations
 import logging
 from contextlib import nullcontext
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Optional
+from itertools import combinations
+from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
 import cma
 import cobra
@@ -73,6 +74,7 @@ from cobra.util import ProcessPool
 from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
 from .data import BayesianData, load_bayesian_data
 from .distance import bayesian_distance, compute_excarbon
+from .parsimony import fold_change, n_changed
 from .priors import build_sigma0_log, classify_kcat_sources
 from .simulate import simulate_bayesian_dataset
 from .tying import isozyme_tie_map
@@ -563,6 +565,169 @@ def cmaes_kcat_tuning(
         objective_trace=objective_trace, n_generations=generation,
         converged=best_rmse <= params.rmse_threshold,
     )
+
+
+def tune_prior_penalty_weight(
+    model: "EcModel",
+    *,
+    adapter: Optional["ModelAdapter"] = None,
+    params: Optional["BayesianParams"] = None,
+    bay_data: Optional[BayesianData] = None,
+    okp_method: Optional[str] = None,
+    bio_rxn: Optional[str] = None,
+    make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
+    change_protein_biomass: Optional[Callable[["EcModel", float], None]] = None,
+    tunable_mask: Optional[np.ndarray] = None,
+    screen: Optional[pd.DataFrame] = None,
+    target_impact_share: float = 0.9,
+    candidates: Sequence[float] = (0.0, 0.01, 0.03, 0.1),
+    seeds: Sequence[int] = (0, 1),
+    fold_threshold: float = 2.0,
+    popsize: Optional[int] = None,
+    n_proc: Optional[int] = None,
+    verbose: bool = True,
+) -> pd.DataFrame:
+    """Sweep ``prior_penalty_weight`` and report the fit/reproducibility
+    trade-off, so the value doesn't have to be picked blind.
+
+    ``prior_penalty_weight`` charges for moving a kcat away from its
+    prior, and mainly exists to keep large corrections reproducible
+    across seeds rather than landing on an arbitrary point along a flat
+    direction. How strong a charge is enough is model- and
+    data-specific: too little and the search's largest corrections
+    disagree across seeds; too much and the search stops finding real
+    corrections at all, giving up fit for nothing. This runs
+    :func:`cmaes_kcat_tuning` at every value in ``candidates``, each at
+    every seed in ``seeds``, all against the *same* tunable set (built
+    once, the way :func:`cmaes_kcat_tuning` would on its own if
+    ``tunable_mask``/``screen`` aren't given), and reports both fit and
+    cross-seed reproducibility per value.
+
+    This is exactly as expensive as it sounds: ``len(candidates) *
+    len(seeds)`` full :func:`cmaes_kcat_tuning` runs, none of them
+    reusable across candidates. Reuse a ``screen`` you already have to
+    at least avoid recomputing that part.
+
+    ``model`` is restored to its original kcats before every run and
+    left that way when this returns -- unlike :func:`cmaes_kcat_tuning`,
+    which mutates ``model`` with its result, this function only
+    reports, since there is no single "best" candidate for it to leave
+    the model in. Fewer than two ``seeds`` makes every reproducibility
+    column ``NaN``, since there is nothing to compare.
+
+    Parameters
+    ----------
+    candidates
+        ``prior_penalty_weight`` values to try.
+    seeds
+        Seeds to run each candidate at. Reproducibility columns pool
+        every pair of seeds, so more than two sharpens them but costs
+        proportionally more.
+    fold_threshold
+        A kcat counts as "moved" past this fold change from its prior.
+        Matches :func:`~.parsimony.fold_change`'s convention.
+    tunable_mask, screen, target_impact_share, popsize, n_proc,
+    make_anaerobic, change_protein_biomass, okp_method, bio_rxn
+        As in :func:`cmaes_kcat_tuning`.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per candidate: ``prior_penalty_weight``, ``n_seeds``,
+        ``distance_mean`` and ``distance_spread`` (max minus min across
+        seeds), ``fit_cost`` (``distance_mean`` relative to the best
+        candidate's, as a fraction), ``n_changed_mean``, ``n_movers``
+        (kcats past ``fold_threshold`` in *either* seed of a pair, summed
+        over every pair), ``n_both_moved`` (past it in *both* -- the
+        denominator for direction agreement, since a kcat only one seed
+        moved has no direction to agree about), ``pct_direction_agree``,
+        ``median_fold_spread`` and ``max_fold_spread`` (among movers,
+        the largest fold-change between what the two seeds landed on).
+    """
+    params, bay_data, bio_rxn, okp_method = _resolve_context(
+        model, adapter, params, bay_data, bio_rxn, okp_method)
+
+    if tunable_mask is None:
+        if screen is None:
+            screen = screen_kcat_leverage(
+                model, adapter=adapter, params=params, bay_data=bay_data,
+                okp_method=okp_method, bio_rxn=bio_rxn,
+                make_anaerobic=make_anaerobic,
+                change_protein_biomass=change_protein_biomass,
+                n_proc=n_proc,
+            )
+        tunable_mask = select_tunable_mask(
+            model, screen, target_impact_share=target_impact_share)
+
+    prior_kcat = model.ec.kcat.copy()
+
+    def _reset():
+        model.ec.kcat[:] = prior_kcat
+        apply_kcat_constraints(model, update_rxns=model.ec.rxns)
+
+    try:
+        rows = []
+        for lam in candidates:
+            lam_params = params.model_copy(
+                update={"prior_penalty_weight": float(lam)})
+            vectors, distances, changed = [], [], []
+            old_kcat = None
+            for seed in seeds:
+                _reset()
+                result = cmaes_kcat_tuning(
+                    model, adapter=adapter, params=lam_params, bay_data=bay_data,
+                    okp_method=okp_method, bio_rxn=bio_rxn,
+                    make_anaerobic=make_anaerobic,
+                    change_protein_biomass=change_protein_biomass,
+                    tunable_mask=tunable_mask, popsize=popsize, n_proc=n_proc,
+                    seed=seed, verbose=verbose,
+                )
+                vectors.append(result.new_kcat)
+                distances.append(
+                    result.rmse_trace[-1] if result.rmse_trace else float("nan"))
+                changed.append(n_changed(result.new_kcat, result.old_kcat))
+                old_kcat = result.old_kcat
+                if verbose:
+                    logger.info(
+                        "prior_penalty_weight=%g seed=%d: distance %.4f, "
+                        "%d changed", lam, seed, distances[-1], changed[-1],
+                    )
+
+            n_movers = n_both = n_agree = 0
+            spreads: list[float] = []
+            for i, j in combinations(range(len(vectors)), 2):
+                fa = fold_change(vectors[i], old_kcat)
+                fb = fold_change(vectors[j], old_kcat)
+                movers = (fa > fold_threshold) | (fb > fold_threshold)
+                both = (fa > fold_threshold) & (fb > fold_threshold)
+                agree = np.sign(np.log(vectors[i][both] / old_kcat[both])) == \
+                    np.sign(np.log(vectors[j][both] / old_kcat[both]))
+                n_movers += int(movers.sum())
+                n_both += int(both.sum())
+                n_agree += int(agree.sum())
+                if movers.any():
+                    ratio = vectors[i][movers] / vectors[j][movers]
+                    spreads.extend(np.maximum(ratio, 1.0 / ratio).tolist())
+
+            rows.append({
+                "prior_penalty_weight": float(lam),
+                "n_seeds": len(seeds),
+                "distance_mean": float(np.mean(distances)),
+                "distance_spread": float(np.ptp(distances)) if len(distances) > 1 else 0.0,
+                "n_changed_mean": float(np.mean(changed)),
+                "n_movers": n_movers,
+                "n_both_moved": n_both,
+                "pct_direction_agree": (n_agree / n_both) if n_both > 0 else float("nan"),
+                "median_fold_spread": float(np.median(spreads)) if spreads else float("nan"),
+                "max_fold_spread": float(np.max(spreads)) if spreads else float("nan"),
+            })
+    finally:
+        _reset()
+
+    df = pd.DataFrame(rows)
+    best = df["distance_mean"].min()
+    df["fit_cost"] = df["distance_mean"] / best - 1.0
+    return df
 
 
 # --------------------------------------------------------------------------- #
