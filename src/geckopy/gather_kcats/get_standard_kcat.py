@@ -44,11 +44,12 @@ def assign_standard_kcat(
     src/geckomat/gather_kcats/getStandardKcat.m.
 
     A standard MW (median of all proteins in ``uniprot_db``) and a
-    standard kcat (median of all non-zero ``model.ec.kcat`` values, or
-    a per-subsystem mean when the subsystem has at least ``threshold``
-    reactions) are computed. Reactions that lack a GPR rule, or have a
-    GPR but no entry in ``model.ec.rxns``, are added to ``model.ec``
-    with this standard pseudoenzyme.
+    standard kcat (median of all non-zero, non-NaN ``model.ec.kcat``
+    values, or a per-subsystem median when the subsystem has at least
+    ``threshold`` reactions with a real kcat) are computed. Reactions
+    that lack a GPR rule, or have a GPR but no entry in
+    ``model.ec.rxns``, are added to ``model.ec`` with this standard
+    pseudoenzyme.
 
     The function is idempotent: previous "standard" entries
     (identified by ``model.ec.source == "standard"``) are stripped
@@ -80,9 +81,10 @@ def assign_standard_kcat(
     uniprot_db
         Pre-loaded UniprotDB; used only for the median MW.
     threshold
-        Minimum number of reactions in a subsystem before a
-        subsystem-specific mean kcat is used. Subsystems with fewer
-        reactions fall back to the global standard kcat.
+        Minimum number of reactions with a real kcat in a subsystem
+        before a subsystem-specific median kcat is used. Subsystems
+        with fewer such reactions fall back to the global standard
+        kcat.
     fill_zero_kcat
         Whether to replace existing 0/NaN ``ec.kcat`` entries with
         the standard kcat.
@@ -188,7 +190,7 @@ def _compute_subsystem_kcats(
 
     for ec_rxn_id, kcat in zip(model.ec.rxns, model.ec.kcat):
         # Only reactions with a real kcat contribute.
-        if kcat == 0:
+        if kcat == 0 or np.isnan(kcat):
             continue
         cobra_rxn_id = _ec_rxn_to_cobra_id(model, ec_rxn_id)
         try:
@@ -413,11 +415,12 @@ def _assign_standard_kcat_to_missing(
 
 
 def _fill_zero_kcats(model: "EcModel", standard_kcat: float) -> list[str]:
-    """Replace unset ``ec.kcat`` entries (0) with ``standard_kcat`` and
-    mark their source as 'standard'. Returns the list of rxn IDs filled."""
+    """Replace unset ``ec.kcat`` entries (0 or NaN) with ``standard_kcat``
+    and mark their source as 'standard'. Returns the list of rxn IDs
+    filled."""
     if model.ec.kcat.size == 0:
         return []
-    unset_mask = model.ec.kcat == 0
+    unset_mask = (model.ec.kcat == 0) | np.isnan(model.ec.kcat)
     if not unset_mask.any():
         return []
     model.ec.kcat[unset_mask] = standard_kcat
