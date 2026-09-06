@@ -7,6 +7,12 @@ ec-specific concerns on top of raven's general-purpose FSEOF:
   explicitly;
 - optionally runs a carbon-source consistency check (warns when the
   carbon-source lower bound is tighter than its uptake at biomass-max);
+- anchors the scan's floor to the production-target reaction's flux at
+  biomass-optimum (matching ``ecFSEOF.m``'s ``iniTarget``), rather than
+  raven-toolbox's default fixed-fraction-of-maximum floor;
+- restricts targets (and the reported scan) to gene-associated
+  reactions whose GPR doesn't reference the "standard" placeholder
+  pseudogene, matching ``ecFSEOF.m``'s candidate-set restriction;
 - filters ``usage_prot_*`` rows out of the returned ``scan`` /
   ``targets`` DataFrames — those reactions are protein-pool plumbing,
   never engineering targets.
@@ -44,6 +50,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _USAGE_PROT_PREFIX = "usage_prot_"
+_STANDARD_GENE = "standard"
 
 
 def ec_fseof(
@@ -84,7 +91,9 @@ def ec_fseof(
         ``model.adapter`` is set.
     max_fraction
         Top of the scan range as a fraction of the theoretical maximum
-        product flux. Default 0.9.
+        product flux. Default 0.9. The floor of the scan range is the
+        production target's flux at biomass-optimum, not a fraction of
+        this ceiling.
     correlation_threshold
         A reaction is a target when ``|corr(flux, enforced)| >=`` this
         value. Default 0.9.
@@ -112,6 +121,8 @@ def ec_fseof(
     if cs_rxn is not None:
         _check_cs_consistency(model, bio_rxn_id, cs_rxn)
 
+    min_target = _biomass_optimal_target_flux(model, bio_rxn_id, prod_target_rxn)
+
     result = fseof(
         model, prod_target_rxn,
         biomass_rxn=bio_rxn_id,
@@ -119,8 +130,10 @@ def ec_fseof(
         max_fraction=max_fraction,
         correlation_threshold=correlation_threshold,
         flux_eps=flux_eps,
+        min_target=min_target,
     )
-    return _drop_usage_prot(result)
+    result = _drop_usage_prot(result)
+    return _drop_ungated_reactions(result, model)
 
 
 def _check_cs_consistency(
@@ -146,6 +159,45 @@ def _check_cs_consistency(
             "doesn't flatten at the bound.",
             cs_rxn_id, cs_rxn_obj.lower_bound, cs_flux,
         )
+
+
+def _biomass_optimal_target_flux(
+    model: "EcModel", bio_rxn_id: str, prod_target_rxn_id: str,
+) -> float:
+    """The production-target reaction's flux at biomass-optimum.
+
+    Matches ``ecFSEOF.m``'s ``iniTarget``: the scan's floor is where the
+    model actually sits before any production is enforced, which can be
+    near zero for a target with no baseline flux -- not a fixed fraction
+    of the theoretical maximum.
+    """
+    with model:
+        model.objective = bio_rxn_id
+        sol = model.optimize()
+        if sol.status != "optimal":
+            return 0.0
+        return float(sol.fluxes.get(prod_target_rxn_id, 0.0))
+
+
+def _gated_reaction(model: "EcModel", rxn_id: str) -> bool:
+    """Whether a reaction can be an engineering target: it must have a
+    GPR, and that GPR must not reference the "standard" placeholder
+    pseudogene added by :func:`assign_standard_kcat` for reactions with
+    no real enzyme assignment."""
+    gpr = model.reactions.get_by_id(rxn_id).gene_reaction_rule
+    return bool(gpr) and _STANDARD_GENE not in gpr
+
+
+def _drop_ungated_reactions(result: FSEOFResult, model: "EcModel") -> FSEOFResult:
+    """Restrict ``scan`` and ``targets`` to gene-associated, non-standard
+    reactions, matching ``ecFSEOF.m``'s candidate-set restriction (a
+    reaction with no GPR, or only the ec.kcat-standard-value pseudogene,
+    can't be engineered)."""
+    scan = result.scan[[_gated_reaction(model, rid) for rid in result.scan.index]]
+    targets = result.targets[
+        result.targets["reaction"].map(lambda rid: _gated_reaction(model, rid))
+    ].reset_index(drop=True)
+    return FSEOFResult(scan=scan, enforced=result.enforced, targets=targets)
 
 
 def _drop_usage_prot(result: FSEOFResult) -> FSEOFResult:
