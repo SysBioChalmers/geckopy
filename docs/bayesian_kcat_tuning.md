@@ -25,6 +25,12 @@ sequence, turn measured data into corrections:
    vector that best matches the data, weighted by how much each kcat's
    source is trusted.
 
+A fourth function, **`review_assignment`**, is complementary rather
+than part of that sequence: it checks the kcats *themselves* for
+assignment mistakes -- independent of any measured data -- since the
+tuner's largest corrections are usually places the assignment went
+wrong rather than discoveries about biology (see Step 4).
+
 The result is usually a short list of corrections, each with a
 before/after value and a source -- not a wholesale rewrite of the
 model. A run that changes nearly every kcat by a little has not found
@@ -172,7 +178,56 @@ comparable in scale to a full tuning run's budget -- expect tens of
 minutes on a genome-scale model, not a quick check. `n_proc`
 parallelises it the same way tuning does.
 
-## Step 4: Tune
+## Step 4: Check the assignments behind the top kcats
+
+Before spending a tuning run on a kcat, it is worth checking whether
+the value was assigned correctly in the first place.
+`review_assignment` flags source-level problems: a value with no kcat
+row behind it for its EC, one number reused across many unrelated
+reactions, an EC's maximum standing in for a whole distribution, an
+implausible magnitude, or a curated value that just repeats what the
+database already said. These are corrections to the *source* -- fix
+them in whatever database or fuzzy-matching step in `gather_kcats`
+produced the value -- so they propagate to every model built from the
+same data, unlike a value the tuner moves for this one model alone.
+
+```python
+from geckopy.gather_kcats.review import EcStats, review_assignment, findings_tsv
+
+# One EcStats per EC code queried while gathering kcats -- summarise
+# whatever kcat database (usually BRENDA) the assignment came from.
+ec_stats = {
+    "1.1.1.1": EcStats(n_kcat=12, kcat_max=340.0, kcat_median=45.0,
+                       values=frozenset({340.0, 45.0, 12.0}), n_sa=0),
+    # ...
+}
+
+findings = review_assignment(
+    model.ec.rxns, model.ec.kcat, model.ec.source, model.ec.eccodes,
+    ec_stats=ec_stats,
+)
+print(findings_tsv(findings))
+```
+
+Each `Finding` names a reaction, its checks (`no-ec-evidence`,
+`repeated-value`, `ec-maximum`, `magnitude`, `custom-duplicate`), and a
+human-readable `detail`. Isozyme copies the
+assignment could not tell apart (the same grouping `tie_isozymes` in
+Step 2 uses) are reported once, not once per copy. Standard fallbacks
+and tied groups are deliberate choices, not mistakes, so both stay
+quiet unless asked for via `include`.
+
+Findings rank by `leverage` when you pass it in -- reuse the `screen`
+from Step 3, expanded from tie-groups back to individual
+`model.ec.rxns` positions via its `_positions` column -- so that
+looking odd and actually mattering are not confused; without it, rows
+come back in input order, and looking odd is all you get. `coverage`
+(a share of flagged leverage) or `top` (a row count) then truncates the
+report: on ecYeastGEM, tightening the checks themselves does not work
+half as well as this does, since `coverage=0.8` cuts 2575 unfiltered
+rows to 33, and the first row alone carries half.
+
+## Step 5: Tune
 
 ```python
 from geckopy import save_ec_model
@@ -211,7 +266,7 @@ condition-specific biomass composition -- pass `make_anaerobic` and/or
 default for either. See `tutorials/full_ecModel/code/anaerobic.py` in
 this repository for a worked example.
 
-## Step 5: Read the result
+## Step 6: Read the result
 
 `result` is a `BayesianTuningResult`:
 
