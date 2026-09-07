@@ -63,6 +63,9 @@ dev = [
 tutorial = [
     "matplotlib>=3.5",
 ]
+bayesian = [
+    "cma>=3.3",
+]
 
 [project.urls]
 Homepage = "https://github.com/SysBioChalmers/geckopy"

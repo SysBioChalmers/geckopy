@@ -48,60 +48,131 @@ class ComplexParams(BaseModel):
     )
 
 
-class BayesianParams(BaseModel):
-    """Hyperparameters for Bayesian kcat fitting (ABC-SMC)."""
+class SourceGroupRule(BaseModel):
+    """One trust-tier entry in ``BayesianParams.source_groups``.
+
+    ``ec.source`` holds literal strings like ``"dlkcat"``, ``"brenda"``,
+    and -- for OpenKineticsPredictor kcats -- the raw predictor method
+    name (e.g. ``"CataPro"``), not a generic ``"okp"`` tag. A rule
+    matches a given ``ec.source`` value if it's listed in ``sources``,
+    or (when ``match_okp`` is True) if it equals the project's
+    configured OKP method (``OkpParams.method``).
+    """
     model_config = ConfigDict(extra="forbid")
 
-    sigma0_log_default: float = 0.5
-    kcat_sources: list[str] = Field(
-        default_factory=lambda: ["dlkcat", "brenda", "custom"]
+    sources: list[str] = Field(
+        default_factory=list,
+        description="Literal ec.source strings belonging to this group.",
     )
-    sigma0_log_source: list[float] = Field(default_factory=lambda: [0.4, 0.2, 0.1])
-
-    shrink_thr_default: float = 1.5
-    shrink_thr_source: list[float] = Field(default_factory=lambda: [1.5, 3.5, 5.5])
-    variance_cap_default: float = 10.0
-    variance_cap_source: list[float] = Field(default_factory=lambda: [10.0, 4.0, 2.0])
-
-    force_prior_thr_default: float = -1.0
-    force_prior_thr_source: list[float] = Field(
-        default_factory=lambda: [-1.0, 4.0, 8.0]
+    match_okp: bool = Field(
+        default=False,
+        description=(
+            "Also match ec.source values equal to the project's "
+            "configured OpenKineticsPredictor method (OkpParams.method)."
+        ),
     )
-    sparsity_threshold: float = 0.3
 
-    schedule_generations: list[int] = Field(default_factory=lambda: [1, 2, 9, 15])
-    schedule_samples: list[int] = Field(default_factory=lambda: [1000, 800, 600, 400])
 
-    target_accept: float = 10.0
-    min_keep: float = 0.3
-    max_keep: float = 0.6
+class BayesianParams(BaseModel):
+    """Hyperparameters for kcat tuning against experimental data.
 
-    rmse_threshold: float = 0.2
-    max_generations: int = 150
+    Sources not matched by any ``source_groups`` entry fall back to the
+    ``*_default`` fields (matching MATLAB's ``noKcatSource`` behaviour:
+    ``sigma0logDefault`` etc. apply to every kcat first, then only ones
+    with a recognised source get overridden by their group's value).
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    sigma0_log_default: float = Field(
+        default=0.5,
+        description=(
+            "Prior standard deviation in log-space for kcats whose source "
+            "matches no source_groups entry."
+        ),
+    )
+    source_groups: dict[str, SourceGroupRule] = Field(
+        default_factory=lambda: {
+            "dlkcat": SourceGroupRule(sources=["dlkcat"]),
+            "brenda": SourceGroupRule(sources=["brenda"]),
+            "custom": SourceGroupRule(sources=["custom"]),
+        },
+        description="Trust tiers: group name -> which ec.source values it covers.",
+    )
+    sigma0_log_source: dict[str, float] = Field(
+        default_factory=lambda: {"dlkcat": 0.4, "brenda": 0.2, "custom": 0.1},
+        description=(
+            "Prior log-space standard deviation per group. Lower is more "
+            "trusted, and narrows that group's proposal width."
+        ),
+    )
+
+    rmse_threshold: float = Field(
+        default=0.2,
+        description="Stop once the best RMSE reaches this; negative never stops early.",
+    )
+    max_generations: int = Field(
+        default=150, description="Hard cap on CMA-ES generations.",
+    )
+
+    max_growth_weight: float = Field(
+        default=1.0,
+        description=(
+            "Weight on the max-growth RMSE against the flux RMSE: "
+            "(rmse_flux + w * rmse_max_growth) / (w + 1). At 2 the "
+            "max-growth conditions count double. MATLAB weights the "
+            "flux term instead, so pass 0.5 to reproduce its 2."
+        ),
+    )
+
+    # Weight on a Gaussian prior term in the selection objective:
+    # rmse + w * mean((log(k/k0) / sigma0_log)**2). Because sigma0_log
+    # already encodes per-source confidence, this charges more for
+    # moving a trusted kcat than an unlabelled one, making parsimony
+    # part of what the search optimises rather than something applied
+    # afterwards.
+    #
+    # The default is what makes a tuned kcat reproducible. The fit is
+    # flat along many directions, so an unpenalised search returns an
+    # arbitrary point along each: on ecYeastGEM two seeds of the same
+    # unpenalised run disagree by up to 27 773-fold on individual
+    # kcats, and only 69% of their large corrections even agree on the
+    # direction of the change. At 0.03 the worst disagreement is 5.7x,
+    # every correction beyond two-fold agrees in direction, and the fit
+    # gives up 4.6%. Set 0 to score on RMSE alone; a run reproducing
+    # MATLAB, which has no such term, must do so.
+    prior_penalty_weight: float = Field(
+        default=0.03,
+        description=(
+            "Weight on a prior term in the selection objective, "
+            "rmse + w * mean((log(k/k0) / sigma0_log)**2). Keeps large "
+            "corrections reproducible across seeds. 0 scores on RMSE alone."
+        ),
+    )
+
+    tie_isozymes: bool = Field(
+        default=True,
+        description=(
+            "Give isozyme copies of one reaction a single kcat when they "
+            "share a prior value and a source, so the search cannot invent "
+            "a distinction the kcat assignment never made. Tying must "
+            "happen before the first generation is sampled, not applied "
+            "to an already-tuned result."
+        ),
+    )
 
     @model_validator(mode="after")
-    def _check_parallel_list_lengths(self) -> "BayesianParams":
-        """The per-source lists must line up with ``kcat_sources``, and the
-        ABC-SMC schedule lists must line up with each other; otherwise a
-        downstream positional zip silently mismatches."""
-        n = len(self.kcat_sources)
-        for name in (
-            "sigma0_log_source",
-            "shrink_thr_source",
-            "variance_cap_source",
-            "force_prior_thr_source",
-        ):
-            length = len(getattr(self, name))
-            if length != n:
+    def _check_group_keys(self) -> "BayesianParams":
+        """The per-source dicts must have exactly ``source_groups``'
+        keys, otherwise a downstream lookup silently falls back to a
+        default."""
+        group_names = set(self.source_groups)
+        for name in ("sigma0_log_source",):
+            keys = set(getattr(self, name))
+            if keys != group_names:
                 raise ValueError(
-                    f"BayesianParams.{name} has length {length}, expected "
-                    f"{n} to match kcat_sources."
+                    f"BayesianParams.{name} keys {sorted(keys)} must match "
+                    f"source_groups keys {sorted(group_names)}."
                 )
-        if len(self.schedule_generations) != len(self.schedule_samples):
-            raise ValueError(
-                "BayesianParams.schedule_generations and schedule_samples "
-                "must have equal length."
-            )
         return self
 
 
