@@ -27,7 +27,7 @@ reviewed = true
 [complex]
 taxonomic_id = 559292
 
-[evolutionary_tuning]
+[evotune]
 sigma0_log_default = 0.3
 rmse_threshold = 0.2
 # CMA-ES generations. 212 approximates a 6800-evaluation budget at
@@ -43,17 +43,17 @@ max_growth_weight = 2.0
 # Trust tiers, least to most trusted. This model labels predicted kcats
 # "OpenKineticsPredictor"; match_okp additionally catches models that label
 # them with the predictor method name (OkpParams.method) instead.
-[evolutionary_tuning.source_groups.okp]
+[evotune.source_groups.okp]
 sources = ["OpenKineticsPredictor"]
 match_okp = true
 
-[evolutionary_tuning.source_groups.brenda]
+[evotune.source_groups.brenda]
 sources = ["brenda"]
 
-[evolutionary_tuning.source_groups.custom]
+[evotune.source_groups.custom]
 sources = ["custom"]
 
-[evolutionary_tuning.sigma0_log_source]
+[evotune.sigma0_log_source]
 okp = 0.25
 brenda = 0.2
 custom = 0.1

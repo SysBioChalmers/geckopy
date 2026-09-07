@@ -1,8 +1,8 @@
 """Anaerobic switch for the yeast-GEM ecModel.
 
 Port of `GECKO/tutorials/full_ecModel/code/anaerobicModel_GECKO.m`,
-which `YeastGEMAdapter.makeModelAnaerobic` calls for every evolutionary
-tuning condition whose oxygen exchange is measured as exactly 0.
+which `YeastGEMAdapter.makeModelAnaerobic` calls for every evotune
+condition whose oxygen exchange is measured as exactly 0.
 
 The changes are organism-specific, so they live with the tutorial
 rather than in geckopy, mirroring where GECKO keeps them. Pass

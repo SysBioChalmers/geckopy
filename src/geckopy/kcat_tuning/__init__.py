@@ -9,33 +9,33 @@ from .sigma_fitter import SigmaFitterResult, fit_sigma, sigma_fitter
 from .truncate_values import truncate_values
 
 try:
-    from . import evolutionary_tuning
+    from . import evotune
 except ImportError as exc:  # pragma: no cover - exercised
     # only when the optional `cma` dependency is absent.
     # Bound to a module-level name: Python clears an `except ... as`
     # target when the block exits, so the class below cannot close over
     # `exc` itself.
-    _evolutionary_tuning_import_error = exc
+    _evotune_import_error = exc
 
-    class _MissingEvolutionaryTuning:
-        """Stand-in for the `evolutionary_tuning` subpackage when its
+    class _MissingEvotune:
+        """Stand-in for the `evotune` subpackage when its
         `cma` dependency isn't installed. Raises only on first attribute
         access, not on import, so plain `geckopy.kcat_tuning`
         stays usable without the optional extra."""
 
         def __getattr__(self, name: str):
             raise ImportError(
-                "Evolutionary (CMA-ES) kcat tuning requires the optional "
-                "'evolutionary-tuning' extra: pip install "
-                "geckopy[evolutionary-tuning]"
-            ) from _evolutionary_tuning_import_error
+                "Evotune: CMA-ES kcat tuning requires the optional "
+                "'evotune' extra: pip install "
+                "geckopy[evotune]"
+            ) from _evotune_import_error
 
-    evolutionary_tuning = _MissingEvolutionaryTuning()  # type: ignore[assignment]
+    evotune = _MissingEvotune()  # type: ignore[assignment]
 
 __all__ = [
     "SigmaFitterResult",
     "TunedKcatsResult",
-    "evolutionary_tuning",
+    "evotune",
     "find_max_value",
     "fit_sigma",
     "sensitivity_tuning",

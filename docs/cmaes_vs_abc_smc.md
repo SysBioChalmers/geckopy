@@ -3,7 +3,7 @@
 DLKcat's own Bayesian approach to kcat tuning implements ABC-SMC
 (Approximate Bayesian Computation, Sequential Monte Carlo) --
 [SysBioChalmers/DLKcat/BayesianApproach](https://github.com/SysBioChalmers/DLKcat/tree/master/BayesianApproach).
-geckopy's `kcat_tuning.evolutionary_tuning` module ported that
+geckopy's `kcat_tuning.evotune` module ported that
 approach faithfully and tested it side by side with a plain optimiser,
 CMA-ES, on the same objective, the same screened parameter set, and
 the same experimental data (ecYeastGEM, 41 conditions). CMA-ES won on
@@ -52,6 +52,6 @@ property of the data, not the search method -- but a direct optimiser
 converges to one point per flat direction instead of sampling across
 it, and `prior_penalty_weight` (a Tikhonov-style penalty on moving away
 from the prior, weighted by how much each source is trusted) picks out
-which point: see `docs/evolutionary_kcat_tuning.md` for how that combines
+which point: see `docs/evotune_kcat_tuning.md` for how that combines
 with `screen_kcat_leverage`/`select_tunable_mask` into the method this
 package actually recommends.

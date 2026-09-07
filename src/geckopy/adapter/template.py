@@ -96,7 +96,7 @@ def _is_nested_model(annotation: Any) -> bool:
 def generate_template_toml(*, project_name: str = "my-ecmodel") -> str:
     """Generate a commented TOML template for a new ecModel project.
 
-    Every section of the schema is emitted, evolutionary kcat-tuning
+    Every section of the schema is emitted, evotune kcat tuning
     hyperparameters included; optional fields are commented out at
     their defaults, so the template doubles as the reference for what
     can be set.

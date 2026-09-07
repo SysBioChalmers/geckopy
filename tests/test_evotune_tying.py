@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from geckopy.kcat_tuning.evolutionary_tuning.tying import (
+from geckopy.kcat_tuning.evotune.tying import (
     apply_ties, base_reaction, isozyme_tie_map, n_free,
 )
 
@@ -85,7 +85,7 @@ def test_tie_map_rejects_mismatched_inputs():
 
 def test_tying_reduces_the_dimension_a_search_sees():
     """A screen or optimiser working on free parameters sees fewer."""
-    from geckopy.kcat_tuning.evolutionary_tuning import tying
+    from geckopy.kcat_tuning.evotune import tying
 
     rxns = ["r_1_EXP_1", "r_1_EXP_2", "r_2_EXP_1", "r_2_EXP_2", "r_3"]
     kcat0 = np.array([10.0, 10.0, 4.0, 9.0, 1.0])

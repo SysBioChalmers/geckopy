@@ -2,18 +2,18 @@
 import pytest
 from pydantic import ValidationError
 
-from geckopy.adapter.params import EvolutionaryTuningParams, SourceGroupRule
+from geckopy.adapter.params import EvotuneParams, SourceGroupRule
 
 
 def test_defaults_are_consistent():
     # The shipped defaults must satisfy the group-key validator.
-    bp = EvolutionaryTuningParams()
+    bp = EvotuneParams()
     assert set(bp.sigma0_log_source) == set(bp.source_groups)
 
 
 def test_mismatched_source_dict_raises():
     with pytest.raises(ValidationError, match="sigma0_log_source"):
-        EvolutionaryTuningParams(
+        EvotuneParams(
             source_groups={
                 "dlkcat": SourceGroupRule(sources=["dlkcat"]),
                 "brenda": SourceGroupRule(sources=["brenda"]),
@@ -23,7 +23,7 @@ def test_mismatched_source_dict_raises():
 
 
 def test_consistent_custom_groups_ok():
-    bp = EvolutionaryTuningParams(
+    bp = EvotuneParams(
         source_groups={
             "a": SourceGroupRule(sources=["src_a"]),
             "b": SourceGroupRule(sources=["src_b"], match_okp=True),
@@ -39,6 +39,6 @@ def test_dropped_fields_are_rejected():
     in MATLAB and are not part of the schema; extra="forbid" should
     reject them outright rather than silently ignoring them."""
     with pytest.raises(ValidationError):
-        EvolutionaryTuningParams(target_accept=10.0)
+        EvotuneParams(target_accept=10.0)
     with pytest.raises(ValidationError):
-        EvolutionaryTuningParams(variance_cap_default=10.0)
+        EvotuneParams(variance_cap_default=10.0)

@@ -1,8 +1,8 @@
-"""Tests for kcat_tuning.evolutionary_tuning.parsimony."""
+"""Tests for kcat_tuning.evotune.parsimony."""
 import numpy as np
 import pytest
 
-from geckopy.kcat_tuning.evolutionary_tuning.parsimony import (
+from geckopy.kcat_tuning.evotune.parsimony import (
     best_parsimonious,
     movement_in_sigma,
     n_changed,
@@ -60,7 +60,7 @@ def test_frontier_reverts_progressively_and_scores_each_point():
 
 
 def test_best_parsimonious_prefers_fewer_changes_within_tolerance():
-    from geckopy.kcat_tuning.evolutionary_tuning.parsimony import FrontierPoint
+    from geckopy.kcat_tuning.evotune.parsimony import FrontierPoint
 
     pts = [
         FrontierPoint(0.0, np.array([1.0]), 4000, 7.0, 0.900),
@@ -73,7 +73,7 @@ def test_best_parsimonious_prefers_fewer_changes_within_tolerance():
 
 
 def test_fold_change_is_symmetric_and_at_least_one():
-    from geckopy.kcat_tuning.evolutionary_tuning.parsimony import fold_change
+    from geckopy.kcat_tuning.evotune.parsimony import fold_change
 
     kcat0 = np.array([10.0, 10.0, 10.0])
     kcat = np.array([20.0, 5.0, 10.0])       # doubled, halved, unchanged
@@ -81,7 +81,7 @@ def test_fold_change_is_symmetric_and_at_least_one():
 
 
 def test_source_movement_flags_whether_trust_order_is_respected():
-    from geckopy.kcat_tuning.evolutionary_tuning.parsimony import source_movement
+    from geckopy.kcat_tuning.evotune.parsimony import source_movement
 
     kcat0 = np.ones(6)
     groups = np.array(["custom", "custom", "brenda", "brenda", "okp", "okp"])
@@ -101,7 +101,7 @@ def test_source_movement_flags_whether_trust_order_is_respected():
 
 
 def test_source_movement_reads_the_tier_when_most_kcats_are_untouched():
-    from geckopy.kcat_tuning.evolutionary_tuning.parsimony import source_movement
+    from geckopy.kcat_tuning.evotune.parsimony import source_movement
 
     kcat0 = np.ones(10)
     groups = np.array(["custom"] * 5 + ["brenda"] * 5)
@@ -130,7 +130,7 @@ def test_source_movement_reads_the_tier_when_most_kcats_are_untouched():
 
 
 def test_identifiability_mask_asks_more_of_trusted_sources():
-    from geckopy.kcat_tuning.evolutionary_tuning.parsimony import identifiability_mask
+    from geckopy.kcat_tuning.evotune.parsimony import identifiability_mask
 
     # Identical measured effect, different trust: custom (0.1) must clear
     # a bar three times higher than unlabelled (0.3).
@@ -144,7 +144,7 @@ def test_identifiability_mask_asks_more_of_trusted_sources():
 
 
 def test_impact_share_rewards_changing_the_kcats_that_matter():
-    from geckopy.kcat_tuning.evolutionary_tuning.parsimony import impact_share
+    from geckopy.kcat_tuning.evotune.parsimony import impact_share
 
     kcat0 = np.ones(4)
     drmse = np.array([1.0, 1.0, 0.01, 0.01])     # two matter, two barely

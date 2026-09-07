@@ -49,7 +49,7 @@ class ComplexParams(BaseModel):
 
 
 class SourceGroupRule(BaseModel):
-    """One trust-tier entry in ``EvolutionaryTuningParams.source_groups``.
+    """One trust-tier entry in ``EvotuneParams.source_groups``.
 
     ``ec.source`` holds literal strings like ``"dlkcat"``, ``"brenda"``,
     and -- for OpenKineticsPredictor kcats -- the raw predictor method
@@ -73,7 +73,7 @@ class SourceGroupRule(BaseModel):
     )
 
 
-class EvolutionaryTuningParams(BaseModel):
+class EvotuneParams(BaseModel):
     """Hyperparameters for kcat tuning against experimental data.
 
     Sources not matched by any ``source_groups`` entry fall back to the
@@ -161,7 +161,7 @@ class EvolutionaryTuningParams(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_group_keys(self) -> "EvolutionaryTuningParams":
+    def _check_group_keys(self) -> "EvotuneParams":
         """The per-source dicts must have exactly ``source_groups``'
         keys, otherwise a downstream lookup silently falls back to a
         default."""
@@ -170,7 +170,7 @@ class EvolutionaryTuningParams(BaseModel):
             keys = set(getattr(self, name))
             if keys != group_names:
                 raise ValueError(
-                    f"EvolutionaryTuningParams.{name} keys {sorted(keys)} must match "
+                    f"EvotuneParams.{name} keys {sorted(keys)} must match "
                     f"source_groups keys {sorted(group_names)}."
                 )
         return self
@@ -268,5 +268,5 @@ class ModelParameters(BaseModel):
     kegg: KeggParams = Field(default_factory=KeggParams)
     uniprot: UniprotParams = Field(default_factory=UniprotParams)
     complex: ComplexParams = Field(default_factory=ComplexParams)
-    evolutionary_tuning: EvolutionaryTuningParams = Field(default_factory=EvolutionaryTuningParams)
+    evotune: EvotuneParams = Field(default_factory=EvotuneParams)
     okp: OkpParams = Field(default_factory=OkpParams)

@@ -1,4 +1,4 @@
-"""FBA simulation half of the evolutionary kcat-tuning distance function.
+"""FBA simulation half of the evotune kcat tuning distance function.
 
 Ported from GECKO MATLAB:
 src/kcat_tuning/Bayesian/abc_max.m (the
@@ -8,7 +8,7 @@ src/kcat_tuning/Bayesian/abc_max.m (the
 
 This module only does the FBA half: given an already kcat-constrained
 ``EcModel`` and one :class:`~geckopy.databases.flux_data.FluxData`
-dataset (either ``tuning_data.flux_data`` or ``tuning_data.max_grate``),
+dataset (either ``evotune_data.flux_data`` or ``evotune_data.max_grate``),
 simulate every condition and report growth + exchange fluxes.
 :mod:`.distance` turns those raw numbers into an RMSE against the
 matching experimental values -- kept separate so the RMSE math is
@@ -42,7 +42,7 @@ class ConditionSimResult:
     block_fluxes: dict[str, float] = field(default_factory=dict)
 
 
-def simulate_tuning_dataset(
+def simulate_evotune_dataset(
     model: "EcModel",
     flux_data: "FluxData",
     *,
@@ -64,8 +64,8 @@ def simulate_tuning_dataset(
        another row's simulation.
     2. For row ``i``, that row's own carbon-source reaction is
        unblocked: fixed at the measured uptake rate if ``constrain``
-       is True (``tuning_data.flux_data``), or fully opened to ``-1000``
-       if ``constrain`` is False (``tuning_data.max_grate`` -- "what's
+       is True (``evotune_data.flux_data``), or fully opened to ``-1000``
+       if ``constrain`` is False (``evotune_data.max_grate`` -- "what's
        the *best possible* growth on this carbon source", not "growth
        at this measured rate").
     3. Optional per-condition adjustments run if the corresponding
@@ -95,7 +95,7 @@ def simulate_tuning_dataset(
         for max-growth data (open uptake fully).
     zero_flux_rxns
         Reaction IDs assumed zero-flux in every condition
-        (``tuning_data.zero_flux``); the row's own carbon source is
+        (``evotune_data.zero_flux``); the row's own carbon source is
         skipped even if it's also listed here.
     bio_rxn_id
         The biomass reaction ID (``adapter.params.bio_rxn``).

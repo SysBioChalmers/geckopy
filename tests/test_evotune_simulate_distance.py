@@ -1,4 +1,4 @@
-"""Tests for kcat_tuning.evolutionary_tuning.simulate / .distance.
+"""Tests for kcat_tuning.evotune.simulate / .distance.
 
 Styled like test_sensitivity_tuning.py's hand-built toy EcModel: a
 tiny two-carbon-source model with a known enzyme cap, so every
@@ -13,16 +13,16 @@ import pytest
 
 from geckopy import EcModel, ModelAdapter
 from geckopy.databases.flux_data import FluxData
-from geckopy.kcat_tuning.evolutionary_tuning.data import TuningData
-from geckopy.kcat_tuning.evolutionary_tuning.distance import (
+from geckopy.kcat_tuning.evotune.data import EvotuneData
+from geckopy.kcat_tuning.evotune.distance import (
     BIOMASS_CARBON_EQUIV,
-    tuning_distance,
+    evotune_distance,
     compute_excarbon,
     dataset_rmse,
 )
-from geckopy.kcat_tuning.evolutionary_tuning.simulate import (
+from geckopy.kcat_tuning.evotune.simulate import (
     ConditionSimResult,
-    simulate_tuning_dataset,
+    simulate_evotune_dataset,
 )
 
 
@@ -133,7 +133,7 @@ def _flux_data(*, ethanol_grrate: float) -> FluxData:
         ),
         exch_mets=["glucose", "ethanol"],
         exch_rxn_ids=["EX_glc", "EX_eth"],
-        tuning_rmse_weight=np.array([1.0, 1.0]),
+        evotune_rmse_weight=np.array([1.0, 1.0]),
         source=["test", "test"],
     )
 
@@ -157,7 +157,7 @@ def _max_grate_data() -> FluxData:
 
 
 # --------------------------------------------------------------------------- #
-# simulate_tuning_dataset
+# simulate_evotune_dataset
 # --------------------------------------------------------------------------- #
 
 def test_simulate_flux_data_enzyme_vs_carbon_limited(tmp_path):
@@ -165,7 +165,7 @@ def test_simulate_flux_data_enzyme_vs_carbon_limited(tmp_path):
     model = _build_toy(adapter)
     flux_data = _flux_data(ethanol_grrate=20.0)
 
-    results = simulate_tuning_dataset(
+    results = simulate_evotune_dataset(
         model, flux_data,
         constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
     )
@@ -197,7 +197,7 @@ def test_simulate_max_grate_opens_uptake_fully(tmp_path):
     model = _build_toy(adapter)
     max_grate = _max_grate_data()
 
-    results = simulate_tuning_dataset(
+    results = simulate_evotune_dataset(
         model, max_grate,
         constrain=False, zero_flux_rxns=[], bio_rxn_id="biomass",
     )
@@ -215,7 +215,7 @@ def test_simulate_unmatched_condition_name_raises(tmp_path):
     flux_data.conds = ["glucose", "propionate"]
 
     with pytest.raises(ValueError, match="propionate"):
-        simulate_tuning_dataset(
+        simulate_evotune_dataset(
             model, flux_data,
             constrain=True, zero_flux_rxns=[], bio_rxn_id="biomass",
         )
@@ -259,7 +259,7 @@ def test_compute_excarbon_zero_carbon_clamps_to_one(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# dataset_rmse / tuning_distance
+# dataset_rmse / evotune_distance
 # --------------------------------------------------------------------------- #
 
 def test_dataset_rmse_measured_terms_match_only_byproduct_deviates(tmp_path):
@@ -271,7 +271,7 @@ def test_dataset_rmse_measured_terms_match_only_byproduct_deviates(tmp_path):
     # nonzero term left is the unmeasured byproduct (assumed
     # zero-flux, but nonzero in the simulation).
     flux_data = _flux_data(ethanol_grrate=20.0)
-    sims = simulate_tuning_dataset(
+    sims = simulate_evotune_dataset(
         model, flux_data,
         constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
     )
@@ -307,7 +307,7 @@ def test_dataset_rmse_growth_mismatch_is_hand_computable(tmp_path):
     # (18.0 vs the actual carbon-limited 20.0) -- a known, hand-provable
     # deviation on top of the byproduct term.
     flux_data = _flux_data(ethanol_grrate=18.0)
-    sims = simulate_tuning_dataset(
+    sims = simulate_evotune_dataset(
         model, flux_data,
         constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
     )
@@ -358,18 +358,18 @@ def test_dataset_rmse_max_grate_scores_growth_only():
     assert rmse == pytest.approx(np.mean([0.0, expected_second]))
 
 
-def test_tuning_distance_combines_both_datasets(tmp_path):
+def test_evotune_distance_combines_both_datasets(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
     flux_data = _flux_data(ethanol_grrate=20.0)
     max_grate = _max_grate_data()
-    tuning_data = TuningData(flux_data=flux_data, max_grate=max_grate, zero_flux=["EX_byp"])
+    evotune_data = EvotuneData(flux_data=flux_data, max_grate=max_grate, zero_flux=["EX_byp"])
 
-    flux_sims = simulate_tuning_dataset(
+    flux_sims = simulate_evotune_dataset(
         model, flux_data,
         constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
     )
-    max_grate_sims = simulate_tuning_dataset(
+    max_grate_sims = simulate_evotune_dataset(
         model, max_grate,
         constrain=False, zero_flux_rxns=[], bio_rxn_id="biomass",
     )
@@ -377,8 +377,8 @@ def test_tuning_distance_combines_both_datasets(tmp_path):
         model, ["EX_glc", "EX_eth", "EX_byp", "biomass"], bio_rxn_id="biomass",
     )
 
-    rmse, detail = tuning_distance(
-        tuning_data,
+    rmse, detail = evotune_distance(
+        evotune_data,
         flux_sims=flux_sims, max_grate_sims=max_grate_sims,
         excarbon=excarbon, bio_rxn_id="biomass",
     )
@@ -396,7 +396,7 @@ def test_tuning_distance_combines_both_datasets(tmp_path):
     assert "flux_data" in detail and "max_grate" in detail
 
 
-def test_tuning_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
+def test_evotune_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
     """``max_growth_weight`` scales the max-growth term, so 2 makes the
     eight max-growth conditions count double against the 33 flux ones.
 
@@ -406,13 +406,13 @@ def test_tuning_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
     model = _build_toy(adapter)
     flux_data = _flux_data(ethanol_grrate=20.0)
     max_grate = _max_grate_data()
-    tuning_data = TuningData(flux_data=flux_data, max_grate=max_grate, zero_flux=["EX_byp"])
+    evotune_data = EvotuneData(flux_data=flux_data, max_grate=max_grate, zero_flux=["EX_byp"])
 
-    flux_sims = simulate_tuning_dataset(
+    flux_sims = simulate_evotune_dataset(
         model, flux_data,
         constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
     )
-    max_grate_sims = simulate_tuning_dataset(
+    max_grate_sims = simulate_evotune_dataset(
         model, max_grate,
         constrain=False, zero_flux_rxns=[], bio_rxn_id="biomass",
     )
@@ -428,8 +428,8 @@ def test_tuning_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
         bio_rxn_id="biomass",
     )
 
-    rmse, _ = tuning_distance(
-        tuning_data,
+    rmse, _ = evotune_distance(
+        evotune_data,
         flux_sims=flux_sims, max_grate_sims=max_grate_sims,
         excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=2.0,
     )
@@ -438,8 +438,8 @@ def test_tuning_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
     )
 
     # 0.5 reproduces MATLAB's maxGrowthWeight = 2, which weights flux.
-    rmse_matlab, _ = tuning_distance(
-        tuning_data,
+    rmse_matlab, _ = evotune_distance(
+        evotune_data,
         flux_sims=flux_sims, max_grate_sims=max_grate_sims,
         excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=0.5,
     )
@@ -448,8 +448,8 @@ def test_tuning_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
     )
 
     # A lone dataset carries the whole score whatever the weight.
-    solo = TuningData(flux_data=flux_data, max_grate=None, zero_flux=["EX_byp"])
-    rmse_solo, _ = tuning_distance(
+    solo = EvotuneData(flux_data=flux_data, max_grate=None, zero_flux=["EX_byp"])
+    rmse_solo, _ = evotune_distance(
         solo,
         flux_sims=flux_sims, max_grate_sims=None,
         excarbon=excarbon, bio_rxn_id="biomass", max_growth_weight=2.0,
@@ -457,13 +457,13 @@ def test_tuning_distance_max_growth_weight_scales_the_max_growth_term(tmp_path):
     assert rmse_solo == pytest.approx(expected_flux_rmse)
 
 
-def test_tuning_distance_missing_dataset_contributes_nothing(tmp_path):
+def test_evotune_distance_missing_dataset_contributes_nothing(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
     flux_data = _flux_data(ethanol_grrate=20.0)
-    tuning_data = TuningData(flux_data=flux_data, max_grate=None, zero_flux=["EX_byp"])
+    evotune_data = EvotuneData(flux_data=flux_data, max_grate=None, zero_flux=["EX_byp"])
 
-    flux_sims = simulate_tuning_dataset(
+    flux_sims = simulate_evotune_dataset(
         model, flux_data,
         constrain=True, zero_flux_rxns=["EX_byp"], bio_rxn_id="biomass",
     )
@@ -471,8 +471,8 @@ def test_tuning_distance_missing_dataset_contributes_nothing(tmp_path):
         model, ["EX_glc", "EX_eth", "EX_byp", "biomass"], bio_rxn_id="biomass",
     )
 
-    rmse, detail = tuning_distance(
-        tuning_data,
+    rmse, detail = evotune_distance(
+        evotune_data,
         flux_sims=flux_sims, max_grate_sims=None,
         excarbon=excarbon, bio_rxn_id="biomass",
     )

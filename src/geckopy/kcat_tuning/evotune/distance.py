@@ -1,4 +1,4 @@
-"""Carbon- and condition-weighted RMSE distance for evolutionary kcat tuning.
+"""Carbon- and condition-weighted RMSE distance for evotune kcat tuning.
 
 Ported from GECKO MATLAB:
 src/kcat_tuning/Bayesian/abc_max.m (the
@@ -37,7 +37,7 @@ from .simulate import ConditionSimResult
 
 if TYPE_CHECKING:
     from ...ec_model.ec_model import EcModel
-    from .data import TuningData
+    from .data import EvotuneData
     from ...databases.flux_data import FluxData
 
 #: MATLAB's hardcoded assumption of the biomass reaction's carbon
@@ -106,15 +106,15 @@ def dataset_rmse(
     Parameters
     ----------
     flux_data
-        The dataset being scored (``tuning_data.flux_data`` or
-        ``tuning_data.max_grate``).
+        The dataset being scored (``evotune_data.flux_data`` or
+        ``evotune_data.max_grate``).
     sims
         One :class:`~.simulate.ConditionSimResult` per
         ``flux_data.conds`` row, e.g. from
-        :func:`~.simulate.simulate_tuning_dataset`.
+        :func:`~.simulate.simulate_evotune_dataset`.
     constrain
         Must match the value passed to
-        :func:`~.simulate.simulate_tuning_dataset` for these
+        :func:`~.simulate.simulate_evotune_dataset` for these
         ``sims``: True includes carbon-weighted exchange-flux terms
         (flux data), False scores growth alone (max-growth data).
     excarbon
@@ -131,7 +131,7 @@ def dataset_rmse(
     Returns
     -------
     rmse : float
-        Weighted (by ``flux_data.tuning_rmse_weight``, if present)
+        Weighted (by ``flux_data.evotune_rmse_weight``, if present)
         mean of the per-condition RMSEs.
     rmse_list : numpy.ndarray
         The per-condition RMSEs (post-penalty, pre-weighting), shape
@@ -178,13 +178,13 @@ def dataset_rmse(
         rmse_list[i] = float(np.sqrt(np.mean(diff ** 2)))
 
     weighted = rmse_list
-    if flux_data.tuning_rmse_weight is not None:
-        weighted = rmse_list * flux_data.tuning_rmse_weight
+    if flux_data.evotune_rmse_weight is not None:
+        weighted = rmse_list * flux_data.evotune_rmse_weight
     return float(np.mean(weighted)), rmse_list
 
 
-def tuning_distance(
-    tuning_data: "TuningData",
+def evotune_distance(
+    evotune_data: "EvotuneData",
     *,
     flux_sims: list[ConditionSimResult] | None,
     max_grate_sims: list[ConditionSimResult] | None,
@@ -195,9 +195,9 @@ def tuning_distance(
 ) -> tuple[float, dict[str, np.ndarray]]:
     """Combine both datasets' RMSE into one score, per ``abc_max.m``.
 
-    ``flux_sims`` must be given (non-``None``) iff ``tuning_data.flux_data``
+    ``flux_sims`` must be given (non-``None``) iff ``evotune_data.flux_data``
     is not ``None``, and likewise for ``max_grate_sims`` /
-    ``tuning_data.max_grate``. A dataset absent from ``tuning_data`` doesn't
+    ``evotune_data.max_grate``. A dataset absent from ``evotune_data`` doesn't
     contribute to the combined RMSE (MATLAB: a missing dataset's
     ``rmse_*`` stays ``[]`` and drops out of ``validIdx``).
 
@@ -230,11 +230,11 @@ def tuning_distance(
     weights: list[float] = []
     detail: dict[str, np.ndarray] = {}
 
-    if tuning_data.flux_data is not None:
+    if evotune_data.flux_data is not None:
         if flux_sims is None:
-            raise ValueError("tuning_data.flux_data is set but flux_sims is None.")
+            raise ValueError("evotune_data.flux_data is set but flux_sims is None.")
         rmse, per_cond = dataset_rmse(
-            tuning_data.flux_data, flux_sims,
+            evotune_data.flux_data, flux_sims,
             constrain=True, excarbon=excarbon, bio_rxn_id=bio_rxn_id,
             penalty=penalty,
         )
@@ -242,11 +242,11 @@ def tuning_distance(
         weights.append(1.0)
         detail["flux_data"] = per_cond
 
-    if tuning_data.max_grate is not None:
+    if evotune_data.max_grate is not None:
         if max_grate_sims is None:
-            raise ValueError("tuning_data.max_grate is set but max_grate_sims is None.")
+            raise ValueError("evotune_data.max_grate is set but max_grate_sims is None.")
         rmse, per_cond = dataset_rmse(
-            tuning_data.max_grate, max_grate_sims,
+            evotune_data.max_grate, max_grate_sims,
             constrain=False, excarbon=excarbon, bio_rxn_id=bio_rxn_id,
             penalty=penalty,
         )

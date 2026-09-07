@@ -159,21 +159,21 @@ def test_no_optional_columns_yields_none(tmp_path):
         ["c1", "0.5", "0.4", "-10.0"],
     ])
     fd = load_flux_data(p)
-    assert fd.tuning_rmse_weight is None
+    assert fd.evotune_rmse_weight is None
     assert fd.source is None
 
 
-def test_tuning_rmse_weight_column_loaded(tmp_path):
+def test_evotune_rmse_weight_column_loaded(tmp_path):
     p = tmp_path / "fd.tsv"
     _write_tsv(p, [
         ["condition", "Ptot", "grRate",
-         "glc (EX_glc)", "tuningRMSEweight"],
+         "glc (EX_glc)", "evotuneRMSEweight"],
         ["c1", "0.5", "0.4", "-10.0", "1.5"],
         ["c2", "0.6", "0.5", "-8.5", "0.7"],
     ])
     fd = load_flux_data(p)
-    assert fd.tuning_rmse_weight is not None
-    np.testing.assert_array_equal(fd.tuning_rmse_weight, [1.5, 0.7])
+    assert fd.evotune_rmse_weight is not None
+    np.testing.assert_array_equal(fd.evotune_rmse_weight, [1.5, 0.7])
     # Tuning-weight column dropped from exch_fluxes.
     assert fd.exch_fluxes.shape == (2, 1)
     assert fd.exch_rxn_ids == ["EX_glc"]
@@ -195,12 +195,12 @@ def test_both_optional_columns(tmp_path):
     p = tmp_path / "fd.tsv"
     _write_tsv(p, [
         ["condition", "Ptot", "grRate",
-         "glc (EX_glc)", "tuningRMSEweight", "source"],
+         "glc (EX_glc)", "evotuneRMSEweight", "source"],
         ["c1", "0.5", "0.4", "-10.0", "1.5", "PMID:12345"],
     ])
     fd = load_flux_data(p)
-    assert fd.tuning_rmse_weight is not None
-    np.testing.assert_array_equal(fd.tuning_rmse_weight, [1.5])
+    assert fd.evotune_rmse_weight is not None
+    np.testing.assert_array_equal(fd.evotune_rmse_weight, [1.5])
     assert fd.source == ["PMID:12345"]
     assert fd.exch_fluxes.shape == (1, 1)
 
@@ -211,13 +211,13 @@ def test_optional_columns_in_arbitrary_position(tmp_path):
     p = tmp_path / "fd.tsv"
     _write_tsv(p, [
         ["condition", "Ptot", "grRate",
-         "source", "glc (EX_glc)", "tuningRMSEweight"],
+         "source", "glc (EX_glc)", "evotuneRMSEweight"],
         ["c1", "0.5", "0.4", "PMID:1", "-10.0", "1.5"],
     ])
     fd = load_flux_data(p)
     assert fd.source == ["PMID:1"]
-    assert fd.tuning_rmse_weight is not None
-    np.testing.assert_array_equal(fd.tuning_rmse_weight, [1.5])
+    assert fd.evotune_rmse_weight is not None
+    np.testing.assert_array_equal(fd.evotune_rmse_weight, [1.5])
     np.testing.assert_array_equal(fd.exch_fluxes, [[-10.0]])
     assert fd.exch_rxn_ids == ["EX_glc"]
 

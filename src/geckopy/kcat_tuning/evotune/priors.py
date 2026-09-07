@@ -1,4 +1,4 @@
-"""Source classification and prior widths for evolutionary kcat tuning.
+"""Source classification and prior widths for evotune kcat tuning.
 
 Ported from GECKO MATLAB:
 src/kcat_tuning/Bayesian/bayesianSensitivityTuning.m
@@ -11,7 +11,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...adapter.params import EvolutionaryTuningParams
+from ...adapter.params import EvotuneParams
 
 #: Sentinel group name for an ``ec.source`` value matched by no
 #: ``source_groups`` entry -- MATLAB's ``noKcatSource``.
@@ -20,7 +20,7 @@ UNLABELLED_GROUP = "unlabelled"
 
 def classify_kcat_source(
     source: str,
-    params: EvolutionaryTuningParams,
+    params: EvotuneParams,
     *,
     okp_method: Optional[str] = None,
 ) -> str:
@@ -63,7 +63,7 @@ def classify_kcat_source(
 
 def classify_kcat_sources(
     ec_sources: list[str],
-    params: EvolutionaryTuningParams,
+    params: EvotuneParams,
     *,
     okp_method: Optional[str] = None,
 ) -> np.ndarray:
@@ -82,7 +82,7 @@ def classify_kcat_sources(
     )
 
 
-def build_sigma0_log(groups: np.ndarray, params: EvolutionaryTuningParams) -> np.ndarray:
+def build_sigma0_log(groups: np.ndarray, params: EvotuneParams) -> np.ndarray:
     """Per-row prior std dev in log-space, from source-group membership.
 
     Mirrors MATLAB's ``sigma0log = sigma0logDefault * ones(...);

@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install
-        run: pip install -e ".[dev,evolutionary-tuning]"
+        run: pip install -e ".[dev,evotune]"
 
       - name: Run pytest
         run: pytest -q
