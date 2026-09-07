@@ -12,6 +12,12 @@ it's a hard requirement here, gated one level up instead (see
 ``evotune`` extra. Install it with
 ``pip install geckopy[evotune]``.
 """
+from .corrections import (
+    Correction,
+    annotate_from_model,
+    corrections,
+    corrections_tsv,
+)
 from .data import EvotuneData, load_evotune_data
 from .distance import (
     BIOMASS_CARBON_EQUIV,
@@ -39,15 +45,19 @@ __all__ = [
     "BIOMASS_CARBON_EQUIV",
     "INFEASIBLE_PENALTY",
     "UNLABELLED_GROUP",
+    "Correction",
     "EvotuneData",
     "EvotuneResult",
     "ConditionSimResult",
+    "annotate_from_model",
     "evotune_distance",
     "build_sigma0_log",
     "classify_kcat_source",
     "classify_kcat_sources",
     "cmaes_kcat_tuning",
     "compute_excarbon",
+    "corrections",
+    "corrections_tsv",
     "dataset_rmse",
     "load_evotune_data",
     "screen_kcat_leverage",
