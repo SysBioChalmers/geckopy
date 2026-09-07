@@ -303,6 +303,33 @@ Before trusting a tuned kcat, check more than the final RMSE:
    elsewhere is a sign of overfitting to a thin dataset, not a fixed
    model.
 
+`new_kcat`/`old_kcat` is thousands of numbers, most of them unchanged --
+not something a reviewer can read. `result.corrections()` turns it into
+the actual review artifact: one `Correction` row per changed kcat
+(reaction, EC code, source, prior/tuned value, fold change), ranked by
+*leverage* rather than by how far a kcat moved, so the parameters the
+data cannot see (free to drift furthest, least worth trusting) sort to
+the bottom instead of the top:
+
+```python
+from geckopy.kcat_tuning import annotate_from_model, corrections_tsv
+
+# screen is Step 3's table -- reuse it rather than recomputing leverage.
+leverage_by_rxn = dict(zip(screen["rxn_id"], screen["leverage"]))
+leverage = [leverage_by_rxn.get(r, 0.0) for r in result.rxns]
+
+annotations = annotate_from_model(model, result.rxns)
+rows = result.corrections(leverage=leverage, **annotations)
+open("corrections.tsv", "w").write(corrections_tsv(rows))
+```
+
+`cumulative_share` on each row is the running fraction of total leverage
+the list has accounted for so far, so a reader can stop where it stops
+climbing rather than reading every row. This is the tuning-time
+counterpart to `review_assignment` in Step 4: that flags kcats worth
+curating *before* a run; this reports which ones the run actually
+changed, and how much each change is worth trusting.
+
 ## Where to go from here
 
 - `docs/cmaes_vs_abc_smc.md` -- why this method is CMA-ES rather than

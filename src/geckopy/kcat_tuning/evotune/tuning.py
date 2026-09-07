@@ -69,6 +69,7 @@ import pandas as pd
 from cobra.util import ProcessPool
 
 from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
+from ..corrections import Correction, corrections as build_corrections
 from .data import EvotuneData, load_evotune_data
 from .distance import evotune_distance, compute_excarbon
 from .parsimony import fold_change, n_changed
@@ -127,6 +128,29 @@ class EvotuneResult:
     objective_trace: list[float] = field(default_factory=list)
     n_generations: int = 0
     converged: bool = False
+
+    def corrections(
+        self,
+        *,
+        leverage: Optional[np.ndarray] = None,
+        names: Optional[Sequence[str]] = None,
+        ec_codes: Optional[Sequence[str]] = None,
+        rel_tol: float = 0.02,
+    ) -> list["Correction"]:
+        """The changes this run makes, most consequential first.
+
+        The vector in ``new_kcat`` is the answer; this is the answer in
+        a form that can be checked. Pass ``leverage`` from a
+        one-at-a-time screen (:func:`screen_kcat_leverage`) to rank by
+        how much each change matters rather than by how far it moved,
+        and to fill the share columns. ``annotate_from_model`` supplies
+        ``names``/``ec_codes``.
+        """
+        return build_corrections(
+            self.new_kcat, self.old_kcat, self.rxns,
+            sources=self.groups, names=names, ec_codes=ec_codes,
+            leverage=leverage, rel_tol=rel_tol,
+        )
 
 
 def _resolve_context(model, adapter, params, evotune_data, bio_rxn, okp_method):
