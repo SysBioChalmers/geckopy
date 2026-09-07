@@ -3,6 +3,12 @@
 Mirrors GECKO MATLAB's `src/kcat_tuning/`
 directory.
 """
+from .corrections import (
+    Correction,
+    annotate_from_model,
+    corrections,
+    corrections_tsv,
+)
 from .find_max_value import find_max_value
 from .sensitivity_tuning import TunedKcatsResult, sensitivity_tuning
 from .sigma_fitter import SigmaFitterResult, fit_sigma, sigma_fitter
@@ -33,8 +39,12 @@ except ImportError as exc:  # pragma: no cover - exercised
     evotune = _MissingEvotune()  # type: ignore[assignment]
 
 __all__ = [
+    "Correction",
     "SigmaFitterResult",
     "TunedKcatsResult",
+    "annotate_from_model",
+    "corrections",
+    "corrections_tsv",
     "evotune",
     "find_max_value",
     "fit_sigma",

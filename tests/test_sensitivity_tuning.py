@@ -241,3 +241,21 @@ def test_result_has_expected_fields_populated(tmp_path):
     assert result.old_kcat[0] == pytest.approx(1.0)
     assert result.new_kcat[0] >= 10.0
     assert result.source[0] == "initial"
+
+
+def test_result_reports_its_own_corrections():
+    """rxn_names is already resolved, so no annotate_from_model needed."""
+    result = TunedKcatsResult(
+        rxns=["r_slow", "r_untouched", "r_drift"],
+        rxn_names=["slow enzyme", "untouched enzyme", "drifting enzyme"],
+        old_kcat=np.array([1.0, 5.0, 2.0]),
+        new_kcat=np.array([10.0, 5.0, 40.0]),
+        source=["brenda", "custom", "okp"],
+    )
+    rows = result.corrections()
+
+    # No leverage screen of its own, so rows fall back to fold-change order.
+    assert [r.rxn_id for r in rows] == ["r_drift", "r_slow"]
+    assert rows[0].name == "drifting enzyme"
+    assert rows[1].source == "brenda"
+    assert rows[1].fold_change == pytest.approx(10.0)

@@ -423,3 +423,20 @@ def test_tune_prior_penalty_weight_single_seed_gives_nan_reproducibility(tmp_pat
     assert row["n_both_moved"] == 0
     assert np.isnan(row["pct_direction_agree"])
     assert np.isnan(row["median_fold_spread"])
+
+
+def test_result_reports_its_own_corrections():
+    """The result already carries everything the table needs."""
+    res = EvotuneResult(
+        rxns=["r_slow", "r_untouched", "r_drift"],
+        old_kcat=np.array([1.0, 5.0, 2.0]),
+        new_kcat=np.array([10.0, 5.0, 40.0]),
+        groups=["brenda", "custom", "okp"],
+    )
+    rows = res.corrections(leverage=np.array([3.0, 1.0, 0.01]))
+
+    # Ranked by leverage: the big drifter is last despite moving furthest.
+    assert [r.rxn_id for r in rows] == ["r_slow", "r_drift"]
+    assert rows[0].source == "brenda"
+    assert rows[0].fold_change == pytest.approx(10.0)
+    assert rows[0].cumulative_share == pytest.approx(3.0 / 4.01)

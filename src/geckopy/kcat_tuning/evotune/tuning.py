@@ -69,7 +69,7 @@ import pandas as pd
 from cobra.util import ProcessPool
 
 from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
-from .corrections import Correction, corrections as build_corrections
+from ..corrections import Correction, corrections as build_corrections
 from .data import EvotuneData, load_evotune_data
 from .distance import evotune_distance, compute_excarbon
 from .parsimony import fold_change, n_changed

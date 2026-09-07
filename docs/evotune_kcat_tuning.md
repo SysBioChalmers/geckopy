@@ -312,7 +312,7 @@ data cannot see (free to drift furthest, least worth trusting) sort to
 the bottom instead of the top:
 
 ```python
-from geckopy.kcat_tuning.evotune import annotate_from_model, corrections_tsv
+from geckopy.kcat_tuning import annotate_from_model, corrections_tsv
 
 # screen is Step 3's table -- reuse it rather than recomputing leverage.
 leverage_by_rxn = dict(zip(screen["rxn_id"], screen["leverage"]))

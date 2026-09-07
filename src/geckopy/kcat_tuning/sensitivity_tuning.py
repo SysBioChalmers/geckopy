@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
 import numpy as np
 
@@ -35,6 +35,7 @@ from ..ec_model.constants import (
     USAGE_PREFIX,
 )
 from ..ec_model.pipeline.apply_kcat import apply_kcat_constraints
+from .corrections import Correction, corrections as build_corrections
 
 if TYPE_CHECKING:
     from ..ec_model.ec_model import EcModel
@@ -86,6 +87,28 @@ class TunedKcatsResult:
         default_factory=lambda: np.empty(0, dtype=float)
     )
     source: list[str] = field(default_factory=list)
+
+    def corrections(
+        self,
+        *,
+        leverage: Optional[np.ndarray] = None,
+        ec_codes: Optional[Sequence[str]] = None,
+        rel_tol: float = 0.02,
+    ) -> list["Correction"]:
+        """The changes this run makes, most consequential first.
+
+        Unlike a screen-backed result, sensitivity_tuning has no
+        leverage of its own to offer -- every bump was, by
+        construction, the bottleneck at the time it was made -- so
+        without ``leverage`` rows fall back to ordering by fold change.
+        ``rxn_names`` already carries resolved names, so there is no
+        need for ``annotate_from_model`` here.
+        """
+        return build_corrections(
+            self.new_kcat, self.old_kcat, self.rxns,
+            sources=self.source, names=self.rxn_names, ec_codes=ec_codes,
+            leverage=leverage, rel_tol=rel_tol,
+        )
 
 
 def sensitivity_tuning(
