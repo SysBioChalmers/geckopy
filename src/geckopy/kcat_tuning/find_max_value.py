@@ -1,7 +1,7 @@
 """Find the maximum kcat (or SA-derived kcat) for a set of EC numbers.
 
 Ported from GECKO MATLAB:
-src/geckomat/kcat_sensitivity_analysis/findMaxValue.m.
+src/kcat_tuning/findMaxValue.m.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def find_max_value(
     with ``"1.1.1."``.
 
     Ported from GECKO MATLAB:
-    src/geckomat/kcat_sensitivity_analysis/findMaxValue.m.
+    src/kcat_tuning/findMaxValue.m.
 
     Parameters
     ----------

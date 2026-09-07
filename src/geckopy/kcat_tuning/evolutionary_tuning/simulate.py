@@ -1,14 +1,14 @@
-"""FBA simulation half of the Bayesian kcat-tuning distance function.
+"""FBA simulation half of the evolutionary kcat-tuning distance function.
 
 Ported from GECKO MATLAB:
-src/geckomat/kcat_sensitivity_analysis/Bayesian/abc_max.m (the
+src/kcat_tuning/Bayesian/abc_max.m (the
 ``rmsecal`` helper's simulate-and-measure loop). Verified against
 ``develop4``'s current source, not the (superseded, per its own
 ``REVIEW.md``) ``fix/bayesianTuning`` branch.
 
 This module only does the FBA half: given an already kcat-constrained
 ``EcModel`` and one :class:`~geckopy.databases.flux_data.FluxData`
-dataset (either ``bay_data.flux_data`` or ``bay_data.max_grate``),
+dataset (either ``tuning_data.flux_data`` or ``tuning_data.max_grate``),
 simulate every condition and report growth + exchange fluxes.
 :mod:`.distance` turns those raw numbers into an RMSE against the
 matching experimental values -- kept separate so the RMSE math is
@@ -42,7 +42,7 @@ class ConditionSimResult:
     block_fluxes: dict[str, float] = field(default_factory=dict)
 
 
-def simulate_bayesian_dataset(
+def simulate_tuning_dataset(
     model: "EcModel",
     flux_data: "FluxData",
     *,
@@ -52,7 +52,7 @@ def simulate_bayesian_dataset(
     make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
     change_protein_biomass: Optional[Callable[["EcModel", float], None]] = None,
 ) -> list[ConditionSimResult]:
-    """Simulate every condition in one Bayesian dataset.
+    """Simulate every condition in one tuning dataset.
 
     Mirrors ``abc_max.m``'s ``rmsecal`` FBA half:
 
@@ -64,8 +64,8 @@ def simulate_bayesian_dataset(
        another row's simulation.
     2. For row ``i``, that row's own carbon-source reaction is
        unblocked: fixed at the measured uptake rate if ``constrain``
-       is True (``bay_data.flux_data``), or fully opened to ``-1000``
-       if ``constrain`` is False (``bay_data.max_grate`` -- "what's
+       is True (``tuning_data.flux_data``), or fully opened to ``-1000``
+       if ``constrain`` is False (``tuning_data.max_grate`` -- "what's
        the *best possible* growth on this carbon source", not "growth
        at this measured rate").
     3. Optional per-condition adjustments run if the corresponding
@@ -79,10 +79,9 @@ def simulate_bayesian_dataset(
 
     All mutation happens inside ``with model:``, which cobra reverts
     on exit -- only bounds are touched here, so this is safe to call
-    repeatedly against one persistent (per-worker) model instance; see
-    the "Spike results" section of
-    ``docs/internal/bayesian_tuning_plan.md`` for why per-particle
-    ``EcModel.copy()`` is not used.
+    repeatedly against one persistent (per-worker) model instance; a
+    per-particle ``EcModel.copy()`` is not used (prohibitively
+    expensive on a real-scale model).
 
     Parameters
     ----------
@@ -96,7 +95,7 @@ def simulate_bayesian_dataset(
         for max-growth data (open uptake fully).
     zero_flux_rxns
         Reaction IDs assumed zero-flux in every condition
-        (``bay_data.zero_flux``); the row's own carbon source is
+        (``tuning_data.zero_flux``); the row's own carbon source is
         skipped even if it's also listed here.
     bio_rxn_id
         The biomass reaction ID (``adapter.params.bio_rxn``).

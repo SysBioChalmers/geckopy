@@ -2,7 +2,7 @@
 import pandas as pd
 
 from geckopy.databases import BrendaData
-from geckopy.kcat_sensitivity_analysis import find_max_value
+from geckopy.kcat_tuning import find_max_value
 
 
 # --------------------------------------------------------------------------- #

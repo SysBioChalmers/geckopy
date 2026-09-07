@@ -1,7 +1,7 @@
-"""Carbon- and condition-weighted RMSE distance for Bayesian kcat tuning.
+"""Carbon- and condition-weighted RMSE distance for evolutionary kcat tuning.
 
 Ported from GECKO MATLAB:
-src/geckomat/kcat_sensitivity_analysis/Bayesian/abc_max.m (the
+src/kcat_tuning/Bayesian/abc_max.m (the
 ``rmsecal`` helper's RMSE half; verified against ``develop4``'s
 current source). :mod:`.simulate` does the FBA half -- this module is
 pure numpy (plus one small model-reading helper for the carbon
@@ -37,7 +37,7 @@ from .simulate import ConditionSimResult
 
 if TYPE_CHECKING:
     from ...ec_model.ec_model import EcModel
-    from .data import BayesianData
+    from .data import TuningData
     from ...databases.flux_data import FluxData
 
 #: MATLAB's hardcoded assumption of the biomass reaction's carbon
@@ -70,7 +70,7 @@ def compute_excarbon(
         Model providing the metabolite formulas.
     rxn_ids
         Reaction IDs to compute weights for (typically every
-        reaction referenced by a Bayesian dataset: its exchange
+        reaction referenced by a tuning dataset: its exchange
         columns, its zero-flux list, and the biomass reaction).
     bio_rxn_id
         The biomass reaction ID.
@@ -101,20 +101,20 @@ def dataset_rmse(
     bio_rxn_id: str,
     penalty: float = INFEASIBLE_PENALTY,
 ) -> tuple[float, np.ndarray]:
-    """RMSE (mean, per-condition array) for one Bayesian dataset.
+    """RMSE (mean, per-condition array) for one tuning dataset.
 
     Parameters
     ----------
     flux_data
-        The dataset being scored (``bay_data.flux_data`` or
-        ``bay_data.max_grate``).
+        The dataset being scored (``tuning_data.flux_data`` or
+        ``tuning_data.max_grate``).
     sims
         One :class:`~.simulate.ConditionSimResult` per
         ``flux_data.conds`` row, e.g. from
-        :func:`~.simulate.simulate_bayesian_dataset`.
+        :func:`~.simulate.simulate_tuning_dataset`.
     constrain
         Must match the value passed to
-        :func:`~.simulate.simulate_bayesian_dataset` for these
+        :func:`~.simulate.simulate_tuning_dataset` for these
         ``sims``: True includes carbon-weighted exchange-flux terms
         (flux data), False scores growth alone (max-growth data).
     excarbon
@@ -131,7 +131,7 @@ def dataset_rmse(
     Returns
     -------
     rmse : float
-        Weighted (by ``flux_data.bayesian_rmse_weight``, if present)
+        Weighted (by ``flux_data.tuning_rmse_weight``, if present)
         mean of the per-condition RMSEs.
     rmse_list : numpy.ndarray
         The per-condition RMSEs (post-penalty, pre-weighting), shape
@@ -178,13 +178,13 @@ def dataset_rmse(
         rmse_list[i] = float(np.sqrt(np.mean(diff ** 2)))
 
     weighted = rmse_list
-    if flux_data.bayesian_rmse_weight is not None:
-        weighted = rmse_list * flux_data.bayesian_rmse_weight
+    if flux_data.tuning_rmse_weight is not None:
+        weighted = rmse_list * flux_data.tuning_rmse_weight
     return float(np.mean(weighted)), rmse_list
 
 
-def bayesian_distance(
-    bay_data: "BayesianData",
+def tuning_distance(
+    tuning_data: "TuningData",
     *,
     flux_sims: list[ConditionSimResult] | None,
     max_grate_sims: list[ConditionSimResult] | None,
@@ -195,9 +195,9 @@ def bayesian_distance(
 ) -> tuple[float, dict[str, np.ndarray]]:
     """Combine both datasets' RMSE into one score, per ``abc_max.m``.
 
-    ``flux_sims`` must be given (non-``None``) iff ``bay_data.flux_data``
+    ``flux_sims`` must be given (non-``None``) iff ``tuning_data.flux_data``
     is not ``None``, and likewise for ``max_grate_sims`` /
-    ``bay_data.max_grate``. A dataset absent from ``bay_data`` doesn't
+    ``tuning_data.max_grate``. A dataset absent from ``tuning_data`` doesn't
     contribute to the combined RMSE (MATLAB: a missing dataset's
     ``rmse_*`` stays ``[]`` and drops out of ``validIdx``).
 
@@ -230,11 +230,11 @@ def bayesian_distance(
     weights: list[float] = []
     detail: dict[str, np.ndarray] = {}
 
-    if bay_data.flux_data is not None:
+    if tuning_data.flux_data is not None:
         if flux_sims is None:
-            raise ValueError("bay_data.flux_data is set but flux_sims is None.")
+            raise ValueError("tuning_data.flux_data is set but flux_sims is None.")
         rmse, per_cond = dataset_rmse(
-            bay_data.flux_data, flux_sims,
+            tuning_data.flux_data, flux_sims,
             constrain=True, excarbon=excarbon, bio_rxn_id=bio_rxn_id,
             penalty=penalty,
         )
@@ -242,11 +242,11 @@ def bayesian_distance(
         weights.append(1.0)
         detail["flux_data"] = per_cond
 
-    if bay_data.max_grate is not None:
+    if tuning_data.max_grate is not None:
         if max_grate_sims is None:
-            raise ValueError("bay_data.max_grate is set but max_grate_sims is None.")
+            raise ValueError("tuning_data.max_grate is set but max_grate_sims is None.")
         rmse, per_cond = dataset_rmse(
-            bay_data.max_grate, max_grate_sims,
+            tuning_data.max_grate, max_grate_sims,
             constrain=False, excarbon=excarbon, bio_rxn_id=bio_rxn_id,
             penalty=penalty,
         )

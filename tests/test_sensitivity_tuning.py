@@ -8,7 +8,7 @@ from scipy import sparse
 
 from geckopy import EcModel, ModelAdapter
 from geckopy.ec_model.ec_data import EcData
-from geckopy.kcat_sensitivity_analysis import (
+from geckopy.kcat_tuning import (
     TunedKcatsResult,
     sensitivity_tuning,
 )

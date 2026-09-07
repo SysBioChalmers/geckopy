@@ -1,9 +1,9 @@
-"""Tests for kcat_sensitivity_analysis.bayesian.priors."""
+"""Tests for kcat_tuning.evolutionary_tuning.priors."""
 import numpy as np
 import pytest
 
-from geckopy.adapter.params import BayesianParams, SourceGroupRule
-from geckopy.kcat_sensitivity_analysis.bayesian.priors import (
+from geckopy.adapter.params import EvolutionaryTuningParams, SourceGroupRule
+from geckopy.kcat_tuning.evolutionary_tuning.priors import (
     UNLABELLED_GROUP,
     build_sigma0_log,
     classify_kcat_source,
@@ -11,8 +11,8 @@ from geckopy.kcat_sensitivity_analysis.bayesian.priors import (
 )
 
 
-def _params() -> BayesianParams:
-    return BayesianParams(
+def _params() -> EvolutionaryTuningParams:
+    return EvolutionaryTuningParams(
         sigma0_log_default=0.5,
         source_groups={
             "dlkcat": SourceGroupRule(sources=["dlkcat"]),

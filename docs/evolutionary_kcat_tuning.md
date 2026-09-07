@@ -3,7 +3,7 @@
 A first, brief protocol for fitting an ecModel's kcats to measured
 growth rates and/or fluxes with `cmaes_kcat_tuning`. This covers one
 recommended path end to end; it is not a full reference (see the
-docstrings in `geckopy.kcat_sensitivity_analysis.bayesian` for every
+docstrings in `geckopy.kcat_tuning.evolutionary_tuning` for every
 option) and it does not build an ecModel from scratch (see
 [migrating_from_gecko_matlab.md](migrating_from_gecko_matlab.md) for
 that).
@@ -41,9 +41,8 @@ least-trusted sources, has.
 
 - A working ecModel and `ModelAdapter` project (an existing
   `model_adapter.toml` and `models/*.yml`).
-- `pip install geckopy[bayesian]` -- the CMA-ES search (`cma`) and the
-  ABC-SMC sampler it replaced (`pyabc`) are optional dependencies, not
-  part of the base install.
+- `pip install geckopy[evolutionary-tuning]` -- the CMA-ES search
+  (`cma`) is an optional dependency, not part of the base install.
 - Experimental data: at least one of a set of measured exchange fluxes
   per condition, or a set of measured maximum growth rates per carbon
   source. Both together works and is preferred -- flux data pins the
@@ -57,15 +56,15 @@ least one of the first two.
 
 | file | contents | required |
 |------|----------|----------|
-| `bayesianFluxData.tsv` | measured exchange fluxes, one row per condition | at least one of these two |
-| `bayesianMaxGrowth.tsv` | measured maximum growth rate, one row per condition, one active carbon source per row (at `-1000`, i.e. unconstrained) | |
-| `bayesianZeroExch.tsv` | reaction IDs assumed to carry zero flux in every condition | no |
+| `tuningFluxData.tsv` | measured exchange fluxes, one row per condition | at least one of these two |
+| `tuningMaxGrowth.tsv` | measured maximum growth rate, one row per condition, one active carbon source per row (at `-1000`, i.e. unconstrained) | |
+| `tuningZeroExch.tsv` | reaction IDs assumed to carry zero flux in every condition | no |
 
 Both flux files share one column layout (the same parser geckopy uses
 for regular flux data):
 
 ```
-Condition   Ptot   grRate   glucose (r_1714)   fructose (r_1709)   ...   bayesianRMSEweight   source
+Condition   Ptot   grRate   glucose (r_1714)   fructose (r_1709)   ...   tuningRMSEweight   source
 glucose     NaN    0.41     -1000              NaN                ...   1                     DLKcat
 fructose    NaN    0.338    NaN                -1000              ...   1                     DLKcat
 ```
@@ -73,32 +72,32 @@ fructose    NaN    0.338    NaN                -1000              ...   1       
 `Condition` names the row, `grRate` is the measured growth rate,
 `Ptot` is measured protein content (`NaN` if not measured), each
 `<met> (<rxn>)` column is a measured or fixed flux for that exchange
-reaction, `bayesianRMSEweight` scales how much that row counts toward
+reaction, `tuningRMSEweight` scales how much that row counts toward
 the RMSE (usually `1`), and `source` is free text carried through for
-your own bookkeeping. `bayesianZeroExch.tsv` is simpler -- a `Rxns`
+your own bookkeeping. `tuningZeroExch.tsv` is simpler -- a `Rxns`
 header, then one reaction ID per line.
 
-## Step 2: Configure `[bayesian]` in `model_adapter.toml`
+## Step 2: Configure `[evolutionary_tuning]` in `model_adapter.toml`
 
 Every field has a default, so this section can be omitted entirely to
 start. A configured example, in plain terms:
 
 ```toml
-[bayesian]
+[evolutionary_tuning]
 sigma0_log_default = 0.3   # trust for any source not listed below
 max_growth_weight = 2.0    # weight the growth-rate data double against flux data
 
-[bayesian.source_groups.okp]
+[evolutionary_tuning.source_groups.okp]
 sources = ["OpenKineticsPredictor"]
 match_okp = true
 
-[bayesian.source_groups.brenda]
+[evolutionary_tuning.source_groups.brenda]
 sources = ["brenda"]
 
-[bayesian.source_groups.custom]
+[evolutionary_tuning.source_groups.custom]
 sources = ["custom"]
 
-[bayesian.sigma0_log_source]
+[evolutionary_tuning.sigma0_log_source]
 okp = 0.25
 brenda = 0.2
 custom = 0.1
@@ -151,7 +150,7 @@ What each knob means:
 
 ```python
 from geckopy import ModelAdapter, load_ec_model
-from geckopy.kcat_sensitivity_analysis.bayesian import screen_kcat_leverage
+from geckopy.kcat_tuning.evolutionary_tuning import screen_kcat_leverage
 
 adapter = ModelAdapter.from_folder("path/to/project")
 model = load_ec_model(adapter=adapter)  # models/ecModel.yml by default
@@ -231,7 +230,7 @@ rows to 33, and the first row alone carries half.
 
 ```python
 from geckopy import save_ec_model
-from geckopy.kcat_sensitivity_analysis.bayesian import cmaes_kcat_tuning
+from geckopy.kcat_tuning.evolutionary_tuning import cmaes_kcat_tuning
 
 result = cmaes_kcat_tuning(
     model, adapter=adapter, screen=screen, n_proc=8, seed=0,
@@ -256,7 +255,7 @@ applied -- nothing further is needed before simulating or saving it.
 Beyond `target_impact_share`, the only other knobs are `popsize`
 (CMA-ES's population size, defaulting to its own dimension-scaled
 choice rather than a value tuned for one particular model), `n_proc`,
-and `seed`; everything else comes from the same `BayesianParams` as
+and `seed`; everything else comes from the same `EvolutionaryTuningParams` as
 Step 2, so there is nothing new to configure once you've read it.
 
 If growth needs special handling for your organism -- forcing
@@ -268,7 +267,7 @@ this repository for a worked example.
 
 ## Step 6: Read the result
 
-`result` is a `BayesianTuningResult`:
+`result` is a `EvolutionaryTuningResult`:
 
 - `rmse_trace` / `objective_trace` -- best-so-far plain-fit RMSE and
   best-so-far optimised objective, per generation (identical unless
@@ -279,15 +278,13 @@ this repository for a worked example.
   tier. Tied isozyme copies share one value in `new_kcat`.
 - `converged` -- whether `rmse_threshold` was reached, or
   `max_generations` was hit first.
-- `diagnostics_trace` -- always empty here; CMA-ES has no
-  per-generation accepted-particle set to compute source-group
-  diagnostics over.
+- `n_generations` -- how many generations actually ran.
 
 Before trusting a tuned kcat, check more than the final RMSE:
 
 1. **How many kcats changed**, and by how much -- a result that moves
    nearly everything by a little has not identified anything.
-   `geckopy.kcat_sensitivity_analysis.bayesian.parsimony` has the
+   `geckopy.kcat_tuning.evolutionary_tuning.parsimony` has the
    tools for this: `n_changed`, `fold_change`, `source_movement`.
 2. **Impact share** -- `parsimony.impact_share` reports what fraction
    of the total achievable improvement the changed kcats actually
@@ -310,9 +307,3 @@ Before trusting a tuned kcat, check more than the final RMSE:
 
 - `docs/cmaes_vs_abc_smc.md` -- why this method is CMA-ES rather than
   the ABC-SMC sampler used elsewhere for the same problem.
-- `docs/internal/bayesian_tuning_handover.md` -- the fuller set of
-  findings behind the defaults above (why 0.03, why tying, what
-  doesn't work).
-- `docs/internal/matlab_replication_results.md` -- the underlying
-  experiments, including how `target_impact_share` was chosen and what
-  is still unvalidated about it on a model unlike ecYeastGEM.

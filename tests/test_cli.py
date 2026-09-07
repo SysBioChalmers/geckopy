@@ -22,11 +22,11 @@ def test_template_includes_nested_sections():
     assert "[kegg]" in text
     assert "[uniprot]" in text
     assert "[complex]" in text
-    assert "[bayesian]" in text
+    assert "[evolutionary_tuning]" in text
 
 
-def test_template_renders_dict_valued_bayesian_fields():
-    """The Bayesian section carries per-source tables, not just scalars."""
+def test_template_renders_dict_valued_evolutionary_tuning_fields():
+    """The evolutionary_tuning section carries per-source tables, not just scalars."""
     text = generate_template_toml()
     uncommented = "\n".join(
         line.lstrip("# ") for line in text.splitlines()
@@ -64,11 +64,11 @@ def test_cli_init_refuses_nonempty_folder(tmp_path, capsys):
     assert "not empty" in captured.err
 
 
-def test_cli_init_scaffolds_the_bayesian_section(tmp_path):
+def test_cli_init_scaffolds_the_evolutionary_tuning_section(tmp_path):
     target = tmp_path / "my-ec"
     main(["init", str(target)])
     toml_text = (target / "model_adapter.toml").read_text()
-    assert "[bayesian]" in toml_text
+    assert "[evolutionary_tuning]" in toml_text
 
 
 def test_cli_init_produces_loadable_adapter_after_filling_required(tmp_path):

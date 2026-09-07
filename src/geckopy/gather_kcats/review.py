@@ -31,7 +31,7 @@ from typing import Iterable, Mapping, Optional, Sequence
 
 import numpy as np
 
-from ..kcat_sensitivity_analysis.bayesian.tying import (
+from ..kcat_tuning.evolutionary_tuning.tying import (
     base_reaction, isozyme_tie_map,
 )
 

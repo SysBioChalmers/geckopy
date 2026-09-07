@@ -12,8 +12,7 @@ Three functions, normally called in this order:
   combined leverage reaches ``target_impact_share`` of the total. A
   *relative* cutoff, so the same ``target_impact_share`` selects a
   comparable quality of parameter set on a model with a different
-  leverage scale, unlike an absolute threshold or a fixed count (see
-  ``docs/internal/matlab_replication_results.md``, Open items #6).
+  leverage scale, unlike an absolute threshold or a fixed count.
 - :func:`cmaes_kcat_tuning` -- the tuning run. Screens and selects
   automatically when no mask is given.
 
@@ -33,10 +32,8 @@ works around a real performance issue in raw
 ``multiprocessing.Pool(initializer=...)`` there -- see its docstring).
 Each worker then scores every particle it's handed against its own
 copy via incremental ``apply_kcat_constraints(update_rxns=...)``
-calls, exactly like the serial path -- see the "Spike results" section
-of ``docs/internal/bayesian_tuning_plan.md`` for why a per-particle
-``EcModel.copy()`` is not used either way (~225x an FBA solve on a
-real-scale model).
+calls, exactly like the serial path -- a per-particle ``EcModel.copy()``
+is not used either way (~225x an FBA solve on a real-scale model).
 
 CMA-ES's own ``ask``/``tell`` sequence stays single-threaded in the
 main process -- it's cheap relative to FBA and, more importantly,
@@ -72,23 +69,23 @@ import pandas as pd
 from cobra.util import ProcessPool
 
 from ...ec_model.pipeline.apply_kcat import apply_kcat_constraints
-from .data import BayesianData, load_bayesian_data
-from .distance import bayesian_distance, compute_excarbon
+from .data import TuningData, load_tuning_data
+from .distance import tuning_distance, compute_excarbon
 from .parsimony import fold_change, n_changed
 from .priors import build_sigma0_log, classify_kcat_sources
-from .simulate import simulate_bayesian_dataset
+from .simulate import simulate_tuning_dataset
 from .tying import isozyme_tie_map
 
 if TYPE_CHECKING:
     from ...adapter import ModelAdapter
-    from ...adapter.params import BayesianParams
+    from ...adapter.params import EvolutionaryTuningParams
     from ...ec_model.ec_model import EcModel
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class BayesianTuningResult:
+class EvolutionaryTuningResult:
     """Outcome of a :func:`cmaes_kcat_tuning` run.
 
     The model is mutated in place (the best kcat vector found is
@@ -132,7 +129,7 @@ class BayesianTuningResult:
     converged: bool = False
 
 
-def _resolve_context(model, adapter, params, bay_data, bio_rxn, okp_method):
+def _resolve_context(model, adapter, params, tuning_data, bio_rxn, okp_method):
     """Resolve every optional input against ``model``'s adapter, or
     raise if it can't be and none was given explicitly."""
     if adapter is None:
@@ -141,18 +138,18 @@ def _resolve_context(model, adapter, params, bay_data, bio_rxn, okp_method):
         if adapter is None:
             raise ValueError(
                 "params not given and model has no adapter to read "
-                "adapter.params.bayesian from."
+                "adapter.params.evolutionary_tuning from."
             )
-        params = adapter.params.bayesian
-    if bay_data is None:
+        params = adapter.params.evolutionary_tuning
+    if tuning_data is None:
         if adapter is None:
             raise ValueError(
-                "bay_data not given and model has no adapter to load it from."
+                "tuning_data not given and model has no adapter to load it from."
             )
-        bay_data = load_bayesian_data(adapter)
-    if bay_data.flux_data is None and bay_data.max_grate is None:
+        tuning_data = load_tuning_data(adapter)
+    if tuning_data.flux_data is None and tuning_data.max_grate is None:
         raise ValueError(
-            "bay_data has neither flux_data nor max_grate -- nothing to "
+            "tuning_data has neither flux_data nor max_grate -- nothing to "
             "tune against."
         )
     if bio_rxn is None:
@@ -161,11 +158,11 @@ def _resolve_context(model, adapter, params, bay_data, bio_rxn, okp_method):
         bio_rxn = adapter.params.bio_rxn
     if okp_method is None and adapter is not None:
         okp_method = adapter.params.okp.method
-    return params, bay_data, bio_rxn, okp_method
+    return params, tuning_data, bio_rxn, okp_method
 
 
 def _tunable_context(
-    model, params, bay_data, bio_rxn, okp_method, tunable_mask,
+    model, params, tuning_data, bio_rxn, okp_method, tunable_mask,
 ):
     """The tunable subset plus everything derived from it: tie groups,
     trust weights, and the excarbon table. Shared by every function in
@@ -194,10 +191,10 @@ def _tunable_context(
     sigma0_log = build_sigma0_log(groups, params)
 
     excarbon_rxn_ids: set[str] = {bio_rxn}
-    for data in (bay_data.flux_data, bay_data.max_grate):
+    for data in (tuning_data.flux_data, tuning_data.max_grate):
         if data is not None:
             excarbon_rxn_ids.update(data.exch_rxn_ids)
-    excarbon_rxn_ids.update(bay_data.zero_flux)
+    excarbon_rxn_ids.update(tuning_data.zero_flux)
     excarbon = compute_excarbon(model, excarbon_rxn_ids, bio_rxn_id=bio_rxn)
 
     tie_map = (
@@ -212,8 +209,8 @@ def screen_kcat_leverage(
     model: "EcModel",
     *,
     adapter: Optional["ModelAdapter"] = None,
-    params: Optional["BayesianParams"] = None,
-    bay_data: Optional[BayesianData] = None,
+    params: Optional["EvolutionaryTuningParams"] = None,
+    tuning_data: Optional[TuningData] = None,
     okp_method: Optional[str] = None,
     bio_rxn: Optional[str] = None,
     make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
@@ -261,11 +258,11 @@ def screen_kcat_leverage(
         :func:`select_tunable_mask` needs to expand a row back into a
         mask; drop it before showing the table to a person.
     """
-    params, bay_data, bio_rxn, okp_method = _resolve_context(
-        model, adapter, params, bay_data, bio_rxn, okp_method)
+    params, tuning_data, bio_rxn, okp_method = _resolve_context(
+        model, adapter, params, tuning_data, bio_rxn, okp_method)
     (tunable_idx, ec_rxn_ids_tunable, kcat0, groups, sigma0_log, excarbon,
      tie_map) = _tunable_context(
-        model, params, bay_data, bio_rxn, okp_method, tunable_mask)
+        model, params, tuning_data, bio_rxn, okp_method, tunable_mask)
 
     reps = np.flatnonzero(tie_map == np.arange(len(tie_map)))
     members_of = {int(r): np.flatnonzero(tie_map == r) for r in reps}
@@ -287,7 +284,7 @@ def screen_kcat_leverage(
     if n_proc == 1:
         rmses = [
             _score_kcat_vector(
-                model, tunable_idx, ec_rxn_ids_tunable, bay_data, excarbon,
+                model, tunable_idx, ec_rxn_ids_tunable, tuning_data, excarbon,
                 bio_rxn, v, make_anaerobic=make_anaerobic,
                 change_protein_biomass=change_protein_biomass,
                 max_growth_weight=params.max_growth_weight,
@@ -297,7 +294,7 @@ def screen_kcat_leverage(
     else:
         with ProcessPool(
             n_proc, initializer=_init_worker,
-            initargs=(model, tunable_idx, ec_rxn_ids_tunable, bay_data,
+            initargs=(model, tunable_idx, ec_rxn_ids_tunable, tuning_data,
                      excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
                      params.max_growth_weight, 0.0, None, None),
         ) as pool:
@@ -371,8 +368,8 @@ def cmaes_kcat_tuning(
     model: "EcModel",
     *,
     adapter: Optional["ModelAdapter"] = None,
-    params: Optional["BayesianParams"] = None,
-    bay_data: Optional[BayesianData] = None,
+    params: Optional["EvolutionaryTuningParams"] = None,
+    tuning_data: Optional[TuningData] = None,
     okp_method: Optional[str] = None,
     bio_rxn: Optional[str] = None,
     make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
@@ -384,10 +381,10 @@ def cmaes_kcat_tuning(
     n_proc: Optional[int] = None,
     seed: Optional[int] = None,
     verbose: bool = True,
-) -> BayesianTuningResult:
+) -> EvolutionaryTuningResult:
     """Tune kcats against experimental data with CMA-ES.
 
-    Configuration comes entirely from ``BayesianParams``: trust tiers,
+    Configuration comes entirely from ``EvolutionaryTuningParams``: trust tiers,
     ``max_growth_weight``, ``prior_penalty_weight`` and ``tie_isozymes``
     control the search, and ``max_generations``/``rmse_threshold`` are
     its stopping conditions.
@@ -420,7 +417,7 @@ def cmaes_kcat_tuning(
     verbose
         Whether per-generation progress is logged at INFO.
     make_anaerobic, change_protein_biomass
-        Forwarded to ``simulate.simulate_bayesian_dataset`` -- see its
+        Forwarded to ``simulate.simulate_tuning_dataset`` -- see its
         docstring; geckopy has no generic organism-agnostic
         implementation of these yet. See the module docstring's
         "Parallel scoring" section for a picklability caveat when
@@ -428,7 +425,7 @@ def cmaes_kcat_tuning(
 
     Returns
     -------
-    BayesianTuningResult
+    EvolutionaryTuningResult
         ``rxns``/``old_kcat``/``new_kcat``/``groups`` cover the
         selected tunable set, tied groups included (their members share
         one value in ``new_kcat``). ``rmse_trace``/``objective_trace``
@@ -442,13 +439,13 @@ def cmaes_kcat_tuning(
         parameters remain after masking and tying -- too little for
         CMA-ES to search over.
     """
-    params, bay_data, bio_rxn, okp_method = _resolve_context(
-        model, adapter, params, bay_data, bio_rxn, okp_method)
+    params, tuning_data, bio_rxn, okp_method = _resolve_context(
+        model, adapter, params, tuning_data, bio_rxn, okp_method)
 
     if tunable_mask is None:
         if screen is None:
             screen = screen_kcat_leverage(
-                model, adapter=adapter, params=params, bay_data=bay_data,
+                model, adapter=adapter, params=params, tuning_data=tuning_data,
                 okp_method=okp_method, bio_rxn=bio_rxn,
                 make_anaerobic=make_anaerobic,
                 change_protein_biomass=change_protein_biomass,
@@ -459,7 +456,7 @@ def cmaes_kcat_tuning(
 
     (tunable_idx, ec_rxn_ids_tunable, kcat0, groups, sigma0_log, excarbon,
      tie_map) = _tunable_context(
-        model, params, bay_data, bio_rxn, okp_method, tunable_mask)
+        model, params, tuning_data, bio_rxn, okp_method, tunable_mask)
 
     reps = np.flatnonzero(tie_map == np.arange(len(tie_map)))
     if len(reps) < 2:
@@ -502,7 +499,7 @@ def cmaes_kcat_tuning(
         nullcontext(None) if n_proc == 1 else
         ProcessPool(
             n_proc, initializer=_init_worker,
-            initargs=(model, tunable_idx, ec_rxn_ids_tunable, bay_data,
+            initargs=(model, tunable_idx, ec_rxn_ids_tunable, tuning_data,
                      excarbon, bio_rxn, make_anaerobic, change_protein_biomass,
                      params.max_growth_weight, params.prior_penalty_weight,
                      kcat0, sigma0_log),
@@ -513,7 +510,7 @@ def cmaes_kcat_tuning(
         if pool is None:
             return np.array([
                 _score_kcat_vector(
-                    model, tunable_idx, ec_rxn_ids_tunable, bay_data,
+                    model, tunable_idx, ec_rxn_ids_tunable, tuning_data,
                     excarbon, bio_rxn, kcat_matrix[:, j],
                     make_anaerobic=make_anaerobic,
                     change_protein_biomass=change_protein_biomass,
@@ -559,7 +556,7 @@ def cmaes_kcat_tuning(
     model.ec.kcat[tunable_idx] = best_vec
     apply_kcat_constraints(model, update_rxns=ec_rxn_ids_tunable)
 
-    return BayesianTuningResult(
+    return EvolutionaryTuningResult(
         rxns=ec_rxn_ids_tunable, old_kcat=kcat0.copy(), new_kcat=best_vec,
         groups=list(groups), rmse_trace=rmse_trace,
         objective_trace=objective_trace, n_generations=generation,
@@ -571,8 +568,8 @@ def tune_prior_penalty_weight(
     model: "EcModel",
     *,
     adapter: Optional["ModelAdapter"] = None,
-    params: Optional["BayesianParams"] = None,
-    bay_data: Optional[BayesianData] = None,
+    params: Optional["EvolutionaryTuningParams"] = None,
+    tuning_data: Optional[TuningData] = None,
     okp_method: Optional[str] = None,
     bio_rxn: Optional[str] = None,
     make_anaerobic: Optional[Callable[["EcModel"], None]] = None,
@@ -644,13 +641,13 @@ def tune_prior_penalty_weight(
         ``median_fold_spread`` and ``max_fold_spread`` (among movers,
         the largest fold-change between what the two seeds landed on).
     """
-    params, bay_data, bio_rxn, okp_method = _resolve_context(
-        model, adapter, params, bay_data, bio_rxn, okp_method)
+    params, tuning_data, bio_rxn, okp_method = _resolve_context(
+        model, adapter, params, tuning_data, bio_rxn, okp_method)
 
     if tunable_mask is None:
         if screen is None:
             screen = screen_kcat_leverage(
-                model, adapter=adapter, params=params, bay_data=bay_data,
+                model, adapter=adapter, params=params, tuning_data=tuning_data,
                 okp_method=okp_method, bio_rxn=bio_rxn,
                 make_anaerobic=make_anaerobic,
                 change_protein_biomass=change_protein_biomass,
@@ -675,7 +672,7 @@ def tune_prior_penalty_weight(
             for seed in seeds:
                 _reset()
                 result = cmaes_kcat_tuning(
-                    model, adapter=adapter, params=lam_params, bay_data=bay_data,
+                    model, adapter=adapter, params=lam_params, tuning_data=tuning_data,
                     okp_method=okp_method, bio_rxn=bio_rxn,
                     make_anaerobic=make_anaerobic,
                     change_protein_biomass=change_protein_biomass,
@@ -786,7 +783,7 @@ def _score_kcat_vector(
     model: "EcModel",
     tunable_idx: np.ndarray,
     ec_rxn_ids_tunable: list[str],
-    bay_data: BayesianData,
+    tuning_data: TuningData,
     excarbon: dict[str, float],
     bio_rxn_id: str,
     kcat_vec: np.ndarray,
@@ -803,9 +800,9 @@ def _score_kcat_vector(
     Writes the candidate kcat vector into ``model.ec.kcat`` and
     rewrites just the tunable rows' stoichiometry via
     ``apply_kcat_constraints(update_rxns=...)`` -- no per-candidate
-    ``EcModel.copy()`` (prohibitively expensive; see the "Spike
-    results" section of ``docs/internal/bayesian_tuning_plan.md``).
-    Called directly (looped in-process) for the serial path, or via
+    ``EcModel.copy()`` (prohibitively expensive: ~225x an FBA solve on
+    a real-scale model). Called directly (looped in-process) for the
+    serial path, or via
     :func:`_score_worker` from inside a pool worker for the parallel
     path -- either way, ``model`` is one persistent object reused
     across every candidate it's asked to score.
@@ -815,25 +812,25 @@ def _score_kcat_vector(
     _reset_solver_basis(model)
 
     flux_sims = None
-    if bay_data.flux_data is not None:
-        flux_sims = simulate_bayesian_dataset(
-            model, bay_data.flux_data,
-            constrain=True, zero_flux_rxns=bay_data.zero_flux,
+    if tuning_data.flux_data is not None:
+        flux_sims = simulate_tuning_dataset(
+            model, tuning_data.flux_data,
+            constrain=True, zero_flux_rxns=tuning_data.zero_flux,
             bio_rxn_id=bio_rxn_id,
             make_anaerobic=make_anaerobic,
             change_protein_biomass=change_protein_biomass,
         )
     max_grate_sims = None
-    if bay_data.max_grate is not None:
-        max_grate_sims = simulate_bayesian_dataset(
-            model, bay_data.max_grate,
+    if tuning_data.max_grate is not None:
+        max_grate_sims = simulate_tuning_dataset(
+            model, tuning_data.max_grate,
             constrain=False, zero_flux_rxns=[],
             bio_rxn_id=bio_rxn_id,
             make_anaerobic=make_anaerobic,
             change_protein_biomass=change_protein_biomass,
         )
-    rmse, _ = bayesian_distance(
-        bay_data, flux_sims=flux_sims, max_grate_sims=max_grate_sims,
+    rmse, _ = tuning_distance(
+        tuning_data, flux_sims=flux_sims, max_grate_sims=max_grate_sims,
         excarbon=excarbon, bio_rxn_id=bio_rxn_id,
         max_growth_weight=max_growth_weight,
     )
@@ -855,7 +852,7 @@ def _score_kcat_vector(
 _WORKER_MODEL: Optional["EcModel"] = None
 _WORKER_TUNABLE_IDX: Optional[np.ndarray] = None
 _WORKER_EC_RXN_IDS_TUNABLE: Optional[list[str]] = None
-_WORKER_BAY_DATA: Optional[BayesianData] = None
+_WORKER_TUNING_DATA: Optional[TuningData] = None
 _WORKER_EXCARBON: Optional[dict[str, float]] = None
 _WORKER_BIO_RXN: Optional[str] = None
 _WORKER_MAKE_ANAEROBIC = None
@@ -870,7 +867,7 @@ def _init_worker(
     model: "EcModel",
     tunable_idx: np.ndarray,
     ec_rxn_ids_tunable: list[str],
-    bay_data: BayesianData,
+    tuning_data: TuningData,
     excarbon: dict[str, float],
     bio_rxn_id: str,
     make_anaerobic,
@@ -884,14 +881,14 @@ def _init_worker(
     (deserialised by ``ProcessPool``, not by us) and everything else
     needed to score a candidate."""
     global _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE
-    global _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
+    global _WORKER_TUNING_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN
     global _WORKER_MAKE_ANAEROBIC, _WORKER_CHANGE_PROTEIN_BIOMASS
     global _WORKER_MAX_GROWTH_WEIGHT, _WORKER_PRIOR_PENALTY_WEIGHT
     global _WORKER_KCAT0, _WORKER_SIGMA0_LOG
     _WORKER_MODEL = model
     _WORKER_TUNABLE_IDX = tunable_idx
     _WORKER_EC_RXN_IDS_TUNABLE = ec_rxn_ids_tunable
-    _WORKER_BAY_DATA = bay_data
+    _WORKER_TUNING_DATA = tuning_data
     _WORKER_EXCARBON = excarbon
     _WORKER_BIO_RXN = bio_rxn_id
     _WORKER_MAKE_ANAEROBIC = make_anaerobic
@@ -906,7 +903,7 @@ def _score_worker(kcat_vec: np.ndarray) -> tuple[float, float]:
     assert _WORKER_MODEL is not None, "_score_worker called before _init_worker"
     return _score_kcat_vector(
         _WORKER_MODEL, _WORKER_TUNABLE_IDX, _WORKER_EC_RXN_IDS_TUNABLE,
-        _WORKER_BAY_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN, kcat_vec,
+        _WORKER_TUNING_DATA, _WORKER_EXCARBON, _WORKER_BIO_RXN, kcat_vec,
         make_anaerobic=_WORKER_MAKE_ANAEROBIC,
         change_protein_biomass=_WORKER_CHANGE_PROTEIN_BIOMASS,
         max_growth_weight=_WORKER_MAX_GROWTH_WEIGHT,

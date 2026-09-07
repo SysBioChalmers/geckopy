@@ -36,7 +36,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install
-        run: pip install -e ".[dev,bayesian]"
+        run: pip install -e ".[dev,evolutionary-tuning]"
 
       - name: Run pytest
         run: pytest -q

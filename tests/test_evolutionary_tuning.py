@@ -1,4 +1,4 @@
-"""Tests for kcat_sensitivity_analysis.bayesian.tuning.
+"""Tests for kcat_tuning.evolutionary_tuning.tuning.
 
 Two toy EcModels:
 
@@ -18,17 +18,17 @@ from scipy import sparse
 
 import cobra
 from geckopy import EcModel, ModelAdapter
-from geckopy.adapter.params import BayesianParams
+from geckopy.adapter.params import EvolutionaryTuningParams
 from geckopy.databases.flux_data import FluxData
 from geckopy.ec_model.ec_data import EcData
-from geckopy.kcat_sensitivity_analysis.bayesian.tuning import (
+from geckopy.kcat_tuning.evolutionary_tuning.tuning import (
     cmaes_kcat_tuning,
     screen_kcat_leverage,
     select_tunable_mask,
     tune_prior_penalty_weight,
 )
-from geckopy.kcat_sensitivity_analysis.bayesian.data import BayesianData
-from geckopy.kcat_sensitivity_analysis.bayesian.tuning import BayesianTuningResult
+from geckopy.kcat_tuning.evolutionary_tuning.data import TuningData
+from geckopy.kcat_tuning.evolutionary_tuning.tuning import EvolutionaryTuningResult
 
 _TRUE_KCAT = 2.0
 _START_KCAT = 1.0
@@ -46,7 +46,7 @@ def _adapter(tmp_path: Path) -> ModelAdapter:
 
 
 def _build_toy(adapter: ModelAdapter) -> EcModel:
-    """Two independent branches, one kcat each -- see test_bayesian_tuning.py."""
+    """Two independent branches, one kcat each."""
     model = EcModel("toy", adapter=adapter)
 
     glc_e = cobra.Metabolite("glc_e", compartment="e")
@@ -111,7 +111,7 @@ def _build_toy(adapter: ModelAdapter) -> EcModel:
     return model
 
 
-def _bay_data() -> BayesianData:
+def _tuning_data() -> TuningData:
     max_grate = FluxData(
         conds=["glucose", "ethanol"],
         p_tot=np.array([np.nan, np.nan]),
@@ -122,7 +122,7 @@ def _bay_data() -> BayesianData:
         exch_mets=["glucose", "ethanol"],
         exch_rxn_ids=["EX_glc", "EX_eth"],
     )
-    return BayesianData(flux_data=None, max_grate=max_grate, zero_flux=[])
+    return TuningData(flux_data=None, max_grate=max_grate, zero_flux=[])
 
 
 def _build_tied_toy(adapter: ModelAdapter) -> EcModel:
@@ -208,7 +208,7 @@ def _build_tied_toy(adapter: ModelAdapter) -> EcModel:
     return model
 
 
-def _tied_bay_data() -> BayesianData:
+def _tied_tuning_data() -> TuningData:
     max_grate = FluxData(
         conds=["glucose", "ethanol"],
         p_tot=np.array([np.nan, np.nan]),
@@ -219,16 +219,16 @@ def _tied_bay_data() -> BayesianData:
         exch_mets=["glucose", "ethanol"],
         exch_rxn_ids=["EX_glc", "EX_eth"],
     )
-    return BayesianData(flux_data=None, max_grate=max_grate, zero_flux=[])
+    return TuningData(flux_data=None, max_grate=max_grate, zero_flux=[])
 
 
 def test_screen_ranks_both_load_bearing_kcats(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
+    tuning_data = _tuning_data()
 
     screen = screen_kcat_leverage(
-        model, adapter=adapter, bay_data=bay_data, n_proc=1,
+        model, adapter=adapter, tuning_data=tuning_data, n_proc=1,
     )
 
     assert set(screen["rxn_id"]) == {"R_glc", "R_eth"}
@@ -242,9 +242,9 @@ def test_screen_ranks_both_load_bearing_kcats(tmp_path):
 def test_select_tunable_mask_is_relative_and_monotone(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
+    tuning_data = _tuning_data()
     screen = screen_kcat_leverage(
-        model, adapter=adapter, bay_data=bay_data, n_proc=1,
+        model, adapter=adapter, tuning_data=tuning_data, n_proc=1,
     )
 
     tiny = select_tunable_mask(model, screen, target_impact_share=0.01)
@@ -270,16 +270,16 @@ def test_select_tunable_mask_empty_screen_returns_empty_mask(tmp_path):
 def test_cmaes_tuning_moves_kcats_toward_truth(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
-    params = BayesianParams(max_generations=15, rmse_threshold=1e-6)
+    tuning_data = _tuning_data()
+    params = EvolutionaryTuningParams(max_generations=15, rmse_threshold=1e-6)
     before = model.ec.kcat.copy()
 
     result = cmaes_kcat_tuning(
-        model, adapter=adapter, params=params, bay_data=bay_data,
+        model, adapter=adapter, params=params, tuning_data=tuning_data,
         n_proc=1, seed=0, verbose=False,
     )
 
-    assert isinstance(result, BayesianTuningResult)
+    assert isinstance(result, EvolutionaryTuningResult)
     assert result.rxns == ["R_glc", "R_eth"]
     assert result.groups == ["brenda", "dlkcat"]
     assert np.array_equal(result.old_kcat, before)
@@ -293,14 +293,14 @@ def test_cmaes_tuning_moves_kcats_toward_truth(tmp_path):
 
 
 def test_cmaes_tuning_n_proc_matches_serial(tmp_path):
-    params = BayesianParams(max_generations=5, rmse_threshold=-1.0)
+    params = EvolutionaryTuningParams(max_generations=5, rmse_threshold=-1.0)
 
     def _run(n_proc):
         adapter = _adapter(tmp_path)
         model = _build_toy(adapter)
-        bay_data = _bay_data()
+        tuning_data = _tuning_data()
         return cmaes_kcat_tuning(
-            model, adapter=adapter, params=params, bay_data=bay_data,
+            model, adapter=adapter, params=params, tuning_data=tuning_data,
             n_proc=n_proc, seed=0, popsize=6, verbose=False,
         )
 
@@ -315,19 +315,19 @@ def test_cmaes_tuning_n_proc_matches_serial(tmp_path):
 def test_tie_isozymes_forces_equal_values(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_tied_toy(adapter)
-    bay_data = _tied_bay_data()
-    params = BayesianParams(max_generations=8, rmse_threshold=-1.0,
+    tuning_data = _tied_tuning_data()
+    params = EvolutionaryTuningParams(max_generations=8, rmse_threshold=-1.0,
                             tie_isozymes=True)
 
     screen = screen_kcat_leverage(
-        model, adapter=adapter, params=params, bay_data=bay_data, n_proc=1,
+        model, adapter=adapter, params=params, tuning_data=tuning_data, n_proc=1,
     )
     # Two rows: the tied isozyme pair as one group, R_eth as another.
     assert len(screen) == 2
     assert sorted(screen["n_isozymes"]) == [1, 2]
 
     result = cmaes_kcat_tuning(
-        model, adapter=adapter, params=params, bay_data=bay_data,
+        model, adapter=adapter, params=params, tuning_data=tuning_data,
         n_proc=1, seed=0, verbose=False,
     )
     assert result.rxns == ["R_iso_EXP_1", "R_iso_EXP_2", "R_eth"]
@@ -337,11 +337,11 @@ def test_tie_isozymes_forces_equal_values(tmp_path):
 def test_tie_isozymes_false_keeps_groups_separate(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_tied_toy(adapter)
-    bay_data = _tied_bay_data()
-    params = BayesianParams(tie_isozymes=False)
+    tuning_data = _tied_tuning_data()
+    params = EvolutionaryTuningParams(tie_isozymes=False)
 
     screen = screen_kcat_leverage(
-        model, adapter=adapter, params=params, bay_data=bay_data, n_proc=1,
+        model, adapter=adapter, params=params, tuning_data=tuning_data, n_proc=1,
     )
     assert len(screen) == 3
     assert (screen["n_isozymes"] == 1).all()
@@ -351,19 +351,19 @@ def test_no_tunable_kcats_raises(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
     model.ec.kcat[:] = 0.0
-    bay_data = _bay_data()
+    tuning_data = _tuning_data()
     with pytest.raises(ValueError, match="No tunable kcats"):
-        cmaes_kcat_tuning(model, adapter=adapter, bay_data=bay_data, n_proc=1)
+        cmaes_kcat_tuning(model, adapter=adapter, tuning_data=tuning_data, n_proc=1)
 
 
 def test_too_few_free_parameters_raises(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
+    tuning_data = _tuning_data()
     mask = np.array([True, False])
     with pytest.raises(ValueError, match="free parameter"):
         cmaes_kcat_tuning(
-            model, adapter=adapter, bay_data=bay_data,
+            model, adapter=adapter, tuning_data=tuning_data,
             tunable_mask=mask, n_proc=1,
         )
 
@@ -371,11 +371,11 @@ def test_too_few_free_parameters_raises(tmp_path):
 def test_tune_prior_penalty_weight_shape_and_fit_cost(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
-    params = BayesianParams(max_generations=6, rmse_threshold=-1.0)
+    tuning_data = _tuning_data()
+    params = EvolutionaryTuningParams(max_generations=6, rmse_threshold=-1.0)
 
     report = tune_prior_penalty_weight(
-        model, adapter=adapter, params=params, bay_data=bay_data,
+        model, adapter=adapter, params=params, tuning_data=tuning_data,
         candidates=(0.0, 1000.0), seeds=(0, 1), n_proc=1, verbose=False,
     )
 
@@ -394,12 +394,12 @@ def test_tune_prior_penalty_weight_shape_and_fit_cost(tmp_path):
 def test_tune_prior_penalty_weight_restores_model(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
+    tuning_data = _tuning_data()
     before = model.ec.kcat.copy()
-    params = BayesianParams(max_generations=4, rmse_threshold=-1.0)
+    params = EvolutionaryTuningParams(max_generations=4, rmse_threshold=-1.0)
 
     tune_prior_penalty_weight(
-        model, adapter=adapter, params=params, bay_data=bay_data,
+        model, adapter=adapter, params=params, tuning_data=tuning_data,
         candidates=(0.0,), seeds=(0,), n_proc=1, verbose=False,
     )
 
@@ -411,11 +411,11 @@ def test_tune_prior_penalty_weight_restores_model(tmp_path):
 def test_tune_prior_penalty_weight_single_seed_gives_nan_reproducibility(tmp_path):
     adapter = _adapter(tmp_path)
     model = _build_toy(adapter)
-    bay_data = _bay_data()
-    params = BayesianParams(max_generations=4, rmse_threshold=-1.0)
+    tuning_data = _tuning_data()
+    params = EvolutionaryTuningParams(max_generations=4, rmse_threshold=-1.0)
 
     report = tune_prior_penalty_weight(
-        model, adapter=adapter, params=params, bay_data=bay_data,
+        model, adapter=adapter, params=params, tuning_data=tuning_data,
         candidates=(0.0,), seeds=(0,), n_proc=1, verbose=False,
     )
 
