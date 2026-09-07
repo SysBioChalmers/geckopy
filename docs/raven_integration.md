@@ -69,6 +69,6 @@ overlaps will be added back to this table as raven-toolbox grows.
   raven-toolbox has a different concern: KEGG taxonomy parsing
   (`raven_toolbox.reconstruction.kegg.taxonomy`).
 - Everything under `geckopy.limit_proteins`,
-  `geckopy.kcat_sensitivity_analysis`,
+  `geckopy.kcat_tuning`,
   `geckopy.ec_model.pipeline.protein_pool`, etc. — pure
   enzyme-constraint mechanics, no general-GEM analog in RAVEN.

@@ -98,8 +98,8 @@ from geckopy.get_enzyme_data import (
     get_ec_from_gem,  # deprecated; alias of fill_eccodes_from_gem
 )
 
-# kcat_sensitivity_analysis
-from geckopy.kcat_sensitivity_analysis import (
+# kcat_tuning
+from geckopy.kcat_tuning import (
     SigmaFitterResult,
     TunedKcatsResult,
     find_max_value,

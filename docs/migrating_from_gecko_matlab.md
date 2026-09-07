@@ -118,8 +118,8 @@ In MATLAB you write an adapter `classdef` and register a default with
 folder with a `model_adapter.toml`, loaded via
 `ModelAdapter.from_folder(path)`. The TOML is parsed into pydantic
 models (`ModelParameters` with nested `kegg`, `uniprot`, `okp`,
-`bayesian`, …) and validated strictly, so config typos are caught
-early.
+`evotune`, …) and validated strictly, so config typos are
+caught early.
 
 There is **no global default adapter**. Functions read `model.adapter`
 or take an explicit `adapter=` argument. Where a MATLAB function takes
@@ -263,7 +263,7 @@ Each row maps a MATLAB function to its geckopy equivalent. The
 | `loadBRENDAdata`      | `load_brenda_data`                                                     | **`[3→4]`** Reads the new TSV schema (`kcat.tsv` / `sa.tsv` / `mw.tsv`, bare EC codes, plain organism names, `references` column). **`[Py]`** Ships **both** `max` and `median` per (ec, substrate, organism) triple — see [kcat_aggregation.md](kcat_aggregation.md). Returns a `BrendaData` dataclass. |
 | `loadDatabases`       | *(implicit)*                                                           | **`[Py]`** No combined-load entry-point; users call `load_brenda_data`, `load_uniprot_tsv`, etc. directly.                                                                                                                                |
 
-### 5.4 Kcat sensitivity analysis (`src/geckomat/kcat_sensitivity_analysis`)
+### 5.4 Kcat sensitivity analysis and tuning (`src/kcat_tuning`)
 
 | MATLAB                                | geckopy                                                            | Notes                                                                                                                                                                                                                            |
 | ------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -271,7 +271,8 @@ Each row maps a MATLAB function to its geckopy equivalent. The
 | `sigmaFitter`                         | `fit_sigma`                                                        | **`[3→4]`** Returns the model fitted to the **optimal** sigma (GECKO 3 returned the last trial value, sigma = 1.0). **`[Py]`** Renamed; `sigma_fitter` kept as deprecated alias. Returns a `SigmaFitterResult`.                  |
 | `findMaxValue`                        | `find_max_value`                                                   | **`[3→4]`** Wildcard EC branch matches real codes.                                                                                                                                                                                |
 | `truncateValues`                      | `truncate_values`                                                  | —                                                                                                                                                                                                                                |
-| `bayesianSensitivityTuning` + helpers | *(not ported)*                                                     | Planned. See `docs/internal/bayesian_tuning_plan.md` for the design notes.                                                                                                                                                       |
+| *(none)*                              | `kcat_tuning.evotune.cmaes_kcat_tuning` + helpers      | **`[Py]`** Fits kcats to experimental flux/growth data with CMA-ES rather than MATLAB's ABC-SMC `bayesianSensitivityTuning`; see [evotune_kcat_tuning.md](evotune_kcat_tuning.md) and [cmaes_vs_abc_smc.md](cmaes_vs_abc_smc.md). |
+| `bayesianSensitivityTuning` + helpers | *(not ported)*                                                     | MATLAB's ABC-SMC sampler itself is not ported; geckopy uses CMA-ES instead (see above).                                                                                                                                          |
 
 ### 5.5 Limit proteins (`src/geckomat/limit_proteins`)
 
@@ -447,9 +448,10 @@ agree. The full per-function divergence list lives in the in-source
 
 ### Not yet in geckopy
 
-- **Bayesian (ABC-SMC) kcat tuning**
-  (`bayesianSensitivityTuning` + helpers). Tracked in
-  `docs/internal/bayesian_tuning_plan.md`.
+- **ABC-SMC kcat tuning** (`bayesianSensitivityTuning` + helpers).
+  geckopy fits kcats to experimental data with CMA-ES instead; see
+  [evotune_kcat_tuning.md](evotune_kcat_tuning.md) and
+  [cmaes_vs_abc_smc.md](cmaes_vs_abc_smc.md).
 - **`plotEcFVA`** — Python users plot from the `ec_fva` DataFrame
   with matplotlib / seaborn directly.
 

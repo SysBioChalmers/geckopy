@@ -105,7 +105,7 @@ def test_constrain_flux_data_alias_emits_warning():
 
 
 def test_sigma_fitter_alias_emits_warning():
-    from geckopy.kcat_sensitivity_analysis import sigma_fitter
+    from geckopy.kcat_tuning import sigma_fitter
 
     class _MockModel:
         pass

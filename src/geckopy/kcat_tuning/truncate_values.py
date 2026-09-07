@@ -1,7 +1,7 @@
 """Round numeric values to roughly 6 significant figures.
 
 Ported from GECKO MATLAB:
-src/geckomat/kcat_sensitivity_analysis/truncateValues.m.
+src/kcat_tuning/truncateValues.m.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ def truncate_values(
     unchanged. The input is never mutated; a new array is returned.
 
     Ported from GECKO MATLAB:
-    src/geckomat/kcat_sensitivity_analysis/truncateValues.m.
+    src/kcat_tuning/truncateValues.m.
 
     Parameters
     ----------

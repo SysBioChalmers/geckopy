@@ -2,8 +2,8 @@
 import numpy as np
 import pytest
 
-from geckopy.kcat_sensitivity_analysis import truncate_values
-from geckopy.kcat_sensitivity_analysis.truncate_values import _truncate_scalar
+from geckopy.kcat_tuning import truncate_values
+from geckopy.kcat_tuning.truncate_values import _truncate_scalar
 
 
 # --------------------------------------------------------------------------- #
