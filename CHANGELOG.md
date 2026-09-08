@@ -1,14 +1,9 @@
 # Changelog
 
-All notable changes to **geckopy** are documented here. The project uses
-[PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
-
 ## 4.0.0b1 — 2026-09-08
 
-Version realignment: geckopy adopts GECKO's own toolbox-generation numbering
-(MATLAB GECKO 1–3, geckopy = 4.x) instead of its own from-zero semver — see
-the README for why. First release published to PyPI, and the first to ship
-kcat tuning against experimental data.
+Version realignment: geckopy numbering will be aligned with GECKO (MATLAB),
+justifying a jump to 4.x. This is the first release published to PyPI.
 
 * New: `kcat_tuning.evotune` fits `ec.kcat` to measured growth rates and
   exchange fluxes with CMA-ES (`screen_kcat_leverage`, `select_tunable_mask`,
