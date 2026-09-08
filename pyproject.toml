@@ -44,12 +44,10 @@ dependencies = [
     # raven-toolbox provides the underlying model-manipulation primitives geckopy
     # extends, plus the ecModel YAML I/O (raven_toolbox.io.ec_data.EcData and the
     # ec-rxns / ec-enzymes / gecko_light sections in read/write_yaml_model).
-    # geckopy needs a develop-only addition (convert_to_irreversible(..., rxns=...),
-    # added for #42) that isn't in any PyPI release yet -- pinned to develop until
-    # raven-toolbox 3.0.0b1 ships, at which point this becomes "raven-toolbox>=3.0.0b1"
-    # (the "b1" in the specifier itself opts pip into matching pre-releases, so no
-    # --pre flag is needed downstream).
-    "raven-toolbox @ git+https://github.com/SysBioChalmers/raven-toolbox.git@develop",
+    # >=3.0.0b1: first release carrying convert_to_irreversible(..., rxns=...),
+    # which make_ec_model needs (#42). The "b1" in the specifier opts pip into
+    # matching pre-releases, so no --pre flag is needed downstream.
+    "raven-toolbox>=3.0.0b1",
     "requests>=2.28",
     "ruamel.yaml>=0.17",
     "scipy>=1.10",
@@ -78,14 +76,6 @@ Issues = "https://github.com/SysBioChalmers/geckopy/issues"
 
 [project.scripts]
 geckopy = "geckopy.cli:main"
-
-[tool.hatch.metadata]
-# Allow `raven-toolbox @ git+https://...` (PEP 508 direct URL) in
-# project.dependencies. hatchling refuses direct references by default
-# because PyPI rejects sdists that contain them. Re-evaluate once
-# raven-toolbox ships the `convert_to_irreversible(rxns=...)` addition
-# in a release and geckopy can pin a version instead.
-allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/geckopy"]
