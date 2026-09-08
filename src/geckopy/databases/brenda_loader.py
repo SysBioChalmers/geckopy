@@ -3,12 +3,12 @@
 Ported from GECKO MATLAB:
 src/geckomat/get_enzyme_data/loadBRENDAdata.m.
 
-Three tab-delimited files are read from the BRENDA folder:
+Three xz-compressed tab-delimited files are read from the BRENDA folder:
 
-    kcat.tsv   kcat values (wide: one row per triple, both max and
-               median across the raw measurements that fed into it)
-    sa.tsv     specific activities (same wide shape)
-    mw.tsv     molecular weights (single value per (ec, organism))
+    kcat.tsv.xz   kcat values (wide: one row per triple, both max and
+                  median across the raw measurements that fed into it)
+    sa.tsv.xz     specific activities (same wide shape)
+    mw.tsv.xz     molecular weights (single value per (ec, organism))
 
 The files are produced by the ``geckopy brenda-refresh`` CLI. kcat and
 SA have seven tab-delimited columns: EC number, substrate (``*`` for
@@ -21,6 +21,7 @@ column header (also skipped).
 from __future__ import annotations
 
 import logging
+import lzma
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -93,7 +94,7 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     Ported from GECKO MATLAB:
     src/geckomat/get_enzyme_data/loadBRENDAdata.m.
 
-    Reads ``kcat.tsv``, ``sa.tsv``, ``mw.tsv`` from ``folder``, splits
+    Reads ``kcat.tsv.xz``, ``sa.tsv.xz``, ``mw.tsv.xz`` from ``folder``, splits
     the kcat and SA wide tables into per-aggregation views, applies the
     GECKO unit conversions, and joins SA + MW on EC + organism
     (case-insensitive) to produce derived kcat tables.
@@ -135,9 +136,9 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
         If any of the three expected files is missing.
     """
     folder = Path(folder)
-    kcat_path = folder / "kcat.tsv"
-    sa_path = folder / "sa.tsv"
-    mw_path = folder / "mw.tsv"
+    kcat_path = folder / "kcat.tsv.xz"
+    sa_path = folder / "sa.tsv.xz"
+    mw_path = folder / "mw.tsv.xz"
 
     for p in (kcat_path, sa_path, mw_path):
         if not p.is_file():
@@ -199,7 +200,7 @@ def _load_wide_table(
     max_col, med_col = value_columns
     rows: list[tuple[str, str, str, float, float, int]] = []
     invalid = 0
-    with open(path, "r", encoding="utf-8") as f:
+    with lzma.open(path, "rt", encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             line = line.rstrip("\n")
             if not line or line.startswith("#"):
@@ -247,7 +248,7 @@ def _load_mw_table(path: Path, *, value_scale: float) -> pd.DataFrame:
     """
     rows: list[tuple[str, str, float]] = []
     invalid = 0
-    with open(path, "r", encoding="utf-8") as f:
+    with lzma.open(path, "rt", encoding="utf-8") as f:
         for line_no, line in enumerate(f, start=1):
             line = line.rstrip("\n")
             if not line or line.startswith("#"):
