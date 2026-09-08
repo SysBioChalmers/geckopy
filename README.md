@@ -4,13 +4,12 @@
 
 Enzyme-constrained genome-scale metabolic modelling in Python.
 
-> **Disambiguation — this is not "geckopy 3.0".** The current geckopy is a new,
-> from-scratch port of the MATLAB [GECKO Toolbox](https://github.com/SysBioChalmers/GECKO).
-> It is unrelated to, and shares no code with, the earlier and separate `geckopy`
-> Python package ([on PyPI as `geckopy`](https://pypi.org/project/geckopy/)) described in
-> Carrasco Muriel, Long & Sonnenschein, *Microbiology Spectrum* 11(6):e01705-23 (2023),
-> [doi:10.1128/spectrum.01705-23](https://doi.org/10.1128/spectrum.01705-23). The two
-> projects share only the name.
+> **Disambiguation.** This is a new, from-scratch port of the
+> [GECKO Toolbox](https://github.com/SysBioChalmers/GECKO) (MATLAB). It is unrelated to
+> the earlier and separate `geckopy` Python package
+> ([on PyPI as release 2.0.2 and earlier](https://pypi.org/project/geckopy/2.0.2/))
+> described in Carrasco Muriel, Long & Sonnenschein, *Microbiology Spectrum*
+> 11(6):e01705-23 (2023), [doi:10.1128/spectrum.01705-23](https://doi.org/10.1128/spectrum.01705-23).
 
 ## What this is
 
@@ -27,33 +26,36 @@ the standard modelling layer, then layers GECKO's enzyme-constraint machinery
 on top. It fetches kcat values from BRENDA, predicts them with DLKcat,
 applies custom curations, and integrates proteomics measurements.
 
-> **Status: alpha.** All the MATLAB GECKO 3.2.5 functions used in the
-> standard ecModel build are ported. The yeast-GEM tutorial runs
-> end-to-end. Not yet on PyPI; install from GitHub for now.
+> **Status: beta (`4.0.0b1`).** All the MATLAB GECKO 3.2.5 functions used in
+> the standard ecModel build are ported, plus CMA-ES-based kcat tuning
+> against experimental data. The yeast-GEM tutorial runs end-to-end.
+> geckopy's version tracks the GECKO project's own toolbox-generation
+> numbering (MATLAB GECKO 1–3, geckopy = 4.x), not a semantic-versioning
+> API-stability claim.
 
 ## Install
 
-geckopy depends on [raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox)
-(the Python port of the RAVEN Toolbox), which is not yet on PyPI. Install both
-from GitHub:
-
 ```bash
-pip install \
-    git+https://github.com/SysBioChalmers/raven-toolbox.git@develop \
-    git+https://github.com/SysBioChalmers/geckopy.git@develop
+pip install --pre geckopy
 ```
 
-Once raven-toolbox and geckopy are published to PyPI, this collapses to
-`pip install geckopy` (raven-toolbox will be pulled in transitively).
+geckopy is currently published as a pre-release, so `--pre` (or an exact
+pin, e.g. `geckopy==4.0.0b1`) is required until the `4.0.0` final release —
+plain `pip install geckopy` won't pick it up before then.
+[raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox) (the Python
+port of the RAVEN Toolbox) is pulled in automatically.
 
 Optional extras:
 
 ```bash
 # Adds matplotlib (needed to render plots from the tutorial)
-pip install "geckopy[tutorial] @ git+https://github.com/SysBioChalmers/geckopy.git@develop"
+pip install --pre "geckopy[tutorial]"
+
+# Adds cma (needed for CMA-ES kcat tuning, geckopy.kcat_tuning.evotune)
+pip install --pre "geckopy[evotune]"
 
 # Adds pytest + ruff (only needed if you're contributing)
-pip install "geckopy[dev] @ git+https://github.com/SysBioChalmers/geckopy.git@develop"
+pip install --pre "geckopy[dev]"
 ```
 
 Requires Python 3.11 or newer.

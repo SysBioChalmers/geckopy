@@ -4,6 +4,94 @@ All notable changes to **geckopy** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [PEP 440](https://peps.python.org/pep-0440/) pre-release versioning.
 
+## [4.0.0b1] — 2026-09-08
+
+Version realignment: geckopy adopts GECKO's own toolbox-generation numbering
+(MATLAB GECKO 1–3, geckopy = 4.x) instead of its own from-zero semver — see
+the README for why. First release published to PyPI, and the first to ship
+kcat tuning against experimental data.
+
+### Added
+
+- **`geckopy.kcat_tuning.evotune`** — new subpackage fitting `ec.kcat` to
+  measured growth rates and exchange fluxes with CMA-ES (evaluated against
+  MATLAB's ABC-SMC approach, which it replaces): `screen_kcat_leverage`,
+  `select_tunable_mask`, `cmaes_kcat_tuning`, `tune_prior_penalty_weight`.
+  `EvotuneResult.corrections()` turns a tuning run into a ranked,
+  human-readable table of what changed and why (reaction, EC code, source,
+  prior/tuned value, fold change, leverage) instead of a raw kcat vector.
+  Gated behind the new `evotune` extra (`cma`); the base install is
+  unaffected. See [`docs/evotune_kcat_tuning.md`](docs/evotune_kcat_tuning.md).
+  (#51, #52)
+- **`geckopy.gather_kcats.review.review_assignment`** — flags kcat-assignment
+  problems (repeated values, EC-maximum fallback, implausible magnitude)
+  worth curating before spending a tuning run on them. (#51)
+
+### Fixed
+
+- **`flexibilize_enz_concs`**: the post-loop refinement pinned
+  `bio_rxn.lower_bound` to `exp_growth` exactly; MATLAB's
+  `flexibilizeEnzConcs.m` uses a soft ±0.25% band instead, whose minimiser
+  settles at the band's low edge rather than at `exp_growth`. geckopy now
+  uses the same soft band, matching MATLAB's growth rate and flexed enzyme
+  bounds. (#41)
+- **`make_ec_model`** was splitting exchange reactions in the
+  irreversibility stage; MATLAB's `makeEcModel.m` excludes them
+  (`nonExchRxns`). Latent divergence exposed once raven-toolbox's
+  `convert_to_irreversible` stopped special-casing exchange reactions by
+  default. (#42)
+- **`get_reactions_from_enzyme`**: `protein_id` matching against
+  `ec.enzymes` was case-sensitive; MATLAB's `getReactionsFromEnzyme` uses
+  `strcmpi`, so `"p4"` now finds what `"P4"` finds. (#43)
+- **`read_dlkcat_output`**: the summary log lumped unrecognized-substrate
+  drops into "dropped N row(s) with non-numeric kcat" even when the row's
+  kcat was numeric — drop reasons are now counted separately. New
+  `strict=True` option (default `False`) raises on any unrecognized
+  substrate, matching MATLAB's fail-fast behavior for callers who want it.
+  (#44)
+- **`parse_okp_output`**: per-row provenance wasn't tagged with the `OKP-`
+  prefix MATLAB's `readOpenKineticsPredictorOutput.m` applies, so the same
+  prediction ended up unprefixed after `normalize_source`. `merge_kcats`
+  now strips a recognized `okp_` prefix before tiering/`source_priority`
+  matching, so a tagged row still ranks like its bare-sourced counterpart.
+  (#46)
+- **`set_kcat_for_reactions`** rejected a per-isozyme kcat list passed
+  against an un-suffixed base reaction name; MATLAB's `setKcatForReactions`
+  accepts this and assigns positionally. Also wrote `ec.source = "manual"`
+  where MATLAB's actual (undocumented) value is `"setKcatForReactions"`.
+  Both now match. (#47)
+- **sdist packaging** bundled the entire local `.venv-win` virtualenv
+  (including a compiled scipy wheel), ballooning it from ~6MB to ~60MB:
+  `.gitignore` listed `.venv/` but not `.venv-win/`, and hatchling's default
+  sdist file selection only reads the top-level `.gitignore`, not git's
+  nested per-directory ignore rules.
+
+### Changed
+
+- **`ec_fva`**'s parallel path now uses `cobra.util.process_pool.ProcessPool`
+  instead of a hand-rolled `multiprocessing.Pool`, matching the pattern
+  cobrapy's own deletion/FVA helpers use: fixes a slow initializer-arg
+  handoff on Windows and switches pool teardown from `terminate()` to a
+  graceful `close()` + `join()`. Public `ec_fva(...)` signature unchanged.
+  (#45)
+- **`kcat_sensitivity_analysis` renamed to `kcat_tuning`**, with the CMA-ES
+  subpackage named `evotune` rather than `bayesian` — the shipped method is
+  CMA-ES, not Bayesian inference. (#51)
+
+### Dependencies
+
+- **`raven-toolbox` now pins `>=3.0.0b1`** (was a `git+...@develop`
+  reference) — that release carries `convert_to_irreversible(...,
+  rxns=...)`, which `make_ec_model` needs (#42). PyPI rejects direct URL
+  references in package metadata, so this also drops the
+  `allow-direct-references` hatchling override that existed only for it.
+
+### Documentation
+
+- README: disambiguation note simplified, and repointed at the specific old
+  `geckopy` release (`2.0.2` and earlier) now that this project has taken
+  over the PyPI project name itself.
+
 ## [0.3.0] — 2026-08-30
 
 Parity pass against the MATLAB GECKO Toolbox: geckopy's core functions now
@@ -360,6 +448,7 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
   [`docs/raven_integration.md`](docs/raven_integration.md) for the
   current delegation and the planned future migrations.
 
+[4.0.0b1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v4.0.0b1
 [0.3.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.3.0
 [0.2.1]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.1
 [0.2.0]: https://github.com/SysBioChalmers/geckopy/releases/tag/v0.2.0
@@ -394,3 +483,12 @@ ecModel build is ported; the yeast-GEM tutorial runs end-to-end.
 [#37]: https://github.com/SysBioChalmers/geckopy/pull/37
 [#38]: https://github.com/SysBioChalmers/geckopy/pull/38
 [#39]: https://github.com/SysBioChalmers/geckopy/pull/39
+[#41]: https://github.com/SysBioChalmers/geckopy/pull/41
+[#42]: https://github.com/SysBioChalmers/geckopy/pull/42
+[#43]: https://github.com/SysBioChalmers/geckopy/pull/43
+[#44]: https://github.com/SysBioChalmers/geckopy/pull/44
+[#45]: https://github.com/SysBioChalmers/geckopy/pull/45
+[#46]: https://github.com/SysBioChalmers/geckopy/pull/46
+[#47]: https://github.com/SysBioChalmers/geckopy/pull/47
+[#51]: https://github.com/SysBioChalmers/geckopy/pull/51
+[#52]: https://github.com/SysBioChalmers/geckopy/pull/52
