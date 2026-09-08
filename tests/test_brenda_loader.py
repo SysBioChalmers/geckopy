@@ -1,5 +1,6 @@
 """Tests for load_brenda_data."""
 import logging
+import lzma
 from pathlib import Path
 
 import pytest
@@ -38,9 +39,11 @@ def _write_brenda_files(
     kcat_text = (_COMMENT_KCAT + _HEADER_KCAT + kcat) if with_headers else kcat
     sa_text = (_COMMENT_SA + _HEADER_SA + sa) if with_headers else sa
     mw_text = (_COMMENT_MW + _HEADER_MW + mw) if with_headers else mw
-    (folder / "kcat.tsv").write_text(kcat_text, encoding="utf-8")
-    (folder / "sa.tsv").write_text(sa_text, encoding="utf-8")
-    (folder / "mw.tsv").write_text(mw_text, encoding="utf-8")
+    for name, text in (
+        ("kcat.tsv.xz", kcat_text), ("sa.tsv.xz", sa_text), ("mw.tsv.xz", mw_text),
+    ):
+        with lzma.open(folder / name, "wt", encoding="utf-8") as f:
+            f.write(text)
 
 
 # --------------------------------------------------------------------------- #
@@ -92,23 +95,23 @@ def test_all_empty_files_yield_empty_dataframes(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_missing_kcat_file_raises(tmp_path):
-    (tmp_path / "sa.tsv").write_text("")
-    (tmp_path / "mw.tsv").write_text("")
-    with pytest.raises(FileNotFoundError, match="kcat.tsv"):
+    (tmp_path / "sa.tsv.xz").write_text("")
+    (tmp_path / "mw.tsv.xz").write_text("")
+    with pytest.raises(FileNotFoundError, match="kcat.tsv.xz"):
         load_brenda_data(tmp_path)
 
 
 def test_missing_sa_file_raises(tmp_path):
-    (tmp_path / "kcat.tsv").write_text("")
-    (tmp_path / "mw.tsv").write_text("")
-    with pytest.raises(FileNotFoundError, match="sa.tsv"):
+    (tmp_path / "kcat.tsv.xz").write_text("")
+    (tmp_path / "mw.tsv.xz").write_text("")
+    with pytest.raises(FileNotFoundError, match="sa.tsv.xz"):
         load_brenda_data(tmp_path)
 
 
 def test_missing_mw_file_raises(tmp_path):
-    (tmp_path / "kcat.tsv").write_text("")
-    (tmp_path / "sa.tsv").write_text("")
-    with pytest.raises(FileNotFoundError, match="mw.tsv"):
+    (tmp_path / "kcat.tsv.xz").write_text("")
+    (tmp_path / "sa.tsv.xz").write_text("")
+    with pytest.raises(FileNotFoundError, match="mw.tsv.xz"):
         load_brenda_data(tmp_path)
 
 

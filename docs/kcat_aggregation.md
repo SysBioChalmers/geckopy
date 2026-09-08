@@ -2,7 +2,7 @@
 
 The bundled BRENDA snapshot ships **both** the per-(ec, substrate,
 organism) max and the per-triple median of all raw measurements that
-fell into the triple. They live in the same `kcat.tsv` / `sa.tsv` file
+fell into the triple. They live in the same `kcat.tsv.xz` / `sa.tsv.xz` file
 distinguished by an `aggregation` column; `load_brenda_data` splits
 them into `BrendaData.kcat_max` / `.kcat_median` (and `.sa_*`) so
 consumers never see doubled-up rows. The default
@@ -146,8 +146,8 @@ One **wide** row per (ec, substrate, organism) triple. `kcat_max` and
 `kcat_median` carry the two statistics computed from the raw
 measurements that fell into the triple. `n` is the count of raw
 measurements aggregated (so `n=1` rows have max == median, as above).
-`sa.tsv` has the same shape with `sa_max` / `sa_median` columns.
-`mw.tsv` keeps a single-valued shape (MW is a per-protein physical
+`sa.tsv.xz` has the same shape with `sa_max` / `sa_median` columns.
+`mw.tsv.xz` keeps a single-valued shape (MW is a per-protein physical
 property; no aggregation question) — header
 `ec_code\tsubstrate\torganism\tmw\tn\treferences`.
 

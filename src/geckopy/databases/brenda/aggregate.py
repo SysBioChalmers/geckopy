@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import lzma
 from pathlib import Path
 from typing import Iterable
 
@@ -22,13 +23,13 @@ from .parse import Kind, Row
 logger = logging.getLogger(__name__)
 
 
-# Output filenames per kind. Plain ``<kind>.tsv``; the historical
+# Output filenames per kind. Plain ``<kind>.tsv.xz``; the historical
 # ``max_<kind>.tsv`` name would be wrong now that the same row carries
-# both max and median.
+# both max and median. xz-compressed: these are multi-MB bulk snapshots.
 _OUTPUT_FILES: dict[Kind, tuple[str, str]] = {
-    "kcat": ("kcat.tsv", "kcat in 1/s"),
-    "sa":   ("sa.tsv",   "specific activity in umol/min/mg"),
-    "mw":   ("mw.tsv",   "molecular weight in g/mol"),
+    "kcat": ("kcat.tsv.xz", "kcat in 1/s"),
+    "sa":   ("sa.tsv.xz",   "specific activity in umol/min/mg"),
+    "mw":   ("mw.tsv.xz",   "molecular weight in g/mol"),
 }
 
 _HEADER_FMT = (
@@ -77,7 +78,7 @@ def aggregate_and_write(
     rows
         Iterable of ``Row`` from ``parse_brenda_json``.
     out_dir
-        Output directory for ``kcat.tsv``, ``sa.tsv``, ``mw.tsv``.
+        Output directory for ``kcat.tsv.xz``, ``sa.tsv.xz``, ``mw.tsv.xz``.
         Created if missing.
     release
         BRENDA release string, e.g. ``"2026.1"``. Written into the
@@ -118,7 +119,7 @@ def aggregate_and_write(
             (k for k in buckets if k[0] == kind),
             key=lambda k: (k[1], k[2], k[3]),
         )
-        with path.open("w", encoding="utf-8", newline="\n") as fh:
+        with lzma.open(path, "wt", encoding="utf-8", newline="\n") as fh:
             fh.write(_HEADER_FMT.format(release=release, date=date, desc=desc))
             fh.write("\t".join(_COLUMN_HEADERS[kind]) + "\n")
             for k in keys:

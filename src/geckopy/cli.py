@@ -12,6 +12,7 @@ Ported from GECKO MATLAB: src/geckomat/utilities/startGECKOproject.m
 from __future__ import annotations
 
 import argparse
+import lzma
 import sys
 from pathlib import Path
 
@@ -101,7 +102,7 @@ def cmd_brenda_refresh(args: argparse.Namespace) -> int:
     for kind, path in paths.items():
         # Each file has a "#" release comment plus a TSV column-header
         # row; both are skipped to report just the data row count.
-        n = sum(1 for _ in path.open("r", encoding="utf-8")) - 2
+        n = sum(1 for _ in lzma.open(path, "rt", encoding="utf-8")) - 2
         print(f"  {path.name}: {n} rows")
     return 0
 
@@ -123,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 
     brenda_parser = sub.add_parser(
         "brenda-refresh",
-        help="Rebuild kcat.tsv / sa.tsv / mw.tsv from the BRENDA bulk JSON",
+        help="Rebuild kcat.tsv.xz / sa.tsv.xz / mw.tsv.xz from the BRENDA bulk JSON",
     )
     brenda_parser.add_argument(
         "--cache-dir", default=str(_DEFAULT_CACHE_DIR),
