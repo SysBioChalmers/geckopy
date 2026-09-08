@@ -1,8 +1,8 @@
 """Download a per-organism UniProt TSV from the UniProt REST API.
 
 Ported from GECKO MATLAB:
-src/geckomat/get_enzyme_data/downloadUniProt.m
-(extracted from loadDatabases.m).
+src/geckomat/get_enzyme_data/loadDatabases.m
+(the UniProt-download branch, extracted into its own module).
 
 Hits ``https://rest.uniprot.org/uniprotkb/stream`` with a query
 built from ``id_type`` + ``uniprot_id`` and writes the resulting

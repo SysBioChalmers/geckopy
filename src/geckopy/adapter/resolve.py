@@ -11,6 +11,8 @@ There are two ways a caller might supply one:
 ``resolve_adapter`` consolidates the "explicit-arg-or-fallback-to-
 ``model.adapter``-or-raise" pattern that 30+ functions duplicated
 inline, with inconsistent error messages.
+
+Ported from GECKO MATLAB: src/geckomat/model_adapter/ModelAdapterManager.m.
 """
 from __future__ import annotations
 

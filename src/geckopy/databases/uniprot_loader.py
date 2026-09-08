@@ -1,6 +1,6 @@
 """Parse uniprot.tsv into a UniprotDB struct.
 
-Ported from GECKO MATLAB: src/geckomat/utilities/loadDatabases.m
+Ported from GECKO MATLAB: src/geckomat/get_enzyme_data/loadDatabases.m
 (the UniProt-parsing branch; the download branch is deferred to a
 separate future module).
 

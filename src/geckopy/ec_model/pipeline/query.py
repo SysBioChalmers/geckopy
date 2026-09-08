@@ -2,6 +2,8 @@
 
 These functions do not mutate the model; they pull subsets of the ec
 data for inspection, reporting, or downstream pipeline use.
+
+Ported from GECKO MATLAB: src/geckomat/change_model/getReactionsFromEnzyme.m.
 """
 from __future__ import annotations
 

@@ -3,8 +3,8 @@
 Used by fuzzy_kcat_matching to find the evolutionarily closest organism
 when an exact match is not available in BRENDA.
 
-Ported from GECKO MATLAB (the inline `KEGG_struct` helper in
-src/geckomat/gather_kcats/fuzzyKcatMatching.m).
+Ported from GECKO MATLAB:
+src/geckomat/gather_kcats/fuzzyKcatMatching.m (the inline `KEGG_struct` helper).
 """
 from __future__ import annotations
 

@@ -9,6 +9,8 @@ matching MATLAB's `makeEcModel.m` exactly. Only pre-GECKO-4 legacy
 files used the reverse-direction convention (`lb=-1000, ub=0`); those
 are normalized to the forward convention on load (see
 `load_ec_model.py`), mirroring MATLAB's `loadEcModel.m`.
+
+Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
 """
 from __future__ import annotations
 
@@ -255,6 +257,9 @@ def set_prot_pool_size(
     sigma: float | None = None,
 ) -> float:
     """Set the upper bound of ``prot_pool_exchange`` (the protein budget).
+
+    Ported from GECKO MATLAB:
+    src/geckomat/change_model/setProtPoolSize.m.
 
     The protein pool exchange represents the cell's total enzyme
     supply. Its upper bound is what limits how much protein the

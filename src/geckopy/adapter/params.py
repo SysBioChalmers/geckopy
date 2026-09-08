@@ -1,4 +1,12 @@
-"""Parameter schemas for ecModel adapters."""
+"""Parameter schemas for ecModel adapters.
+
+``KeggParams``, ``UniprotParams``, ``ComplexParams``, and the core fields
+of ``ModelParameters`` mirror the ``obj.params.*`` fields set in GECKO
+MATLAB's adapter template. ``BayesianParams`` and ``OkpParams`` are
+geckopy-only extensions with no MATLAB equivalent.
+
+Ported from GECKO MATLAB: src/geckomat/model_adapter/adapterTemplate.m.
+"""
 from pathlib import Path
 from typing import Literal, Optional
 
