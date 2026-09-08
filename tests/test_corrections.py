@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from geckopy.kcat_tuning.corrections import (
-    Correction, annotate_from_model, corrections, corrections_tsv,
+    annotate_from_model, corrections, corrections_tsv,
 )
 
 
