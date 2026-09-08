@@ -4,6 +4,12 @@
 
 Enzyme-constrained genome-scale metabolic modelling in Python.
 
+> **Full documentation for both MATLAB GECKO and geckopy — the six-stage
+> protocol, installation, troubleshooting, and complete API reference —
+> lives at [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/).**
+> This README only covers install and a quick orientation; that site is
+> the place to actually learn or look things up.
+
 > **Disambiguation.** This is a new, from-scratch port of the
 > [GECKO Toolbox](https://github.com/SysBioChalmers/GECKO) (MATLAB). It is unrelated to
 > the earlier and separate `geckopy` Python package
