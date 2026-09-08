@@ -1,7 +1,7 @@
 """FBA simulation half of the evotune kcat tuning distance function.
 
 Ported from GECKO MATLAB:
-src/kcat_tuning/Bayesian/abc_max.m (the
+src/geckomat/kcat_sensitivity_analysis/Bayesian/abc_max.m (the
 ``rmsecal`` helper's simulate-and-measure loop). Verified against
 ``develop4``'s current source, not the (superseded, per its own
 ``REVIEW.md``) ``fix/bayesianTuning`` branch.

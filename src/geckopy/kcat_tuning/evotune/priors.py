@@ -1,7 +1,7 @@
 """Source classification and prior widths for evotune kcat tuning.
 
 Ported from GECKO MATLAB:
-src/kcat_tuning/Bayesian/bayesianSensitivityTuning.m
+src/geckomat/kcat_sensitivity_analysis/Bayesian/bayesianSensitivityTuning.m
 (the ``kcatSourceIdx``/``sigma0log`` construction). Verified against
 ``develop4``'s current source.
 """

@@ -12,7 +12,7 @@ rate to the experimental one, pick the sigma that minimises the
 difference.
 
 Ported from GECKO MATLAB:
-src/kcat_tuning/sigmaFitter.m.
+src/geckomat/kcat_sensitivity_analysis/sigmaFitter.m.
 """
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ def fit_sigma(
     The best sigma is re-applied to ``model`` before return.
 
     Ported from GECKO MATLAB:
-    src/kcat_tuning/sigmaFitter.m.
+    src/geckomat/kcat_sensitivity_analysis/sigmaFitter.m.
 
     Parameters
     ----------

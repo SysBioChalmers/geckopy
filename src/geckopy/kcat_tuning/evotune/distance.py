@@ -1,7 +1,7 @@
 """Carbon- and condition-weighted RMSE distance for evotune kcat tuning.
 
 Ported from GECKO MATLAB:
-src/kcat_tuning/Bayesian/abc_max.m (the
+src/geckomat/kcat_sensitivity_analysis/Bayesian/abc_max.m (the
 ``rmsecal`` helper's RMSE half; verified against ``develop4``'s
 current source). :mod:`.simulate` does the FBA half -- this module is
 pure numpy (plus one small model-reading helper for the carbon

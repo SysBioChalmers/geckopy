@@ -20,7 +20,7 @@ rate is ``adapter.params.gr_exp`` (the experimental growth rate
 from the adapter config).
 
 Ported from GECKO MATLAB:
-src/kcat_tuning/sensitivityTuning.m.
+src/geckomat/kcat_sensitivity_analysis/sensitivityTuning.m.
 """
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def sensitivity_tuning(
     7. Re-applies kcat constraints for that single reaction.
 
     Ported from GECKO MATLAB:
-    src/kcat_tuning/sensitivityTuning.m.
+    src/geckomat/kcat_sensitivity_analysis/sensitivityTuning.m.
 
     Parameters
     ----------

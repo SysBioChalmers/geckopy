@@ -1,7 +1,7 @@
 """Load experimental data for evotune (CMA-ES) kcat tuning.
 
 Ported from GECKO MATLAB:
-src/kcat_tuning/Bayesian/loadBayesianData.m.
+src/geckomat/kcat_sensitivity_analysis/Bayesian/loadBayesianData.m.
 
 MATLAB's ``loadBayesianData`` loads ``bayesianFluxData.tsv`` and
 ``bayesianMaxGrowth.tsv`` (renamed here to ``evotuneFluxData.tsv`` and
