@@ -134,11 +134,12 @@ specification and how it differs from the legacy MATLAB / RAVEN format.
 
 geckopy is a function-by-function port: algorithmic fidelity comes
 first, Pythonic idiom second. Each ported source file carries a
-`Ported from GECKO MATLAB: <path>` docstring header. Where the Python
-version intentionally differs (different direction conventions, fixed
-MATLAB bugs, etc.), the divergence is tagged with a `MATLAB-COMPAT:`
-comment in source. The cumulative list of MATLAB-side improvements
-the port surfaced lives in
+`Ported from GECKO MATLAB: <path>` docstring header. For current
+MATLAB ↔ Python behavioural differences, see the
+[MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+on [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/), the
+shared documentation site for both toolboxes. The cumulative list of
+MATLAB-side bugs and rough edges the port surfaced lives in
 [`docs/future_improvements.md`](docs/future_improvements.md).
 
 ## License

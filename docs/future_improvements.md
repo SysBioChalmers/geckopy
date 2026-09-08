@@ -7,10 +7,11 @@ weren't blocking. Three audiences:
   model", "Third-party library gotchas", and "Deferred migrations".
 - **MATLAB GECKO maintainers** — section "MATLAB GECKO changes".
   Each item is a bug or rough edge in MATLAB GECKO that the port
-  spotted while comparing the two implementations side by side.
-  Every item is also flagged with a `MATLAB-COMPAT:` comment in
-  the geckopy source, so `grep -rn "MATLAB-COMPAT:" src/` gives
-  the full list with file references.
+  spotted while comparing the two implementations side by side. For
+  the current, maintained list of MATLAB ↔ Python behavioural
+  differences (broader than just what's tracked here), see the
+  [MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+  on [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/).
 - **anyone hitting a strange dependency bug** — section
   "Third-party library gotchas".
 
@@ -68,32 +69,17 @@ keep an in-flight release on schedule.
   would make every layer consistent. Small effect (only rows
   reported as ranges) — deferred.
 
-- **Drop the git URL from `pyproject.toml`'s raven-toolbox
-  dependency once raven-toolbox publishes to PyPI.** Currently
-  pinned to `raven-toolbox @ git+https://github.com/SysBioChalmers/raven-toolbox.git@main`,
-  which forces an internet round-trip on every install and means
-  no install reproducibility per release. Switch to a plain
-  `raven-toolbox>=<min>` pin (and collapse the README install
-  block to `pip install geckopy`) the moment raven-toolbox is on
-  PyPI.
-
 ## MATLAB GECKO changes
 
 Aimed at MATLAB GECKO maintainers. Each item is something the
 geckopy port found while comparing the two implementations: bugs,
-dead code, unit-comment slip-ups, or unclear behaviour. The
-in-source `MATLAB-COMPAT:` comments in geckopy carry the same
-notes alongside the Python implementation.
+dead code, unit-comment slip-ups, or unclear behaviour.
 
 Notable items:
 
 - Implement gene-cell splitting in the UniProt loader.
 - Apply the `stoicho` column from `customKcats.tsv`, or drop it from
   the schema.
-- Change source-string convention for `setKcatForReactions` to `'manual'`.
-- Make `getReactionsFromEnzyme` case-sensitive.
-- Forbid length-N kcat lists for un-suffixed `rxn_ids` in
-  `setKcatForReactions` (strict matching rule).
 - Rename `getKcatAcrossIsozymes` to `fillKcatsFromIsozymes` — the
   verb `get` is misleading, the function mutates `ec.kcat` in place.
   geckopy renamed its Python counterpart; the MATLAB side is the
@@ -148,7 +134,8 @@ Notable items:
   the docstring's origin ranking implies origin 4 should win. Either
   swap the search order so any-no-subs-kcat is tried before org-SA,
   or update the docstring to match the search order. geckopy
-  replicates the current MATLAB behavior with a MATLAB-COMPAT note.
+  replicates the current MATLAB behavior; see the note in
+  `fuzzy_kcat_matching/_brenda_query.py`.
 - Delete `updateProtPool` from MATLAB GECKO. The function has been
   obsolete since GECKO 3.2.0 (all enzymes, measured and unmeasured,
   draw from the protein pool); its sole runtime behaviour on a

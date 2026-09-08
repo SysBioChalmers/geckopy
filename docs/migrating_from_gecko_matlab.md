@@ -415,10 +415,10 @@ See [kcat_aggregation.md](kcat_aggregation.md).
 The port found and fixed several GECKO 3 bugs (EC-code assignment,
 sigma fitting, standard-kcat subsystem means, duplicate EC codes,
 …); **`[3→4]`** GECKO 4 carries the same fixes, so the two toolboxes
-agree. The full per-function divergence list lives in the in-source
-`MATLAB-COMPAT:` comments
-(`grep -rn "MATLAB-COMPAT:" src/geckopy/`) and in
-[future_improvements.md](future_improvements.md).
+agree. The full per-function divergence list lives in the
+[MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+on gecko-docs.readthedocs.io, plus [future_improvements.md](future_improvements.md)
+for the MATLAB-side items the port surfaced.
 
 ### Available in both (added during the port)
 
@@ -459,10 +459,13 @@ agree. The full per-function divergence list lives in the in-source
 
 ## 9. Where to look when something differs
 
-- Every intentional divergence in geckopy carries a
-  **`MATLAB-COMPAT:`** comment in source. Each ported function's
-  docstring also opens with `Ported from GECKO MATLAB: <path>.` so
-  you can find the exact MATLAB original.
+- Each ported function's docstring opens with
+  `Ported from GECKO MATLAB: <path>.` so you can find the exact
+  MATLAB original.
+- For current MATLAB ↔ Python behavioural differences, see the
+  [MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+  on [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/), the
+  shared documentation site for both toolboxes.
 - MATLAB-side bugs and rough edges the port found are tracked in
   [future_improvements.md](future_improvements.md).
 - For the GECKO 3→4 changes as they apply on the MATLAB side, see
