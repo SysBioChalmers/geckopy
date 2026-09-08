@@ -257,6 +257,51 @@ def test_r_bio_classified_as_knockdown(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Scan floor anchored to biomass-optimal target flux
+# --------------------------------------------------------------------------- #
+
+def test_scan_floor_anchored_to_biomass_optimal_flux(tmp_path):
+    """The scan's floor is the production-target's flux at biomass-optimum,
+    not a fixed fraction of the theoretical maximum: forcing EX_PROD's
+    lower bound to 5 makes that its biomass-optimal flux too (nothing
+    rewards producing more), so the first enforced level must be 5, not
+    raven-toolbox's default floor of target_max/n_steps."""
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    model.reactions.get_by_id("EX_PROD").lower_bound = 5.0
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    assert result.enforced[0] == pytest.approx(5.0)
+
+
+# --------------------------------------------------------------------------- #
+# Candidate set restricted to gene-associated, non-standard reactions
+# --------------------------------------------------------------------------- #
+
+def test_ungated_reaction_excluded_from_targets_and_scan(tmp_path):
+    """EX_PROD itself has no GPR, so even though its flux trivially and
+    perfectly tracks the enforced level, it must not appear as a target
+    or in the reported scan -- matching ecFSEOF.m's restriction to
+    gene-associated, non-standard reactions."""
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    assert "EX_PROD" not in result.scan.index
+    assert "EX_PROD" not in set(result.targets["reaction"])
+
+
+def test_standard_gene_reaction_excluded(tmp_path):
+    """A reaction whose only GPR is the 'standard' placeholder pseudogene
+    (added by assign_standard_kcat for un-annotated reactions) is not a
+    real engineering target and must be excluded, matching ecFSEOF.m."""
+    adapter = _adapter(tmp_path)
+    model = _build_fseof_model(adapter)
+    model.reactions.get_by_id("R_BIO").gene_reaction_rule = "standard"
+    result = ec_fseof(model, "EX_PROD", n_steps=6)
+    assert "R_BIO" not in result.scan.index
+    assert "R_BIO" not in set(result.targets["reaction"])
+
+
+# --------------------------------------------------------------------------- #
 # usage_prot_* filtered out of scan + targets
 # --------------------------------------------------------------------------- #
 

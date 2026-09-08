@@ -193,8 +193,8 @@ def test_standard_kcat_is_median_of_nonzero_existing_kcats(tmp_path):
 # Subsystem-specific kcat
 # --------------------------------------------------------------------------- #
 
-def test_subsystem_mean_used_above_threshold(tmp_path):
-    """A subsystem with >= threshold reactions uses the subsystem mean."""
+def test_subsystem_median_used_above_threshold(tmp_path):
+    """A subsystem with >= threshold reactions uses the subsystem median."""
     adapter = _adapter(tmp_path)
     rxn_specs = []
     for i in range(15):
@@ -223,10 +223,37 @@ def test_subsystem_mean_used_above_threshold(tmp_path):
             r.subsystem = "S"
 
     assign_standard_kcat(model, _uniprot([100.0]), threshold=10)
-    # missing_r should get subsystem mean = 2.0, NOT the global median of 2.0.
-    # (Same value here, but the path is "subsystem mean".)
+    # missing_r should get the subsystem median = 2.0, NOT the global
+    # median of 2.0. (Same value here, but the path is "subsystem median".)
     missing_idx = model.ec.rxns.index("missing_r")
     assert model.ec.kcat[missing_idx] == pytest.approx(2.0)
+
+
+def test_subsystem_value_is_median_not_mean(tmp_path):
+    """Subsystem kcat is the median of its real kcats, not the mean:
+    [1, 1, 100] has mean 34 but median 1."""
+    adapter = _adapter(tmp_path)
+    rxn_specs = [
+        ("sub_r0", [("M0a", -1.0, "M0a", "c"), ("M0b", 1.0, "M0b", "c")], "g0"),
+        ("sub_r1", [("M1a", -1.0, "M1a", "c"), ("M1b", 1.0, "M1b", "c")], "g1"),
+        ("sub_r2", [("M2a", -1.0, "M2a", "c"), ("M2b", 1.0, "M2b", "c")], "g2"),
+        ("missing_r", [("Xa", -1.0, "Xa", "c"), ("Xb", 1.0, "Xb", "c")], None),
+    ]
+    model = _build_model_with_pool(
+        adapter, rxn_specs,
+        ec_rxns=["sub_r0", "sub_r1", "sub_r2"],
+        ec_kcats=[1.0, 1.0, 100.0],
+        ec_genes=["g0", "g1", "g2"],
+        ec_enzymes=["g0", "g1", "g2"],
+        ec_mws=[100.0, 100.0, 100.0],
+        rxn_to_ec_genes=[[0], [1], [2]],
+    )
+    for rid in ("sub_r0", "sub_r1", "sub_r2", "missing_r"):
+        model.reactions.get_by_id(rid).subsystem = "S"
+
+    assign_standard_kcat(model, _uniprot([100.0]), threshold=3)
+    missing_idx = model.ec.rxns.index("missing_r")
+    assert model.ec.kcat[missing_idx] == pytest.approx(1.0)
 
 
 def test_subsystem_below_threshold_falls_back_to_standard(tmp_path):
@@ -257,6 +284,38 @@ def test_subsystem_below_threshold_falls_back_to_standard(tmp_path):
     # Only 3 reactions in subsystem S, threshold=10 -> standardKcat = median(100, 100, 100) = 100.
     missing_idx = model.ec.rxns.index("missing_r")
     assert model.ec.kcat[missing_idx] == pytest.approx(100.0)
+
+
+def test_subsystem_threshold_and_median_ignore_nan_kcats(tmp_path):
+    """A NaN kcat sitting in a subsystem must not count toward that
+    subsystem's threshold eligibility or poison its median: sub_r0 has a
+    real kcat (100), sub_r1's kcat is still NaN (unset), and other_r (a
+    different subsystem) has a real kcat (50) so the global standard kcat
+    is a distinct value (75). With threshold=2, only sub_r0's kcat is
+    real, so missing_r (no GPR, same subsystem) must fall back to the
+    global standard kcat, not a NaN-poisoned subsystem median."""
+    adapter = _adapter(tmp_path)
+    rxn_specs = [
+        ("sub_r0", [("M0a", -1.0, "M0a", "c"), ("M0b", 1.0, "M0b", "c")], "g0"),
+        ("sub_r1", [("M1a", -1.0, "M1a", "c"), ("M1b", 1.0, "M1b", "c")], "g1"),
+        ("other_r", [("M2a", -1.0, "M2a", "c"), ("M2b", 1.0, "M2b", "c")], "g2"),
+        ("missing_r", [("Xa", -1.0, "Xa", "c"), ("Xb", 1.0, "Xb", "c")], None),
+    ]
+    model = _build_model_with_pool(
+        adapter, rxn_specs,
+        ec_rxns=["sub_r0", "sub_r1", "other_r"],
+        ec_kcats=[100.0, np.nan, 50.0],
+        ec_genes=["g0", "g1", "g2"],
+        ec_enzymes=["g0", "g1", "g2"],
+        ec_mws=[100.0, 100.0, 100.0],
+        rxn_to_ec_genes=[[0], [1], [2]],
+    )
+    for rid in ("sub_r0", "sub_r1", "missing_r"):
+        model.reactions.get_by_id(rid).subsystem = "S"
+
+    assign_standard_kcat(model, _uniprot([100.0]), threshold=2)
+    missing_idx = model.ec.rxns.index("missing_r")
+    assert model.ec.kcat[missing_idx] == pytest.approx(75.0)
 
 
 # --------------------------------------------------------------------------- #
@@ -500,6 +559,24 @@ def test_fill_zero_kcat_replaces_zeros_with_standard(tmp_path):
     assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
     r2_idx = model.ec.rxns.index("r2")
     assert model.ec.kcat[r2_idx] == pytest.approx(10.0)  # standard_kcat
+    assert model.ec.source[r2_idx] == "standard"
+
+
+def test_fill_zero_kcat_also_replaces_nan(tmp_path):
+    """fill_zero_kcat treats an existing NaN kcat as unset, same as 0."""
+    adapter = _adapter(tmp_path)
+    model = _build_model_with_pool(
+        adapter,
+        [("r1", [("A", -1.0, "alpha", "c"), ("B", 1.0, "beta", "c")], "g1"),
+         ("r2", [("B", -1.0, "beta", "c"), ("C", 1.0, "gamma", "c")], "g2")],
+        ec_rxns=["r1", "r2"],
+        ec_kcats=[10.0, np.nan],
+        ec_genes=["g1", "g2"], ec_enzymes=["g1", "g2"], ec_mws=[100.0, 100.0],
+        rxn_to_ec_genes=[[0], [1]],
+    )
+    assign_standard_kcat(model, _uniprot([100.0]), fill_zero_kcat=True)
+    r2_idx = model.ec.rxns.index("r2")
+    assert model.ec.kcat[r2_idx] == pytest.approx(10.0)
     assert model.ec.source[r2_idx] == "standard"
 
 
