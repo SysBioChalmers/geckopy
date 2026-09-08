@@ -41,10 +41,10 @@ class FluxData:
     exch_rxn_ids
         Exchange reaction IDs in the model, matching the columns of
         ``exch_fluxes`` and ``exch_mets``.
-    bayesian_rmse_weight
-        Optional per-condition weights for the Bayesian-kcat-tuning
+    evotune_rmse_weight
+        Optional per-condition weights for the evotune-kcat-tuning
         RMSE term. ``None`` if the source file did not have the
-        ``bayesianRMSEweight`` column.
+        ``evotuneRMSEweight`` column.
     source
         Optional per-condition free-text describing where the data
         came from. ``None`` if the source file did not have a
@@ -63,7 +63,7 @@ class FluxData:
     )
     exch_mets: list[str] = field(default_factory=list)
     exch_rxn_ids: list[str] = field(default_factory=list)
-    bayesian_rmse_weight: Optional[np.ndarray] = None
+    evotune_rmse_weight: Optional[np.ndarray] = None
     source: Optional[list[str]] = None
 
 
@@ -78,11 +78,11 @@ def load_flux_data(path: str | Path) -> FluxData:
 
     Optional extra columns (in any position):
 
-    * ``bayesianRMSEweight`` (float): weights for Bayesian kcat tuning.
+    * ``evotuneRMSEweight`` (float): weights for evotune kcat tuning.
     * ``source`` (str): free-text describing the data origin.
 
     Both columns are dropped from the matrix and surfaced on the
-    returned ``FluxData`` as ``bayesian_rmse_weight`` and ``source``.
+    returned ``FluxData`` as ``evotune_rmse_weight`` and ``source``.
 
     Ported from GECKO MATLAB:
     src/geckomat/utilities/loadFluxData.m.
@@ -126,19 +126,19 @@ def load_flux_data(path: str | Path) -> FluxData:
 
     # Pull out optional columns first; collect indices to drop.
     optional_indices: list[int] = []
-    bayesian_idx = _index_of(header, "bayesianRMSEweight")
+    tuning_idx = _index_of(header, "evotuneRMSEweight")
     source_idx = _index_of(header, "source")
 
-    bayesian_weights: Optional[np.ndarray] = None
+    tuning_weights: Optional[np.ndarray] = None
     source_values: Optional[list[str]] = None
 
-    if bayesian_idx is not None:
-        bayesian_weights = np.array(
-            [_parse_float(r[bayesian_idx]) if bayesian_idx < len(r) else float("nan")
+    if tuning_idx is not None:
+        tuning_weights = np.array(
+            [_parse_float(r[tuning_idx]) if tuning_idx < len(r) else float("nan")
              for r in data],
             dtype=float,
         )
-        optional_indices.append(bayesian_idx)
+        optional_indices.append(tuning_idx)
     if source_idx is not None:
         source_values = [
             r[source_idx] if source_idx < len(r) else "" for r in data
@@ -182,7 +182,7 @@ def load_flux_data(path: str | Path) -> FluxData:
         exch_fluxes=exch_fluxes,
         exch_mets=exch_mets,
         exch_rxn_ids=exch_rxn_ids,
-        bayesian_rmse_weight=bayesian_weights,
+        evotune_rmse_weight=tuning_weights,
         source=source_values,
     )
 

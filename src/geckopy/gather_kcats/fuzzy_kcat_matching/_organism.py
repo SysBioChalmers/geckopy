@@ -4,6 +4,8 @@ The model organism's name (from the adapter's ``params.org_name``)
 is looked up in the KEGG phylogenetic-distance struct. When BRENDA
 has no exact organism match, the matcher uses this struct to keep
 the rows for the phylogenetically closest organism(s).
+
+Ported from GECKO MATLAB: src/geckomat/gather_kcats/fuzzyKcatMatching.m.
 """
 from __future__ import annotations
 

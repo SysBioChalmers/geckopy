@@ -1,4 +1,14 @@
-"""Command-line interface for geckopy."""
+"""Command-line interface for geckopy.
+
+The `init` subcommand ports GECKO MATLAB's project-scaffolding logic
+(`src/geckomat/utilities/startGECKOproject.m`): create the project
+folder tree and write out a template adapter. The `brenda-refresh`,
+`uniprot-download`, and `kegg-download` subcommands are new tooling
+with no MATLAB equivalent.
+
+Ported from GECKO MATLAB: src/geckomat/utilities/startGECKOproject.m
+(the `init` subcommand only).
+"""
 from __future__ import annotations
 
 import argparse
@@ -49,9 +59,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     for sub in ("data", "models", "output"):
         (folder / sub).mkdir(exist_ok=True)
 
-    toml_text = generate_template_toml(
-        advanced=args.advanced, project_name=folder.name
-    )
+    toml_text = generate_template_toml(project_name=folder.name)
     (folder / "model_adapter.toml").write_text(toml_text)
     (folder / "adapter.py").write_text(ADAPTER_PY_STUB)
 
@@ -110,10 +118,6 @@ def main(argv: list[str] | None = None) -> int:
     init_parser.add_argument(
         "folder",
         help="Target folder (will be created; must not already exist or be empty)",
-    )
-    init_parser.add_argument(
-        "--advanced", action="store_true",
-        help="Include advanced sections (Bayesian kcat-tuning hyperparameters)",
     )
     init_parser.set_defaults(func=cmd_init)
 

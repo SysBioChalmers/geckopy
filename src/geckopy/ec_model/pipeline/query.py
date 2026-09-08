@@ -2,6 +2,8 @@
 
 These functions do not mutate the model; they pull subsets of the ec
 data for inspection, reporting, or downstream pipeline use.
+
+Ported from GECKO MATLAB: src/geckomat/change_model/getReactionsFromEnzyme.m.
 """
 from __future__ import annotations
 
@@ -45,10 +47,9 @@ def get_reactions_from_enzyme(
     ------
     ValueError
         If ``protein_id`` is not found in ec.enzymes (case-insensitive).
-        MATLAB-COMPAT: MATLAB's getReactionsFromEnzyme returns five empty
-        outputs instead of raising on an unmatched proteinId. Raising here
-        is a deliberate Python-API choice, not a parity gap to close --
-        see raven-gecko-parity#70.
+        A deliberate Python-API choice, not a parity gap to close: MATLAB's
+        ``getReactionsFromEnzyme`` returns five empty outputs instead of
+        raising on an unmatched proteinId. See raven-gecko-parity#70.
     """
     protein_id_lower = protein_id.lower()
     try:

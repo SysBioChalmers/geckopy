@@ -118,8 +118,8 @@ In MATLAB you write an adapter `classdef` and register a default with
 folder with a `model_adapter.toml`, loaded via
 `ModelAdapter.from_folder(path)`. The TOML is parsed into pydantic
 models (`ModelParameters` with nested `kegg`, `uniprot`, `okp`,
-`bayesian`, …) and validated strictly, so config typos are caught
-early.
+`evotune`, …) and validated strictly, so config typos are
+caught early.
 
 There is **no global default adapter**. Functions read `model.adapter`
 or take an explicit `adapter=` argument. Where a MATLAB function takes
@@ -263,7 +263,7 @@ Each row maps a MATLAB function to its geckopy equivalent. The
 | `loadBRENDAdata`      | `load_brenda_data`                                                     | **`[3→4]`** Reads the new TSV schema (`kcat.tsv` / `sa.tsv` / `mw.tsv`, bare EC codes, plain organism names, `references` column). **`[Py]`** Ships **both** `max` and `median` per (ec, substrate, organism) triple — see [kcat_aggregation.md](kcat_aggregation.md). Returns a `BrendaData` dataclass. |
 | `loadDatabases`       | *(implicit)*                                                           | **`[Py]`** No combined-load entry-point; users call `load_brenda_data`, `load_uniprot_tsv`, etc. directly.                                                                                                                                |
 
-### 5.4 Kcat sensitivity analysis (`src/geckomat/kcat_sensitivity_analysis`)
+### 5.4 Kcat sensitivity analysis and tuning (`src/kcat_tuning`)
 
 | MATLAB                                | geckopy                                                            | Notes                                                                                                                                                                                                                            |
 | ------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -271,7 +271,8 @@ Each row maps a MATLAB function to its geckopy equivalent. The
 | `sigmaFitter`                         | `fit_sigma`                                                        | **`[3→4]`** Returns the model fitted to the **optimal** sigma (GECKO 3 returned the last trial value, sigma = 1.0). **`[Py]`** Renamed; `sigma_fitter` kept as deprecated alias. Returns a `SigmaFitterResult`.                  |
 | `findMaxValue`                        | `find_max_value`                                                   | **`[3→4]`** Wildcard EC branch matches real codes.                                                                                                                                                                                |
 | `truncateValues`                      | `truncate_values`                                                  | —                                                                                                                                                                                                                                |
-| `bayesianSensitivityTuning` + helpers | *(not ported)*                                                     | Planned. See `docs/internal/bayesian_tuning_plan.md` for the design notes.                                                                                                                                                       |
+| *(none)*                              | `kcat_tuning.evotune.cmaes_kcat_tuning` + helpers      | **`[Py]`** Fits kcats to experimental flux/growth data with CMA-ES rather than MATLAB's ABC-SMC `bayesianSensitivityTuning`; see [evotune_kcat_tuning.md](evotune_kcat_tuning.md) and [cmaes_vs_abc_smc.md](cmaes_vs_abc_smc.md). |
+| `bayesianSensitivityTuning` + helpers | *(not ported)*                                                     | MATLAB's ABC-SMC sampler itself is not ported; geckopy uses CMA-ES instead (see above).                                                                                                                                          |
 
 ### 5.5 Limit proteins (`src/geckomat/limit_proteins`)
 
@@ -414,10 +415,10 @@ See [kcat_aggregation.md](kcat_aggregation.md).
 The port found and fixed several GECKO 3 bugs (EC-code assignment,
 sigma fitting, standard-kcat subsystem means, duplicate EC codes,
 …); **`[3→4]`** GECKO 4 carries the same fixes, so the two toolboxes
-agree. The full per-function divergence list lives in the in-source
-`MATLAB-COMPAT:` comments
-(`grep -rn "MATLAB-COMPAT:" src/geckopy/`) and in
-[future_improvements.md](future_improvements.md).
+agree. The full per-function divergence list lives in the
+[MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+on gecko-docs.readthedocs.io, plus [future_improvements.md](future_improvements.md)
+for the MATLAB-side items the port surfaced.
 
 ### Available in both (added during the port)
 
@@ -447,9 +448,10 @@ agree. The full per-function divergence list lives in the in-source
 
 ### Not yet in geckopy
 
-- **Bayesian (ABC-SMC) kcat tuning**
-  (`bayesianSensitivityTuning` + helpers). Tracked in
-  `docs/internal/bayesian_tuning_plan.md`.
+- **ABC-SMC kcat tuning** (`bayesianSensitivityTuning` + helpers).
+  geckopy fits kcats to experimental data with CMA-ES instead; see
+  [evotune_kcat_tuning.md](evotune_kcat_tuning.md) and
+  [cmaes_vs_abc_smc.md](cmaes_vs_abc_smc.md).
 - **`plotEcFVA`** — Python users plot from the `ec_fva` DataFrame
   with matplotlib / seaborn directly.
 
@@ -457,10 +459,13 @@ agree. The full per-function divergence list lives in the in-source
 
 ## 9. Where to look when something differs
 
-- Every intentional divergence in geckopy carries a
-  **`MATLAB-COMPAT:`** comment in source. Each ported function's
-  docstring also opens with `Ported from GECKO MATLAB: <path>.` so
-  you can find the exact MATLAB original.
+- Each ported function's docstring opens with
+  `Ported from GECKO MATLAB: <path>.` so you can find the exact
+  MATLAB original.
+- For current MATLAB ↔ Python behavioural differences, see the
+  [MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+  on [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/), the
+  shared documentation site for both toolboxes.
 - MATLAB-side bugs and rough edges the port found are tracked in
   [future_improvements.md](future_improvements.md).
 - For the GECKO 3→4 changes as they apply on the MATLAB side, see

@@ -34,7 +34,7 @@ def format_kcat_source(
     ``"brenda (wc=0, origin=1)"``. Rows without fuzzy metadata (an exact
     OKP database hit or a prediction) render as the bare token, so the
     bracket's presence and the wildcard/origin numbers give downstream
-    consumers (notably Bayesian sensitivity tuning) a quick read on how
+    consumers (notably evotune kcat tuning) a quick read on how
     uncertain the kcat is.
     """
     token = normalize_source(source)

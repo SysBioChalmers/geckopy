@@ -26,3 +26,35 @@ reviewed = true
 
 [complex]
 taxonomic_id = 559292
+
+[evotune]
+sigma0_log_default = 0.3
+rmse_threshold = 0.2
+# CMA-ES generations. 212 approximates a 6800-evaluation budget at
+# cmaes_kcat_tuning's own default population size for ~110 free
+# parameters; a different tunable-set size changes that population
+# size and so the evaluation count this actually spends.
+max_generations = 212
+# Weights the max-growth term: the eight max-growth conditions count double
+# against the 33 flux conditions, which are 30 parts glucose. MATLAB weights
+# the flux term with this field instead, so its maxGrowthWeight = 2 is 0.5 here.
+max_growth_weight = 2.0
+
+# Trust tiers, least to most trusted. This model labels predicted kcats
+# "OpenKineticsPredictor"; match_okp additionally catches models that label
+# them with the predictor method name (OkpParams.method) instead.
+[evotune.source_groups.okp]
+sources = ["OpenKineticsPredictor"]
+match_okp = true
+
+[evotune.source_groups.brenda]
+sources = ["brenda"]
+
+[evotune.source_groups.custom]
+sources = ["custom"]
+
+[evotune.sigma0_log_source]
+okp = 0.25
+brenda = 0.2
+custom = 0.1
+

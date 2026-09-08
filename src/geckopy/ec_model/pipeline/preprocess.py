@@ -3,6 +3,8 @@
 Corresponds to stages 1 to 4 of makeEcModel in GECKO MATLAB. These
 stages do not touch the `ec` substructure; they only reshape the
 underlying model so subsequent stages operate on a clean irreversible form.
+
+Ported from GECKO MATLAB: src/geckomat/change_model/makeEcModel.m.
 """
 from __future__ import annotations
 from typing import TYPE_CHECKING

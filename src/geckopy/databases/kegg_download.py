@@ -1,8 +1,8 @@
 """Download organism-specific protein information from KEGG REST.
 
 Ported from GECKO MATLAB:
-src/geckomat/get_enzyme_data/downloadKEGG.m
-(extracted from loadDatabases.m).
+src/geckomat/get_enzyme_data/loadDatabases.m
+(the KEGG-download branch, extracted into its own module).
 
 Two REST endpoints are used:
 
