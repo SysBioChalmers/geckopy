@@ -1,4 +1,4 @@
-# geckopy - under active development
+# geckopy
 
 [![tests](https://github.com/SysBioChalmers/geckopy/actions/workflows/test.yml/badge.svg)](https://github.com/SysBioChalmers/geckopy/actions/workflows/test.yml)
 
@@ -23,27 +23,36 @@ adds those limits to the network.
 geckopy is a Python port of the [GECKO Toolbox](https://github.com/SysBioChalmers/GECKO)
 (MATLAB). It builds on [cobrapy](https://github.com/opencobra/cobrapy) for
 the standard modelling layer, then layers GECKO's enzyme-constraint machinery
-on top. It fetches kcat values from BRENDA, predicts them with DLKcat,
-applies custom curations, and integrates proteomics measurements.
+on top: it fetches kcat values from BRENDA, predicts them with DLKcat, tunes
+them against experimental growth/flux data with CMA-ES, applies custom
+curations, and integrates proteomics measurements.
 
 > **Status: beta (`4.0.0b1`).** All the MATLAB GECKO 3.2.5 functions used in
-> the standard ecModel build are ported, plus CMA-ES-based kcat tuning
-> against experimental data. The yeast-GEM tutorial runs end-to-end.
-> geckopy's version tracks the GECKO project's own toolbox-generation
-> numbering (MATLAB GECKO 1–3, geckopy = 4.x), not a semantic-versioning
-> API-stability claim.
+> the standard ecModel build are ported, and the yeast-GEM tutorial runs
+> end-to-end. geckopy's version number tracks the GECKO project's own
+> toolbox-generation numbering (MATLAB GECKO 1–3, geckopy = 4.x), rather than
+> making a semantic-versioning API-stability claim.
 
 ## Install
+
+geckopy depends on [raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox)
+(the Python port of the RAVEN Toolbox). Both are currently pre-releases on
+PyPI, so a plain `pip install geckopy` won't find anything — `--pre` is
+required:
 
 ```bash
 pip install --pre geckopy
 ```
 
-geckopy is currently published as a pre-release, so `--pre` (or an exact
-pin, e.g. `geckopy==4.0.0b1`) is required until the `4.0.0` final release —
-plain `pip install geckopy` won't pick it up before then.
-[raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox) (the Python
-port of the RAVEN Toolbox) is pulled in automatically.
+`raven-toolbox` doesn't need to be named separately: geckopy's own dependency
+on it already specifies `>=3.0.0b1`, and a specifier that names a pre-release
+opts pip into matching pre-releases for that package too, `--pre` or not. To
+pin the exact versions this was written against instead of "whatever's
+newest," name both explicitly:
+
+```bash
+pip install raven-toolbox==3.0.0b1 geckopy==4.0.0b1
+```
 
 Optional extras:
 
@@ -102,6 +111,10 @@ proteomics integration, and Crabtree-effect simulation) is in
 [`tutorials/full_ecModel/protocol.py`](tutorials/full_ecModel/protocol.py).
 That script reproduces the MATLAB GECKO Nature Protocols tutorial in
 Python, step by step, and is the easiest way to see geckopy in action.
+
+Fitting kcats against measured growth rates and exchange fluxes (rather
+than looking them up) is a separate workflow, `geckopy.kcat_tuning.evotune`
+— see [`docs/evotune_kcat_tuning.md`](docs/evotune_kcat_tuning.md).
 
 ## On-disk format
 
