@@ -308,7 +308,10 @@ def test_cmaes_tuning_n_proc_matches_serial(tmp_path):
     parallel = _run(2)
 
     assert np.array_equal(serial.new_kcat, parallel.new_kcat)
-    assert serial.rmse_trace == parallel.rmse_trace
+    # rmse_trace values are summed in a different order across worker
+    # processes than in-process, so they can differ by a couple of ULPs
+    # even when the optimization itself (new_kcat) is bit-identical.
+    assert np.allclose(serial.rmse_trace, parallel.rmse_trace, rtol=1e-9, atol=1e-12)
     assert serial.n_generations == parallel.n_generations
 
 
