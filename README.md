@@ -35,15 +35,14 @@ curations, and integrates proteomics measurements.
 
 > **Status: beta (`4.0.0b1`).** All the MATLAB GECKO 3.2.5 functions used in
 > the standard ecModel build are ported, and the yeast-GEM tutorial runs
-> end-to-end. geckopy's version number tracks the GECKO project's own
-> toolbox-generation numbering (MATLAB GECKO 1–3, geckopy = 4.x), rather than
-> making a semantic-versioning API-stability claim.
+> end-to-end. geckopy's major and minor version number (x.y.-) will follow
+> the MATLAB GECKO numbering, justifying a jump to version 4.
 
 ## Install
 
 geckopy depends on [raven-toolbox](https://github.com/SysBioChalmers/raven-toolbox)
 (the Python port of the RAVEN Toolbox). Both are currently pre-releases on
-PyPI, so a plain `pip install geckopy` won't find anything — `--pre` is
+PyPI, so a plain `pip install geckopy` will install the wrong version — `--pre` is
 required:
 
 ```bash
@@ -141,13 +140,8 @@ specification and how it differs from the legacy MATLAB / RAVEN format.
 geckopy is a function-by-function port: algorithmic fidelity comes
 first, Pythonic idiom second. Each ported source file carries a
 `Ported from GECKO MATLAB: <path>` docstring header. For current
-MATLAB ↔ Python behavioural differences, see the
-[MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
-on [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/), the
-shared documentation site for both toolboxes. The cumulative list of
-MATLAB-side bugs and rough edges the port surfaced lives in
-[`docs/future_improvements.md`](docs/future_improvements.md).
-
+MATLAB ↔ Python behavioural differences, see [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/), the
+shared documentation site for both toolboxes.
 ## License
 
 MIT. See [`LICENSE`](LICENSE), or the `license` field of
