@@ -12,6 +12,7 @@ Ported from GECKO MATLAB: src/geckomat/utilities/startGECKOproject.m
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -71,9 +72,19 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-# Default to a project-relative location (resolved against the current
-# working directory) rather than the install tree, which may be read-only.
-_DEFAULT_CACHE_DIR = Path("data") / "brenda" / "_cache"
+# The raw BRENDA bulk-JSON download is a disposable, re-fetchable, multi-
+# hundred-MB cache -- same OS user-cache-dir convention as raven-toolbox's
+# own binary cache (raven_toolbox.binaries._cache_dir), not the project
+# directory or the install tree (which may be read-only).
+def _default_cache_dir() -> Path:
+    base = os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")
+    return Path(base) / "geckopy" / "brenda"
+
+
+_DEFAULT_CACHE_DIR = _default_cache_dir()
+# The aggregated TSVs are a chosen project output, not a cache -- default to
+# a project-relative location (resolved against the current working
+# directory).
 _DEFAULT_OUT_DIR = Path("data") / "brenda"
 
 
