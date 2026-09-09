@@ -31,8 +31,8 @@ Scope and limits
   which also runs them off stored files.
 - The geckopy fixture files under ``examples/ecTestGEM/`` are identical to
   GECKO's ``test/unit_tests/ecTestGEM/`` (modulo line endings and the
-  BRENDA text files, which geckopy stores as the ``kcat.tsv.xz`` /
-  ``mw.tsv.xz`` / ``sa.tsv.xz`` TSVs its loader reads).
+  BRENDA text files, which geckopy stores as the ``kcat.tsv`` / ``mw.tsv`` /
+  ``sa.tsv`` TSVs its loader reads).
 
 MATLAB reference: GECKO commit c9101f17.
 """

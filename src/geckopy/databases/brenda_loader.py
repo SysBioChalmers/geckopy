@@ -3,20 +3,27 @@
 Ported from GECKO MATLAB:
 src/geckomat/get_enzyme_data/loadBRENDAdata.m.
 
-Three xz-compressed tab-delimited files are read from the BRENDA folder:
+Three tab-delimited files are read from the BRENDA folder:
 
-    kcat.tsv.xz   kcat values (wide: one row per triple, both max and
-                  median across the raw measurements that fed into it)
-    sa.tsv.xz     specific activities (same wide shape)
-    mw.tsv.xz     molecular weights (single value per (ec, organism))
+    kcat.tsv   kcat values (wide: one row per triple, both max and
+               median across the raw measurements that fed into it)
+    sa.tsv     specific activities (same wide shape)
+    mw.tsv     molecular weights (single value per (ec, organism))
 
-The files are produced by the ``geckopy brenda-refresh`` CLI. kcat and
-SA have seven tab-delimited columns: EC number, substrate (``*`` for
-SA), organism, value-max, value-median, n (number of raw measurements
-aggregated), references (semicolon-joined PMIDs or ``*``). MW has six
-columns (single value, no aggregation choice). A ``#`` header line
-carries the BRENDA release version; the line after it is the TSV
-column header (also skipped).
+The files are produced by the ``geckopy brenda-refresh`` CLI and kept
+plain text in the repo. The published wheel ships xz-compressed
+copies instead (``kcat.tsv.xz`` etc. -- a build hook compresses them;
+see ``hatch_build.py``), since they're most of the installed
+package's size; this loader looks for the ``.xz`` variant first and
+falls back to plain text, so it works against either an installed
+wheel or a git checkout without caring which.
+
+kcat and SA have seven tab-delimited columns: EC number, substrate
+(``*`` for SA), organism, value-max, value-median, n (number of raw
+measurements aggregated), references (semicolon-joined PMIDs or
+``*``). MW has six columns (single value, no aggregation choice). A
+``#`` header line carries the BRENDA release version; the line after
+it is the TSV column header (also skipped).
 """
 from __future__ import annotations
 
@@ -24,7 +31,7 @@ import logging
 import lzma
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import IO, Literal
 
 import pandas as pd
 
@@ -94,7 +101,7 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     Ported from GECKO MATLAB:
     src/geckomat/get_enzyme_data/loadBRENDAdata.m.
 
-    Reads ``kcat.tsv.xz``, ``sa.tsv.xz``, ``mw.tsv.xz`` from ``folder``, splits
+    Reads ``kcat.tsv``, ``sa.tsv``, ``mw.tsv`` from ``folder``, splits
     the kcat and SA wide tables into per-aggregation views, applies the
     GECKO unit conversions, and joins SA + MW on EC + organism
     (case-insensitive) to produce derived kcat tables.
@@ -136,9 +143,9 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
         If any of the three expected files is missing.
     """
     folder = Path(folder)
-    kcat_path = folder / "kcat.tsv.xz"
-    sa_path = folder / "sa.tsv.xz"
-    mw_path = folder / "mw.tsv.xz"
+    kcat_path = _resolve_brenda_path(folder, "kcat")
+    sa_path = _resolve_brenda_path(folder, "sa")
+    mw_path = _resolve_brenda_path(folder, "mw")
 
     for p in (kcat_path, sa_path, mw_path):
         if not p.is_file():
@@ -175,6 +182,24 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
 # File parsing
 # --------------------------------------------------------------------------- #
 
+
+def _resolve_brenda_path(folder: Path, stem: str) -> Path:
+    """Prefer ``<stem>.tsv.xz`` (installed wheel); fall back to
+    ``<stem>.tsv`` (git checkout, or freshly written by brenda-refresh)."""
+    xz_path = folder / f"{stem}.tsv.xz"
+    if xz_path.is_file():
+        return xz_path
+    return folder / f"{stem}.tsv"
+
+
+def _open_brenda_file(path: Path) -> IO[str]:
+    """Open a BRENDA TSV for text reading, transparently decompressing
+    ``.xz`` files."""
+    if path.suffix == ".xz":
+        return lzma.open(path, "rt", encoding="utf-8")
+    return open(path, "r", encoding="utf-8")
+
+
 # Wide-format file layout (kcat / SA): 7 columns
 # 0=ec_code, 1=substrate, 2=organism, 3=value_max, 4=value_median,
 # 5=n, 6=refs
@@ -200,7 +225,7 @@ def _load_wide_table(
     max_col, med_col = value_columns
     rows: list[tuple[str, str, str, float, float, int]] = []
     invalid = 0
-    with lzma.open(path, "rt", encoding="utf-8") as f:
+    with _open_brenda_file(path) as f:
         for line_no, line in enumerate(f, start=1):
             line = line.rstrip("\n")
             if not line or line.startswith("#"):
@@ -248,7 +273,7 @@ def _load_mw_table(path: Path, *, value_scale: float) -> pd.DataFrame:
     """
     rows: list[tuple[str, str, float]] = []
     invalid = 0
-    with lzma.open(path, "rt", encoding="utf-8") as f:
+    with _open_brenda_file(path) as f:
         for line_no, line in enumerate(f, start=1):
             line = line.rstrip("\n")
             if not line or line.startswith("#"):

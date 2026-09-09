@@ -8,7 +8,6 @@ triple) and one row per (ec, organism) for MW.
 from __future__ import annotations
 
 import hashlib
-import lzma
 from pathlib import Path
 
 import pytest
@@ -21,8 +20,7 @@ FIXTURE = Path(__file__).parent / "data" / "brenda_minimal.json"
 
 def _read_tsv(path: Path) -> tuple[str, list[str], list[list[str]]]:
     """Return (release-comment line, column-header tokens, data rows)."""
-    with lzma.open(path, "rt", encoding="utf-8") as f:
-        text = f.read()
+    text = path.read_text(encoding="utf-8")
     lines = [ln for ln in text.split("\n") if ln]
     comment = lines[0]
     header = lines[1].split("\t")
@@ -46,9 +44,9 @@ def test_three_files_written(written):
 
 
 def test_filenames_are_neutral(written):
-    assert written["kcat"].name == "kcat.tsv.xz"
-    assert written["sa"].name == "sa.tsv.xz"
-    assert written["mw"].name == "mw.tsv.xz"
+    assert written["kcat"].name == "kcat.tsv"
+    assert written["sa"].name == "sa.tsv"
+    assert written["mw"].name == "mw.tsv"
 
 
 def test_comment_line_format(written):
@@ -153,16 +151,15 @@ def test_byte_identical_across_runs(tmp_path):
     d2 = tmp_path / "run2"
     aggregate_and_write(rows1, d1, release="2026.1", date="2026-05-18")
     aggregate_and_write(rows1, d2, release="2026.1", date="2026-05-18")
-    for name in ("kcat.tsv.xz", "sa.tsv.xz", "mw.tsv.xz"):
+    for name in ("kcat.tsv", "sa.tsv", "mw.tsv"):
         h1 = hashlib.sha256((d1 / name).read_bytes()).hexdigest()
         h2 = hashlib.sha256((d2 / name).read_bytes()).hexdigest()
         assert h1 == h2, f"{name} not byte-identical across runs"
 
 
 def test_lf_line_endings(written):
-    with lzma.open(written["kcat"], "rt", encoding="utf-8") as f:
-        text = f.read()
-    assert "\r\n" not in text, "CRLF line ending detected"
+    raw = written["kcat"].read_bytes()
+    assert b"\r\n" not in raw, "CRLF line ending detected"
 
 
 def test_sa_substrate_column_is_star(written):

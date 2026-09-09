@@ -39,11 +39,9 @@ def _write_brenda_files(
     kcat_text = (_COMMENT_KCAT + _HEADER_KCAT + kcat) if with_headers else kcat
     sa_text = (_COMMENT_SA + _HEADER_SA + sa) if with_headers else sa
     mw_text = (_COMMENT_MW + _HEADER_MW + mw) if with_headers else mw
-    for name, text in (
-        ("kcat.tsv.xz", kcat_text), ("sa.tsv.xz", sa_text), ("mw.tsv.xz", mw_text),
-    ):
-        with lzma.open(folder / name, "wt", encoding="utf-8") as f:
-            f.write(text)
+    (folder / "kcat.tsv").write_text(kcat_text, encoding="utf-8")
+    (folder / "sa.tsv").write_text(sa_text, encoding="utf-8")
+    (folder / "mw.tsv").write_text(mw_text, encoding="utf-8")
 
 
 # --------------------------------------------------------------------------- #
@@ -95,29 +93,68 @@ def test_all_empty_files_yield_empty_dataframes(tmp_path):
 # --------------------------------------------------------------------------- #
 
 def test_missing_kcat_file_raises(tmp_path):
-    (tmp_path / "sa.tsv.xz").write_text("")
-    (tmp_path / "mw.tsv.xz").write_text("")
-    with pytest.raises(FileNotFoundError, match="kcat.tsv.xz"):
+    (tmp_path / "sa.tsv").write_text("")
+    (tmp_path / "mw.tsv").write_text("")
+    with pytest.raises(FileNotFoundError, match="kcat.tsv"):
         load_brenda_data(tmp_path)
 
 
 def test_missing_sa_file_raises(tmp_path):
-    (tmp_path / "kcat.tsv.xz").write_text("")
-    (tmp_path / "mw.tsv.xz").write_text("")
-    with pytest.raises(FileNotFoundError, match="sa.tsv.xz"):
+    (tmp_path / "kcat.tsv").write_text("")
+    (tmp_path / "mw.tsv").write_text("")
+    with pytest.raises(FileNotFoundError, match="sa.tsv"):
         load_brenda_data(tmp_path)
 
 
 def test_missing_mw_file_raises(tmp_path):
-    (tmp_path / "kcat.tsv.xz").write_text("")
-    (tmp_path / "sa.tsv.xz").write_text("")
-    with pytest.raises(FileNotFoundError, match="mw.tsv.xz"):
+    (tmp_path / "kcat.tsv").write_text("")
+    (tmp_path / "sa.tsv").write_text("")
+    with pytest.raises(FileNotFoundError, match="mw.tsv"):
         load_brenda_data(tmp_path)
 
 
 def test_missing_folder_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_brenda_data(tmp_path / "does_not_exist")
+
+
+# --------------------------------------------------------------------------- #
+# xz-compressed variant (what the published wheel ships)
+# --------------------------------------------------------------------------- #
+
+def test_reads_xz_compressed_files(tmp_path):
+    """A folder with only the .tsv.xz variant (as an installed wheel
+    ships) loads exactly like plain text."""
+    kcat_text = (
+        _COMMENT_KCAT + _HEADER_KCAT
+        + "1.1.1.1\tm1\torg1\t10\t4\t3\t*\n"
+    )
+    with lzma.open(tmp_path / "kcat.tsv.xz", "wt", encoding="utf-8") as f:
+        f.write(kcat_text)
+    with lzma.open(tmp_path / "sa.tsv.xz", "wt", encoding="utf-8") as f:
+        f.write(_COMMENT_SA + _HEADER_SA)
+    with lzma.open(tmp_path / "mw.tsv.xz", "wt", encoding="utf-8") as f:
+        f.write(_COMMENT_MW + _HEADER_MW)
+
+    result = load_brenda_data(tmp_path)
+    assert result.kcat_for("max").iloc[0]["kcat"] == 10.0
+    assert result.kcat_for("median").iloc[0]["kcat"] == 4.0
+
+
+def test_prefers_xz_over_plain_text_when_both_present(tmp_path):
+    """If a folder somehow has both, the .xz variant wins -- it's what
+    an installed wheel ships alongside a stale plain-text leftover."""
+    _write_brenda_files(
+        tmp_path, kcat="1.1.1.1\tm1\torg1\t99\t99\t1\t*\n",
+    )
+    with lzma.open(tmp_path / "kcat.tsv.xz", "wt", encoding="utf-8") as f:
+        f.write(
+            _COMMENT_KCAT + _HEADER_KCAT
+            + "1.1.1.1\tm1\torg1\t1\t1\t1\t*\n"
+        )
+
+    result = load_brenda_data(tmp_path)
+    assert result.kcat_for("max").iloc[0]["kcat"] == 1.0
 
 
 # --------------------------------------------------------------------------- #

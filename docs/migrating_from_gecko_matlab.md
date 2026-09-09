@@ -260,7 +260,7 @@ Each row maps a MATLAB function to its geckopy equivalent. The
 | `getECfromDatabase`   | `fill_eccodes_from_database`                                           | **`[3→4]`** Can consult KEGG when UniProt's EC field is empty or ends with `-` (opt-in via `kegg_db=`). **`[Py]`** Renamed; `get_ec_from_database` kept as deprecated alias.                                                              |
 | `getECfromGEM`        | `fill_eccodes_from_gem`                                                | **`[3→4]`** Actually assigns EC codes (the GECKO 3 validation regex silently discarded every EC string). **`[Py]`** Renamed; `get_ec_from_gem` kept as deprecated alias.                                                                  |
 | `getECstring`         | *(internal helper inside `fill_eccodes_*`)*                            | Not exposed as a public entry-point — folded into the EC-fill helpers.                                                                                                                                                                     |
-| `loadBRENDAdata`      | `load_brenda_data`                                                     | **`[3→4]`** Reads the new TSV schema (`kcat.tsv.xz` / `sa.tsv.xz` / `mw.tsv.xz`, bare EC codes, plain organism names, `references` column). **`[Py]`** Ships **both** `max` and `median` per (ec, substrate, organism) triple — see [kcat_aggregation.md](kcat_aggregation.md). Returns a `BrendaData` dataclass. |
+| `loadBRENDAdata`      | `load_brenda_data`                                                     | **`[3→4]`** Reads the new TSV schema (`kcat.tsv` / `sa.tsv` / `mw.tsv`, bare EC codes, plain organism names, `references` column). **`[Py]`** Ships **both** `max` and `median` per (ec, substrate, organism) triple — see [kcat_aggregation.md](kcat_aggregation.md). Returns a `BrendaData` dataclass. |
 | `loadDatabases`       | *(implicit)*                                                           | **`[Py]`** No combined-load entry-point; users call `load_brenda_data`, `load_uniprot_tsv`, etc. directly.                                                                                                                                |
 
 ### 5.4 Kcat sensitivity analysis and tuning (`src/kcat_tuning`)
@@ -396,13 +396,10 @@ empty-ecModel guard, provenance injection). See
 [raven_integration.md](raven_integration.md) for the split, and
 [yaml_format.md](yaml_format.md) for the schema reference.
 
-**BRENDA data files.** **`[3→4]`** GECKO 4 / geckopy ship the same
-schema (refreshed from the BRENDA bulk JSON; bare EC numbers, plain
-organism names, `#` release header, `references` column) as
-`kcat.tsv` / `sa.tsv` / `mw.tsv` on the MATLAB side; geckopy stores
-the identical content xz-compressed (`kcat.tsv.xz` / `sa.tsv.xz` /
-`mw.tsv.xz`) to keep the PyPI package small. GECKO 3's `max_KCAT.txt`
-etc. are no longer
+**BRENDA data files.** **`[3→4]`** GECKO 4 / geckopy ship
+`kcat.tsv` / `sa.tsv` / `mw.tsv` (refreshed from the BRENDA bulk
+JSON; bare EC numbers, plain organism names, `#` release header,
+`references` column). GECKO 3's `max_KCAT.txt` etc. are no longer
 read. **`[Py]`** geckopy additionally ships both **max** and
 **median** rows per (ec, substrate, organism) triple in one file,
 distinguished by an `aggregation` column. The default

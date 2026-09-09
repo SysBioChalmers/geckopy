@@ -13,6 +13,3 @@
 *.txt   text eol=lf
 *.xml   text eol=lf
 *.md    text eol=lf
-
-# Compressed binary data -- never text-normalize.
-*.xz    binary
