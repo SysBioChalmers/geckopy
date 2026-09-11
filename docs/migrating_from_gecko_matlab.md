@@ -343,11 +343,14 @@ from geckopy import (
     fuzzy_kcat_matching, apply_kcat_list, apply_kcat_constraints,
     set_prot_pool_size, save_ec_model,
 )
+from geckopy.databases import download_phyl_dist
 
 adapter   = ModelAdapter.from_folder("my_model")
 model     = make_ec_model(load_conventional_gem(adapter), adapter)
 brenda    = load_brenda_data(adapter.get_brenda_db_folder())
-phyl_dist = load_phyl_dist(adapter.params.path / "data" / "PhylDist.mat")
+if not adapter.get_phyl_dist_path().is_file():
+    download_phyl_dist(adapter.get_phyl_dist_path())       # RAVEN's keggPhylDist.mat
+phyl_dist = load_phyl_dist(adapter.get_phyl_dist_path())
 kcats     = fuzzy_kcat_matching(model, brenda, phyl_dist)   # returns a DataFrame
 apply_kcat_list(model, kcats)                               # mutates in place
 apply_kcat_constraints(model)
@@ -360,11 +363,14 @@ Three patterns to notice:
 1. **Loaders are explicit.** Where MATLAB's `fuzzyKcatMatching`
    re-loads BRENDA + phyl-dist internally on every call, geckopy
    passes the pre-loaded `BrendaData` + `PhylDist` so you control
-   when (and from where) they load.
+   when (and from where) they load. MATLAB reads the phylogenetic
+   distances from RAVEN's `keggPhylDist.mat`; `download_phyl_dist`
+   fetches that same file into the project's `data/` folder.
 2. **`apply_kcat_list` mutates.** No reassignment to `model`.
 3. **`save_ec_model` is YAML-only.** SBML ecModel I/O was dropped in
-   `0.1.0a2`; conventional starting GEMs still load from SBML via
-   `cobra.io.read_sbml_model` (called inside `load_conventional_gem`).
+   `0.1.0a2`; `load_conventional_gem` still reads starting GEMs from
+   SBML (`cobra.io.read_sbml_model`) as well as from RAVEN/cobra YAML
+   (raven-toolbox's `read_yaml_model`).
 
 The full tutorial (yeast-GEM, end-to-end, ~600 lines including kcat
 curation + proteomics + sensitivity tuning) lives at

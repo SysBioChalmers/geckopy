@@ -127,8 +127,8 @@ class EvotuneParams(BaseModel):
         description=(
             "Weight on the max-growth RMSE against the flux RMSE: "
             "(rmse_flux + w * rmse_max_growth) / (w + 1). At 2 the "
-            "max-growth conditions count double. MATLAB weights the "
-            "flux term instead, so pass 0.5 to reproduce its 2."
+            "max-growth conditions count double. Same weighting as "
+            "MATLAB's maxGrowthWeight."
         ),
     )
 
@@ -146,8 +146,7 @@ class EvotuneParams(BaseModel):
     # kcats, and only 69% of their large corrections even agree on the
     # direction of the change. At 0.03 the worst disagreement is 5.7x,
     # every correction beyond two-fold agrees in direction, and the fit
-    # gives up 4.6%. Set 0 to score on RMSE alone; a run reproducing
-    # MATLAB, which has no such term, must do so.
+    # gives up 4.6%. Set 0 to score on RMSE alone.
     prior_penalty_weight: float = Field(
         default=0.03,
         description=(
