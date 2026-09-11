@@ -6,7 +6,9 @@ without any GECKO additions. This is the model that
 
 This helper reads that file from the path set in the adapter
 (``adapter.params.conv_gem``). The extension picks the reader:
-``.yml``/``.yaml`` via ``load_yaml_model``, ``.json`` via
+``.yml``/``.yaml`` via raven-toolbox's ``read_yaml_model`` (which,
+unlike cobra's reader, keeps RAVEN fields such as per-reaction
+``eccodes``), ``.json`` via
 ``load_json_model``, ``.mat`` via ``load_matlab_model``, and
 anything else via ``read_sbml_model``.
 
@@ -19,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cobra
+from raven_toolbox.io import read_yaml_model
 
 if TYPE_CHECKING:
     from ..adapter import ModelAdapter
@@ -56,7 +59,7 @@ def load_conventional_gem(adapter: "ModelAdapter") -> cobra.Model:
         raise FileNotFoundError(f"conv_gem file not found: {path}")
     suffix = path.suffix.lower()
     if suffix in _YAML_SUFFIXES:
-        return cobra.io.load_yaml_model(str(path))
+        return read_yaml_model(path)
     if suffix in _JSON_SUFFIXES:
         return cobra.io.load_json_model(str(path))
     if suffix in _MAT_SUFFIXES:

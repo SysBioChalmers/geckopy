@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+* `fuzzy_kcat_matching`: when a reaction has several EC numbers, the EC
+  matched at the earliest-tried level now wins, using the same search order
+  as within one EC (a correct-organism specific activity, origin 5, before
+  any-organism any-substrate kcat, origin 4), matching `fuzzyKcatMatching.m`.
+  Previously the lower origin number won. This changes the kcat of
+  multi-EC reactions; on the yeast-GEM tutorial the pre-tuning growth rate
+  goes from 0.0013 to 0.12 /hour, in line with MATLAB.
+* `load_conventional_gem` reads YAML with raven-toolbox's `read_yaml_model`
+  instead of `cobra.io.load_yaml_model`, so RAVEN fields such as
+  per-reaction `eccodes` are kept (`fill_eccodes_from_gem` found no EC
+  numbers on RAVEN-format GEMs).
+* New: `geckopy.databases.download_phyl_dist` fetches the KEGG
+  phylogenetic-distance file distributed with RAVEN.
+* full_ecModel tutorial: downloads the full `PhylDist.mat` instead of
+  shipping a two-organism stub, uses KEGG as fallback for EC numbers, uses
+  `merge_kcats`, runs ecFVA (STEP 73-75, skipped on GLPK) and the light
+  versus full comparison (STEP 76-77, new `code/plot_light_vs_full.py`).
+* Docs: `max_growth_weight` is weighted as in MATLAB's `maxGrowthWeight`
+  (the previous description said otherwise).
+
 ## 4.0.0b1 — 2026-09-08
 
 Version realignment: geckopy numbering will be aligned with GECKO (MATLAB),
