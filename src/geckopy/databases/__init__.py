@@ -11,7 +11,7 @@ from .kegg_download import download_kegg
 from .kegg_loader import KeggDB, load_kegg_tsv
 from .mw import calculate_mw
 from .pax_db_loader import ProtData, load_pax_db
-from .phyl_dist import PhylDist, load_phyl_dist
+from .phyl_dist import PhylDist, download_phyl_dist, load_phyl_dist
 from .prot_data_loader import load_prot_data
 from .pubchem import find_met_smiles
 from .uniprot_download import download_uniprot
@@ -28,6 +28,7 @@ __all__ = [
     "UniprotDB",
     "calculate_mw",
     "download_kegg",
+    "download_phyl_dist",
     "download_uniprot",
     "find_met_smiles",
     "get_complex_data",
