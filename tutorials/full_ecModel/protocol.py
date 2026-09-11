@@ -40,13 +40,14 @@ from geckopy import (
     load_phyl_dist,
     load_uniprot_tsv,
     make_ec_model,
-    merge_dlkcat_and_fuzzy_kcats,
+    merge_kcats,
     read_dlkcat_output,
     save_ec_model,
     set_kcat_for_reactions,
     set_prot_pool_size,
     write_dlkcat_input,
 )
+from geckopy.databases import download_phyl_dist, load_kegg_tsv
 
 # %% [markdown]
 # ## STAGE 0: Preparation
@@ -112,25 +113,30 @@ save_ec_model(ec_model, "ecYeastGEM_stage1.yml", adapter=adapter)
 
 # %% [markdown]
 # **STEP 16-17** Gather EC numbers via `fill_eccodes_from_database`,
-# which overwrites `ec.eccodes` with UniProt-derived values for
+# which overwrites `ec.eccodes` with database-derived values for
 # every reaction, since yeast-GEM's own EC annotations are not
-# thoroughly curated.
+# thoroughly curated. UniProt is queried first; KEGG (`data/kegg.tsv`)
+# fills reactions where UniProt has no EC number or only an
+# incomplete one (ending in `-`).
 
 # %%
-fill_eccodes_from_database(ec_model, uniprot_db)
+kegg_db = load_kegg_tsv(params.path / "data" / "kegg.tsv")
+fill_eccodes_from_database(ec_model, uniprot_db, kegg_db=kegg_db)
 
 # %% [markdown]
 # **STEP 18-19** Gather kcat values from BRENDA via fuzzy matching.
-# The BRENDA dumps live at `data/max_KCAT.txt` etc.; PhylDist.mat is
-# the KEGG phylogenetic-distance file.
-#
-# Note: the PhylDist.mat shipped here is a stub. For
-# better-than-tutorial results, build a real PhylDist via KEGG (a
-# `get_phyl_dist` function is on the porting roadmap).
+# The BRENDA data ships with geckopy. When BRENDA has no value for
+# S. cerevisiae itself, the value of the phylogenetically closest
+# organism is used, based on the KEGG phylogenetic distances in
+# `data/PhylDist.mat`. That file (~5 MB) is downloaded from RAVEN on
+# the first run.
 
 # %%
 brenda = load_brenda_data(adapter.get_brenda_db_folder())
-phyl_dist = load_phyl_dist(params.path / "data" / "PhylDist.mat")
+phyl_dist_path = adapter.get_phyl_dist_path()
+if not phyl_dist_path.is_file():
+    download_phyl_dist(phyl_dist_path)
+phyl_dist = load_phyl_dist(phyl_dist_path)
 kcat_list_fuzzy = fuzzy_kcat_matching(ec_model, brenda, phyl_dist)
 print(f"Fuzzy BRENDA matches: {len(kcat_list_fuzzy)} rows")
 
@@ -169,11 +175,17 @@ kcat_list_dlkcat = read_dlkcat_output(
 print(f"DLKcat predictions: {len(kcat_list_dlkcat)} rows")
 
 # %% [markdown]
-# **STEP 26** Combine kcat from BRENDA and DLKcat.
+# **STEP 26** Combine kcat from BRENDA and DLKcat. For each reaction,
+# the first source in the priority list that has a kcat is used:
+# BRENDA matches without EC wildcard and with origin up to 6
+# (`database_top`), then DLKcat, then any remaining BRENDA match
+# (`database_bottom`). See `help(merge_kcats)` for the tier
+# definitions.
 
 # %%
-kcat_list_merged = merge_dlkcat_and_fuzzy_kcats(
-    kcat_list_dlkcat, kcat_list_fuzzy,
+kcat_list_merged = merge_kcats(
+    kcat_list_fuzzy, kcat_list_dlkcat,
+    source_priority=["database_top", "dlkcat", "database_bottom"],
 )
 
 # %% [markdown]
@@ -258,12 +270,24 @@ print(f"Tuned {len(tuning_result.rxns)} kcats; "
       f"final growth rate: {final_growth:.4f}")
 
 # %% [markdown]
-# Note: `bayesianSensitivityTuning` (the ABC-SMC variant introduced
-# in GECKO 3.3.0) is not ported; geckopy fits kcats to experimental
-# data with CMA-ES instead (see docs/evotune_kcat_tuning.md),
-# not wired into this protocol walkthrough. The MATLAB tutorial also
-# skips it here; the maintained ecYeastGEM in the yeast-GEM repository
-# uses it instead.
+# Besides step-wise sensitivity tuning, kcats can be fitted to
+# experimental growth rates and exchange fluxes with CMA-ES
+# (`geckopy.kcat_tuning.evotune`, installed with the `evotune` extra;
+# see docs/evotune_kcat_tuning.md):
+#
+# ```python
+# from geckopy.kcat_tuning.evotune import (
+#     cmaes_kcat_tuning, screen_kcat_leverage, select_tunable_mask,
+# )
+# screen = screen_kcat_leverage(ec_model)
+# mask = select_tunable_mask(ec_model, screen)
+# result = cmaes_kcat_tuning(ec_model, tunable_mask=mask)
+# ```
+#
+# Its hyperparameters are set in the `[evotune]` section of
+# `model_adapter.toml`, but each model may need its own tuning of
+# them. As in the MATLAB tutorial, it is not run here; the maintained
+# ecYeastGEM in the yeast-GEM repository is tuned this way.
 
 # %% [markdown]
 # **STEP 45-51** Curate kcat values based on the tuning result.
@@ -508,72 +532,89 @@ print(f"Mapped fluxes shape: {mapped.mapped_flux.shape}; "
       f"conv model reactions: {len(conv_model.reactions)}")
 
 # %% [markdown]
-# **STEP 73-75 (deferred)** Three-way FVA across bare GEM,
-# full ecModel, and ecModel + proteomics integration is the
-# original MATLAB step. With the default open-source solver (GLPK)
-# this takes well over an hour on yeast-GEM-sized models: ~4000
-# canonical reactions x 3 models x 2 LPs each. The code below is
-# kept commented out; rerun once a faster solver (Gurobi or CPLEX)
-# is configured via `ec_model.solver = "gurobi"`. The `plot_ec_fva`
-# helper in `code/plot_ec_fva.py` is already in place to render
-# the CDF comparison once FVA results are available.
-#
-# ```python
-# from geckopy.utilities import ec_fva
-#
-# model_bare = load_conventional_gem(adapter)
-# model_bare.adapter = adapter
-# ec_model_bare = load_ec_model("ecYeastGEM.yml", adapter=adapter)
-#
-# # Cap target growth at what the proteomics-constrained model can
-# # reach, and apply the same exchange constraints to all three.
-# flux_data.gr_rate[0] = 0.088
-# for m in (model_bare, ec_model_bare, ecModelProt):
-#     apply_flux_data_constraints(
-#         m, flux_data,
-#         condition=0, max_min_growth="max", loose_strict_flux="loose",
-#     )
-#
-# fva_bare = ec_fva(ec_model_bare, model_bare)
-# fva_full = ec_fva(ec_model_bare, model_bare)
-# fva_prot = ec_fva(ecModelProt, model_bare)
-#
-# import pandas as pd
-# fva_all = pd.DataFrame({
-#     "rxn_id": fva_bare.index,
-#     "minFlux_bare": fva_bare["min_flux"].values,
-#     "maxFlux_bare": fva_bare["max_flux"].values,
-#     "minFlux_ec": fva_full["min_flux"].values,
-#     "maxFlux_ec": fva_full["max_flux"].values,
-#     "minFlux_ecProt": fva_prot["min_flux"].values,
-#     "maxFlux_ecProt": fva_prot["max_flux"].values,
-# })
-# fva_all.to_csv(output_dir / "ecFVA.tsv", sep="\t", index=False)
-#
-# import numpy as np
-# min_flux_mat = np.column_stack([
-#     fva_bare["min_flux"].values,
-#     fva_full["min_flux"].values,
-#     fva_prot["min_flux"].values,
-# ])
-# max_flux_mat = np.column_stack([
-#     fva_bare["max_flux"].values,
-#     fva_full["max_flux"].values,
-#     fva_prot["max_flux"].values,
-# ])
-# plot_ec_fva(
-#     min_flux_mat, max_flux_mat,
-#     labels=["bare GEM", "ecModel", "ecModel + proteomics"],
-#     save_path=output_dir / "ecFVA.pdf",
-# )
-# ```
+# **STEP 73-75** Perform (ec)FVA on the starting GEM, the ecModel,
+# and the ecModel with proteomics integration, all under the same
+# exchange flux constraints. `ec_fva` maps each ecModel's variability
+# back onto the starting GEM's reactions, so the three results line
+# up row by row. This is two LPs per reaction per model; with Gurobi
+# or CPLEX it takes a few minutes, with GLPK well over an hour, so it
+# is skipped on GLPK (set `cobra.Configuration().solver = "gurobi"`,
+# or another commercial solver, to run it).
+
+# %%
+import pandas as pd
+
+from geckopy.utilities import ec_fva
+
+fva_solver = cobra.Configuration().solver.__name__.rsplit(".", 1)[-1]
+if fva_solver.startswith("glpk"):
+    print("STEP 73-75 skipped: ec_fva is too slow with GLPK.")
+else:
+    model_fva = load_conventional_gem(adapter)
+    model_fva.adapter = adapter
+    ec_model_fva = load_ec_model("ecYeastGEM.yml", adapter=adapter)
+
+    # The proteomics-constrained model reaches at most 0.088 /hour, so
+    # use that as target growth rate for all three models.
+    flux_data.gr_rate[0] = 0.088
+    for m in (model_fva, ec_model_fva, ecModelProt):
+        apply_flux_data_constraints(
+            m, flux_data,
+            condition=0, max_min_growth="max", loose_strict_flux="loose",
+        )
+
+    fva = {
+        "GEM": ec_fva(model_fva, model_fva),
+        "ecModel": ec_fva(ec_model_fva, model_fva),
+        "ecModel + proteomics": ec_fva(ecModelProt, model_fva),
+    }
+
+    fva_all = pd.DataFrame({
+        "rxn_id": [r.id for r in model_fva.reactions],
+        "rxn_name": [r.name for r in model_fva.reactions],
+    })
+    for label, col in zip(fva, ("", "ec-", "ecP-")):
+        fva_all[f"{col}minFlux"] = fva[label]["min_flux"].values
+        fva_all[f"{col}maxFlux"] = fva[label]["max_flux"].values
+    fva_all.to_csv(output_dir / "ecFVA.tsv", sep="\t", index=False)
+
+    plot_ec_fva(
+        np.column_stack([r["min_flux"].values for r in fva.values()]),
+        np.column_stack([r["max_flux"].values for r in fva.values()]),
+        labels=list(fva),
+        save_path=output_dir / "ecFVA.pdf",
+    )
 
 # %% [markdown]
-# **STEP 76-77 skipped:** light vs full ecModel comparison
-# requires the light variant of `make_ec_model`, which is not yet
-# ported (the existing code path raises `NotImplementedError` for
-# `gecko_light=True`).
-#
+# **STEP 76-77** Compare light and full ecModels. For a fair
+# comparison, `plot_light_vs_full` (in `code/`) builds a light and a
+# full ecModel from yeast-GEM with only BRENDA kcats and no tuning,
+# and compares their flux distributions at maximum growth rate.
+
+# %%
+from plot_light_vs_full import plot_light_vs_full  # noqa: E402
+
+flux_light, flux_full = plot_light_vs_full(
+    load_conventional_gem(adapter), adapter,
+    uniprot_db=uniprot_db, brenda=brenda, phyl_dist=phyl_dist,
+    save_path=output_dir / "lightVSfull.pdf",
+)
+
+# %% [markdown]
+# The ratio between the two flux distributions shows which reactions
+# carry a flux that deviates more than 0.1% between the light and
+# full ecModel.
+
+# %%
+with np.errstate(divide="ignore", invalid="ignore"):
+    flux_ratio = flux_full / flux_light
+changed_flux = np.abs(flux_ratio - 1) > 0.001
+print(f"{int(changed_flux.sum())} reactions carry a different flux:")
+for rxn, changed in zip(conv_model.reactions, changed_flux):
+    if changed:
+        print(f"  {rxn.id}: {rxn.name}")
+
+# %% [markdown]
 # **STEP 78-79 skipped:** these refer to the
 # `tutorials/light_ecModel` protocol which is out of scope for
 # this tutorial.
