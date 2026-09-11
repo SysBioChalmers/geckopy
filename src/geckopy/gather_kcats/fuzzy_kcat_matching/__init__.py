@@ -25,6 +25,7 @@ import pandas as pd
 
 from ._brenda_query import (
     NO_MATCH_WC,
+    SEARCH_RANK,
     build_ec_indices,
     find_ec_rows,
     iterative_match_one_ec,
@@ -109,8 +110,9 @@ def fuzzy_kcat_matching(
        specificity that wildcards already discard).
 
     Across the multiple EC tokens of one reaction, the best match is
-    chosen by minimum wildcard count, then minimum origin (best output
-    rank), then maximum kcat.
+    chosen by minimum wildcard count, then the earliest-tried level in
+    the order above (so org + SA, origin 5, beats any organism + any
+    substrate + KCAT, origin 4), then maximum kcat.
 
     The model's organism is read from
     ``model.adapter.params.org_name``. When BRENDA has no exact
@@ -277,9 +279,9 @@ def fuzzy_kcat_matching(
 
         min_wc = min(r[2] for r in matched)
         at_min_wc = [r for r in matched if r[2] == min_wc]
-        min_origin = min(r[1] for r in at_min_wc)
-        at_min_origin = [r for r in at_min_wc if r[1] == min_origin]
-        best = max(at_min_origin, key=lambda r: r[0])
+        min_rank = min(SEARCH_RANK[r[1]] for r in at_min_wc)
+        at_min_rank = [r for r in at_min_wc if SEARCH_RANK[r[1]] == min_rank]
+        best = max(at_min_rank, key=lambda r: r[0])
 
         out_kcats.append(best[0])
         out_wcs.append(best[2])

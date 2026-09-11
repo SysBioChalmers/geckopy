@@ -53,6 +53,13 @@ SEARCH_LEVELS: list[tuple[bool, bool, bool, int]] = [
     (False, False, True,  6),
 ]
 
+# Position of each output origin in SEARCH_LEVELS. Selection across the EC
+# tokens of one reaction compares matches by this rank, so a token matched
+# at an earlier-tried level beats one matched later, as within one token.
+SEARCH_RANK: dict[int, int] = {
+    origin: rank for rank, (*_, origin) in enumerate(SEARCH_LEVELS)
+}
+
 
 def build_ec_indices(table: pd.DataFrame) -> dict[str, np.ndarray]:
     """Group BRENDA table row indices by lowercased ``ec_code``."""

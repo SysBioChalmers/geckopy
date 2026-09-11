@@ -134,7 +134,9 @@ Notable items:
   the docstring's origin ranking implies origin 4 should win. Either
   swap the search order so any-no-subs-kcat is tried before org-SA,
   or update the docstring to match the search order. geckopy
-  replicates the current MATLAB behavior; see the note in
+  replicates the current MATLAB behavior, both within one EC number
+  and when selecting among the EC numbers of one reaction; see
+  `SEARCH_LEVELS` and `SEARCH_RANK` in
   `fuzzy_kcat_matching/_brenda_query.py`.
 - Delete `updateProtPool` from MATLAB GECKO. The function has been
   obsolete since GECKO 3.2.0 (all enzymes, measured and unmeasured,
