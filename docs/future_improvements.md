@@ -10,7 +10,7 @@ weren't blocking. Three audiences:
   spotted while comparing the two implementations side by side. For
   the current, maintained list of MATLAB ↔ Python behavioural
   differences (broader than just what's tracked here), see the
-  [MATLAB ↔ Python translation guide](https://gecko-docs.readthedocs.io/en/latest/api/translation/)
+  [GECKO vs. geckopy](https://gecko-docs.readthedocs.io/en/latest/gecko-to-geckopy.html) page
   on [gecko-docs.readthedocs.io](https://gecko-docs.readthedocs.io/).
 - **anyone hitting a strange dependency bug** — section
   "Third-party library gotchas".
