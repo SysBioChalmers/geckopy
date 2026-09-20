@@ -42,6 +42,24 @@ _PROT_PATTERN = re.compile(r"^prot_")
 _FIRST_LINE_PATTERN = re.compile(r"^(\S*)\n")
 
 
+def met_smiles(metabolite) -> str:
+    """The metabolite's SMILES, whatever shape its annotation is in.
+
+    cobra stores an annotation value as the object it was assigned, and
+    returns a *list* for a model read back from a file: a metabolite
+    annotated in memory by :func:`find_met_smiles` carries ``"CCO"``,
+    and the same metabolite after a save/load round trip carries
+    ``["CCO"]``. Readers that assume a string get a list that compares
+    equal to nothing and is not hashable.
+
+    Returns the first non-empty entry, or ``""`` when there is none.
+    """
+    value = metabolite.annotation.get("smiles", "")
+    if isinstance(value, (list, tuple, set)):
+        return next((str(v) for v in value if v), "")
+    return str(value) if value else ""
+
+
 def find_met_smiles(
     model: "cobra.Model",
     *,

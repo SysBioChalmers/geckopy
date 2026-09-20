@@ -13,7 +13,7 @@ from .mw import calculate_mw
 from .pax_db_loader import ProtData, load_pax_db
 from .phyl_dist import PhylDist, download_phyl_dist, load_phyl_dist
 from .prot_data_loader import load_prot_data
-from .pubchem import find_met_smiles
+from .pubchem import find_met_smiles, met_smiles
 from .uniprot_download import download_uniprot
 from .uniprot_loader import UniprotDB, load_uniprot_tsv
 
@@ -41,4 +41,5 @@ __all__ = [
     "load_phyl_dist",
     "load_prot_data",
     "load_uniprot_tsv",
+    "met_smiles",
 ]

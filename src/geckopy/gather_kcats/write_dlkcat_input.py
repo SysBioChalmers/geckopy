@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from ..databases.pubchem import met_smiles as read_met_smiles
+
 if TYPE_CHECKING:
     from ..databases.dlkcat_ignore_lists import DLKcatIgnoreLists
     from ..ec_model.ec_model import EcModel
@@ -64,7 +66,8 @@ def write_dlkcat_input(
       SMILES are dropped from the output. Otherwise the SMILES is
       written as the literal string ``"None"``.
 
-    SMILES are read from each metabolite's ``annotation['smiles']``.
+    SMILES are read from each metabolite's ``annotation['smiles']``,
+    which cobra returns as a list for a model loaded from a file.
 
     Parameters
     ----------
@@ -194,7 +197,7 @@ def extract_enzyme_substrate_pairs(
     metabolites = list(model.metabolites)
     met_ids = [m.id for m in metabolites]
     met_names = [m.name for m in metabolites]
-    met_smiles = [m.annotation.get("smiles", "") for m in metabolites]
+    met_smiles = [read_met_smiles(m) for m in metabolites]
     met_normalized = [_normalize(n) for n in met_names]
 
     # Build the ignore mask.

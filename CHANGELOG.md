@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+* Fix: `write_dlkcat_input` and the OpenKineticsPredictor input builder
+  raised `TypeError: cannot use 'list' as a set element` on any model that
+  had been saved and reloaded. cobra returns an annotation value as a list
+  for a model read from a file, so `annotation['smiles']` is `"CCO"` on a
+  model annotated in memory by `find_met_smiles` and `["CCO"]` on the same
+  model after a round trip, and the ignore-list check hashed it. The new
+  `databases.met_smiles` reads either shape; a reloaded model now writes
+  the same DLKcat input as a freshly annotated one.
+
 * `fuzzy_kcat_matching`: when a reaction has several EC numbers, the EC
   matched at the earliest-tried level now wins, using the same search order
   as within one EC (a correct-organism specific activity, origin 5, before
