@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ...databases.pubchem import met_smiles as read_met_smiles
+
 if TYPE_CHECKING:
     from ...ec_model.ec_model import EcModel
 
@@ -88,7 +90,7 @@ def parse_okp_output(
     seq_to_proteins = _index(model.ec.sequence)
     smiles_to_mets: dict[str, list] = {}
     for met in model.metabolites:
-        smiles = met.annotation.get("smiles", "")
+        smiles = read_met_smiles(met)
         if smiles:
             smiles_to_mets.setdefault(smiles, []).append(met)
 

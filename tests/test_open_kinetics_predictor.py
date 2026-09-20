@@ -169,6 +169,22 @@ def test_parse_maps_back_to_ec_rxns():
     assert set(df["rxn_id"]) == {"r1", "r2"}
 
 
+def test_parse_maps_back_from_a_reloaded_models_list_valued_smiles():
+    """cobra returns annotation values as lists for a model read from a
+    file, which is what `save_ec_model` + `load_ec_model` produces. The
+    SMILES index has to key on the string inside the list, not on the
+    list itself."""
+    model = _ec_model()
+    for met in model.metabolites:
+        if met.annotation.get("smiles"):
+            met.annotation["smiles"] = [met.annotation["smiles"]]
+
+    df = parse_okp_output(model, _OKP_RESULT_CSV)
+    assert len(df) == 3
+    assert set(df["rxn_id"]) == {"r1", "r2"}
+    assert all(s in (["ala"], ["beta"]) for s in df["substrates"])
+
+
 def test_parse_source_provenance_stripped_and_verbatim():
     df = parse_okp_output(_ec_model(), _OKP_RESULT_CSV)
     sources = set(df["source"])

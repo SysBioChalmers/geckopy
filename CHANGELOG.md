@@ -10,6 +10,9 @@
   model after a round trip, and the ignore-list check hashed it. The new
   `databases.met_smiles` reads either shape; a reloaded model now writes
   the same DLKcat input as a freshly annotated one.
+* Fix: `parse_okp_output` raised `TypeError: cannot use 'list' as a dict
+  key` on a reloaded model for the same reason, when indexing metabolites
+  by their SMILES annotation to map each prediction back to an `ec.rxn`.
 
 * `fuzzy_kcat_matching`: when a reaction has several EC numbers, the EC
   matched at the earliest-tried level now wins, using the same search order
