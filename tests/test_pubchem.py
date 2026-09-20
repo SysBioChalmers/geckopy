@@ -343,3 +343,28 @@ def test_logs_summary_after_run(monkeypatch, tmp_path, caplog):
         find_met_smiles(model, cache_path=cache_path)
 
     assert "SMILES found for" in caplog.text
+
+
+# --------------------------------------------------------------------------- #
+# Reading the annotation back
+# --------------------------------------------------------------------------- #
+
+def test_met_smiles_accepts_the_shape_a_loaded_model_carries():
+    """cobra returns a list for a model read from a file, a string for one
+    annotated in memory. Both mean the same molecule."""
+    import cobra
+
+    from geckopy.databases import met_smiles
+
+    met = cobra.Metabolite("etoh")
+    met.annotation["smiles"] = "CCO"
+    assert met_smiles(met) == "CCO"
+
+    met.annotation["smiles"] = ["CCO"]
+    assert met_smiles(met) == "CCO"
+
+    met.annotation["smiles"] = []
+    assert met_smiles(met) == ""
+
+    del met.annotation["smiles"]
+    assert met_smiles(met) == ""

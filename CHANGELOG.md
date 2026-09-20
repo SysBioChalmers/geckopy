@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+* Fix: `write_dlkcat_input` and the OpenKineticsPredictor input builder
+  raised `TypeError: cannot use 'list' as a set element` on any model that
+  had been saved and reloaded. cobra returns an annotation value as a list
+  for a model read from a file, so `annotation['smiles']` is `"CCO"` on a
+  model annotated in memory by `find_met_smiles` and `["CCO"]` on the same
+  model after a round trip, and the ignore-list check hashed it. The new
+  `databases.met_smiles` reads either shape; a reloaded model now writes
+  the same DLKcat input as a freshly annotated one.
+* Fix: `parse_okp_output` raised `TypeError: cannot use 'list' as a dict
+  key` on a reloaded model for the same reason, when indexing metabolites
+  by their SMILES annotation to map each prediction back to an `ec.rxn`.
 * Fix: evotune's trust tiers never applied to a fuzzy-matched kcat.
   `ec.source` reads `"brenda (wc=0, origin=1)"` where MATLAB's reads
   `"brenda"`, and `classify_kcat_source` compared the whole string against
