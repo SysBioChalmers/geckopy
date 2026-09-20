@@ -170,15 +170,22 @@ def match_kcat(
     kcats = table["kcat"].iloc[rows].values
 
     if substrate_match and not sa:
-        # MATLAB only counts kcat > 0 in this branch and divides by
-        # min(substrCoeff). We match.
         positive = kcats > 0
+        matched_rows = rows[positive]
         kcats = kcats[positive]
         if len(kcats) == 0:
             return 0.0, 0
-        coeff = min(substrate_coeffs) if substrate_coeffs else 1.0
-        if coeff > 0:
-            kcats = kcats / coeff
+        # A BRENDA kcat is a turnover per molecule of the substrate it was
+        # measured on, so it becomes a reaction turnover by dividing by that
+        # substrate's coefficient -- the one the row matched on, not the
+        # smallest coefficient in the reaction.
+        coefficient = dict(zip((s.lower() for s in substrates), substrate_coeffs))
+        divisors = (
+            table["substrate"].iloc[matched_rows].str.lower()
+            .map(coefficient).fillna(1.0).to_numpy(dtype=float)
+        )
+        divisors[divisors <= 0] = 1.0
+        kcats = kcats / divisors
 
     if len(kcats) == 0:
         return 0.0, 0

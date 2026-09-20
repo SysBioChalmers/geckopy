@@ -725,3 +725,43 @@ def test_explicit_aggregate_overrides_adapter(tmp_path):
         model, brenda, _phyl_dist(["yeast"]), aggregate="max",
     )
     assert df["kcat"].iloc[0] == 100.0
+
+
+def test_kcat_is_scaled_by_the_matched_substrate_not_the_smallest(tmp_path):
+    """A BRENDA kcat is a turnover per molecule of the substrate it was
+    measured on, so it converts to a reaction turnover by dividing by
+    that substrate's coefficient.
+
+    Cytochrome c oxidase is the case that matters: yeast-GEM writes it
+    per one cytochrome c, so oxygen carries 0.25. Dividing BRENDA's
+    1500/s by the smallest coefficient in the reaction reports 6000/s,
+    four times the measured turnover and well past what the enzyme can
+    do.
+    """
+    adapter = _adapter_with_org(tmp_path, "yeast")
+    model = _ec_model(adapter, [
+        ("r1", "7.1.1.9", [("ferrocytochrome_c", -1.0), ("oxygen", -0.25)]),
+    ])
+    df = fuzzy_kcat_matching(
+        model,
+        _brenda(kcat_rows=[("7.1.1.9", "ferrocytochrome_c", "yeast", 1500.0)]),
+        _phyl_dist(["yeast"]),
+    )
+    row = df.iloc[0]
+    assert row["origin"] == 1
+    assert row["kcat"] == pytest.approx(1500.0)
+
+
+def test_kcat_is_divided_when_the_matched_substrate_is_taken_more_than_once(tmp_path):
+    """The division is still needed where it was meant to apply: two
+    molecules of the measured substrate per turnover halve the rate."""
+    adapter = _adapter_with_org(tmp_path, "yeast")
+    model = _ec_model(adapter, [
+        ("r1", "1.1.1.1", [("alpha", -2.0), ("beta", -1.0)]),
+    ])
+    df = fuzzy_kcat_matching(
+        model,
+        _brenda(kcat_rows=[("1.1.1.1", "alpha", "yeast", 100.0)]),
+        _phyl_dist(["yeast"]),
+    )
+    assert df.iloc[0]["kcat"] == pytest.approx(50.0)
