@@ -13,7 +13,15 @@
 * Fix: `parse_okp_output` raised `TypeError: cannot use 'list' as a dict
   key` on a reloaded model for the same reason, when indexing metabolites
   by their SMILES annotation to map each prediction back to an `ec.rxn`.
-
+* Fix: evotune's trust tiers never applied to a fuzzy-matched kcat.
+  `ec.source` reads `"brenda (wc=0, origin=1)"` where MATLAB's reads
+  `"brenda"`, and `classify_kcat_source` compared the whole string against
+  the `source_groups` entries, so every fuzzy database match fell through
+  to `unlabelled` and took `sigma0_log_default` instead of its tier's
+  width -- on the yeast tutorial, 3 497 of 4 671 kcats. The bracketed
+  detail is now ignored when matching; a group that lists the full string
+  still matches it. Tuning runs on models with fuzzy-matched kcats will
+  move by this.
 * `fuzzy_kcat_matching`: when a reaction has several EC numbers, the EC
   matched at the earliest-tried level now wins, using the same search order
   as within one EC (a correct-organism specific activity, origin 5, before
