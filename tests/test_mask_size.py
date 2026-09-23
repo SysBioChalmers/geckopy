@@ -18,6 +18,7 @@ from geckopy.ec_model.ec_data import EcData
 from geckopy.kcat_tuning.evotune.data import EvotuneData
 from geckopy.kcat_tuning.evotune.mask_size import (
     MaskSizePoint,
+    combine_mask_size_points,
     recommend_target_impact_share,
     sweep_tunable_mask_size,
 )
@@ -325,3 +326,49 @@ def test_sweep_uses_rmse_trace_minimum_not_last_entry(tmp_path, monkeypatch):
     )
 
     assert points[0].rmse == (0.71934,)
+
+
+def test_combine_merges_seeds_per_share_and_sorts():
+    parts = [
+        MaskSizePoint(0.5, 700, (3.5,), (0,)),
+        MaskSizePoint(0.3, 400, (7.8,), (1,)),
+        MaskSizePoint(0.5, 700, (3.4,), (1,)),
+        MaskSizePoint(0.3, 400, (7.7,), (0,)),
+    ]
+    merged = combine_mask_size_points(parts)
+    assert [p.target_impact_share for p in merged] == [0.3, 0.5]
+    assert merged[0].rmse == (7.7, 7.8) and merged[0].seeds == (0, 1)
+    assert merged[1].rmse == (3.5, 3.4) and merged[1].seeds == (0, 1)
+    assert merged[1].n_selected == 700
+    assert not np.isnan(merged[1].rmse_sd)
+
+
+def test_combine_rejects_disagreeing_n_selected():
+    parts = [
+        MaskSizePoint(0.5, 700, (3.5,), (0,)),
+        MaskSizePoint(0.5, 650, (3.4,), (1,)),
+    ]
+    with pytest.raises(ValueError, match="n_selected"):
+        combine_mask_size_points(parts)
+
+
+def test_combine_rejects_repeated_seed():
+    parts = [
+        MaskSizePoint(0.5, 700, (3.5,), (0,)),
+        MaskSizePoint(0.5, 700, (3.4,), (0,)),
+    ]
+    with pytest.raises(ValueError, match="Seed repeated"):
+        combine_mask_size_points(parts)
+
+
+def test_combined_points_feed_the_recommendation():
+    parts = [
+        MaskSizePoint(0.3, 400, (7.8,), (0,)),
+        MaskSizePoint(0.3, 400, (7.7,), (1,)),
+        MaskSizePoint(0.5, 700, (3.5,), (0,)),
+        MaskSizePoint(0.5, 700, (3.4,), (1,)),
+        MaskSizePoint(0.7, 1100, (3.4,), (0,)),
+        MaskSizePoint(0.7, 1100, (3.39,), (1,)),
+    ]
+    share, _ = recommend_target_impact_share(combine_mask_size_points(parts))
+    assert share == 0.5

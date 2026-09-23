@@ -135,6 +135,12 @@ def sweep_tunable_mask_size(
     has not necessarily bracketed the true minimum, and a smaller share
     is worth adding to confirm it.
 
+    The points are independent, so a sweep can also be spread over
+    separate jobs: call this once per share (or per share and seed) with
+    a shared ``screen`` and merge the results with
+    :func:`combine_mask_size_points`. Wall time is then that of the
+    slowest point instead of the sum of all of them.
+
     ``seeds`` defaults to two, not one, doubling the cost of the
     default call: :func:`recommend_target_impact_share`'s noise-floor
     check needs at least two seeds at a point to have anything to
@@ -203,6 +209,55 @@ def sweep_tunable_mask_size(
             rmse=tuple(rmses), seeds=tuple(seeds),
         ))
     return points
+
+
+def combine_mask_size_points(
+    points: Sequence[MaskSizePoint],
+) -> list[MaskSizePoint]:
+    """Merge points measured separately into one point per share.
+
+    For results from independent runs of :func:`sweep_tunable_mask_size`
+    (one job per share or per share and seed): points with the same
+    ``target_impact_share`` have their seeds and RMSEs combined, ordered
+    by seed so the result does not depend on the order runs finished in.
+    The result is sorted by share, ready for
+    :func:`recommend_target_impact_share`.
+
+    Raises
+    ------
+    ValueError
+        If points at one share disagree on ``n_selected`` (they were not
+        tuned from the same screen and model), or repeat a seed.
+    """
+    by_share: dict[float, list[MaskSizePoint]] = {}
+    for p in points:
+        by_share.setdefault(p.target_impact_share, []).append(p)
+
+    merged = []
+    for share in sorted(by_share):
+        group = by_share[share]
+        sizes = {p.n_selected for p in group}
+        if len(sizes) > 1:
+            raise ValueError(
+                f"Points at target_impact_share={share:g} disagree on "
+                f"n_selected ({sorted(sizes)}); they were not tuned from "
+                "the same screen and model."
+            )
+        runs = sorted(
+            (sd, r) for p in group for sd, r in zip(p.seeds, p.rmse)
+        )
+        seeds = [sd for sd, _ in runs]
+        if len(set(seeds)) != len(seeds):
+            raise ValueError(
+                f"Seed repeated at target_impact_share={share:g}: {seeds}."
+            )
+        merged.append(MaskSizePoint(
+            target_impact_share=share,
+            n_selected=group[0].n_selected,
+            rmse=tuple(r for _, r in runs),
+            seeds=tuple(seeds),
+        ))
+    return merged
 
 
 def _local_sd(a: MaskSizePoint, b: MaskSizePoint) -> Optional[float]:

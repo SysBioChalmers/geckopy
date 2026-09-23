@@ -22,6 +22,7 @@ from .distance import (
 )
 from .mask_size import (
     MaskSizePoint,
+    combine_mask_size_points,
     recommend_target_impact_share,
     sweep_tunable_mask_size,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "classify_kcat_source",
     "classify_kcat_sources",
     "cmaes_kcat_tuning",
+    "combine_mask_size_points",
     "compute_excarbon",
     "dataset_rmse",
     "load_evotune_data",
