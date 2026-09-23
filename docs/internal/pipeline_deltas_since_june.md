@@ -141,6 +141,16 @@ origin-limit demotion) are solid; the single-reaction mechanism isn't
 required to know **floor + `top_origin_limit=4` together is safe for every
 predictor tested**, which is the practical recommendation below.
 
+For CatPred specifically, combining the two mitigations makes almost no
+difference versus `top_origin_limit=4` alone (`c3_fl4` vs `c3_o4`: 34 of
+4,834 kcats differ; `b26_fl4` vs `b26_o4`: byte-identical). This isn't a
+bug — `top_origin_limit=4` already demotes every origin-5/6 BRENDA match
+below *any* prediction, and CatPred's coverage is broad enough that almost
+every reaction with an origin-5/6 match also has a CatPred prediction
+available to fall back to. The floor only has room to matter where a
+predictor's coverage is patchier (DLKcat, EITLEM) and a reaction's only
+alternative to the bad BRENDA value is standard kcat, not a prediction.
+
 ## Recommendation
 
 - **Commit**: nothing yet. The floor fix (`brenda_fix.py`) is sandbox-only
