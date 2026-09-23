@@ -20,6 +20,11 @@ from .distance import (
     compute_excarbon,
     dataset_rmse,
 )
+from .mask_size import (
+    MaskSizePoint,
+    recommend_target_impact_share,
+    sweep_tunable_mask_size,
+)
 from .priors import (
     UNLABELLED_GROUP,
     build_sigma0_log,
@@ -42,6 +47,7 @@ __all__ = [
     "EvotuneData",
     "EvotuneResult",
     "ConditionSimResult",
+    "MaskSizePoint",
     "evotune_distance",
     "build_sigma0_log",
     "classify_kcat_source",
@@ -50,8 +56,10 @@ __all__ = [
     "compute_excarbon",
     "dataset_rmse",
     "load_evotune_data",
+    "recommend_target_impact_share",
     "screen_kcat_leverage",
     "select_tunable_mask",
     "simulate_evotune_dataset",
+    "sweep_tunable_mask_size",
     "tune_prior_penalty_weight",
 ]
