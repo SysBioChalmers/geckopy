@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Literal
 
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,9 @@ class BrendaData:
         )
 
 
-def load_brenda_data(folder: str | Path) -> BrendaData:
+def load_brenda_data(
+    folder: str | Path, *, filter_outlier_kcats: bool = True,
+) -> BrendaData:
     """Load BRENDA kcat, SA, and MW dumps from a folder.
 
     Ported from GECKO MATLAB:
@@ -129,6 +132,12 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     ----------
     folder
         Directory containing all three BRENDA dump files.
+    filter_outlier_kcats
+        If True (default), drop a row whose kcat is more than 4 orders
+        of magnitude below the typical kcat of its EC before it can be
+        matched to any reaction -- see ``_filter_outlier_rows`` for the
+        rationale and mechanism. Set False to reproduce the unfiltered
+        1.0-era behaviour.
 
     Returns
     -------
@@ -169,6 +178,11 @@ def load_brenda_data(folder: str | Path) -> BrendaData:
     sa_median = _join_sa_with_mw(
         _sa_view_from_wide(sa_wide, "sa_median"), mw_raw,
     )
+
+    if filter_outlier_kcats:
+        kcat_max, kcat_median, sa_max, sa_median = _filter_outlier_rows(
+            [kcat_max, kcat_median, sa_max, sa_median],
+        )
 
     return BrendaData(
         kcat_max=kcat_max,
@@ -371,3 +385,95 @@ def _join_sa_with_mw(sa: pd.DataFrame, mw: pd.DataFrame) -> pd.DataFrame:
     if not out_rows:
         return pd.DataFrame(columns=_SA_COLUMNS)
     return pd.DataFrame(out_rows, columns=_SA_COLUMNS)
+
+
+def _filter_outlier_rows(
+    tables: list[pd.DataFrame], *, decades: float = 4.0, min_ref: int = 5,
+) -> list[pd.DataFrame]:
+    """Drop a row whose kcat is implausibly low for its EC.
+
+    BRENDA's specific-activity x molecular-weight join can produce a
+    derived kcat that is many orders of magnitude below anything else
+    reported for the same EC -- almost always a unit or transcription
+    error upstream, not a real slow enzyme (a documented case: EC
+    2.3.1.297's only molecular-weight row is for a different organism
+    than its lowest specific-activity row, and the derived kcat this
+    produces, ~4e-7 1/s, is 8 orders of magnitude below the yeast SA
+    measurement for the same EC that has no matching MW row and is
+    silently dropped instead). Once matched to a reaction, a kcat that
+    small makes the enzyme-usage coefficient enormous and can make a
+    model untunable.
+
+    This is a *relative* floor, not a fixed threshold: a row is dropped
+    only if it is more than ``decades`` orders of magnitude below the
+    median kcat of its own EC. "Its own EC" widens from the full
+    4-level code to the 3-, 2-, then 1-level prefix if fewer than
+    ``min_ref`` values are available at the current level, so a
+    sparsely-represented EC is still judged against something. The
+    reference pool for one EC is built from every positive-kcat row of
+    every table passed in (plain kcat rows and SA-derived rows alike),
+    computed once up front from the *unfiltered* tables so that
+    dropping a row in one table cannot shift the reference used to
+    judge another.
+
+    Real enzymes can be genuinely slow, so this only catches a row far
+    outside its own EC's spread, not a merely-low one.
+
+    Parameters
+    ----------
+    tables
+        The four BRENDA views (``kcat_max``, ``kcat_median``,
+        ``sa_max``, ``sa_median``); each must have ``ec_code`` and
+        ``kcat`` columns. Order is preserved in the return value.
+    decades
+        How many orders of magnitude below the reference counts as an
+        outlier.
+    min_ref
+        Minimum number of reference values required before a level is
+        trusted; the search widens to a broader EC prefix otherwise.
+
+    Returns
+    -------
+    list[pandas.DataFrame]
+        The same tables, each with outlier rows removed and its index
+        reset.
+    """
+    pool: dict[str, list[float]] = {}
+    for table in tables:
+        for ec, kcat in zip(table["ec_code"], table["kcat"]):
+            if kcat > 0 and "-" not in ec:
+                pool.setdefault(ec, []).append(np.log10(kcat))
+
+    log_values_by_level: dict[tuple[int, str], list[float]] = {}
+    for ec, values in pool.items():
+        parts = ec.split(".")
+        for level in (4, 3, 2, 1):
+            key = (level, ".".join(parts[:level]))
+            log_values_by_level.setdefault(key, []).extend(values)
+
+    reference_cache: dict[str, float | None] = {}
+
+    def reference_log_kcat(ec: str) -> float | None:
+        if ec not in reference_cache:
+            parts = ec.split(".")
+            reference_cache[ec] = None
+            for level in (4, 3, 2, 1):
+                values = log_values_by_level.get((level, ".".join(parts[:level])), [])
+                if len(values) >= min_ref:
+                    reference_cache[ec] = float(np.median(values))
+                    break
+        return reference_cache[ec]
+
+    filtered = []
+    for table in tables:
+        if table.empty:
+            # An empty boolean mask loses the (already-correct) column
+            # set on an empty frame; nothing to filter anyway.
+            filtered.append(table)
+            continue
+        keep = []
+        for ec, kcat in zip(table["ec_code"], table["kcat"]):
+            ref = reference_log_kcat(ec) if kcat > 0 else None
+            keep.append(not (ref is not None and np.log10(kcat) < ref - decades))
+        filtered.append(table[pd.Series(keep, index=table.index)].reset_index(drop=True))
+    return filtered
