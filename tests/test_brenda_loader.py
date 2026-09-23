@@ -89,6 +89,85 @@ def test_all_empty_files_yield_empty_dataframes(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
+# Outlier filtering (filter_outlier_kcats)
+# --------------------------------------------------------------------------- #
+
+
+def _kcat_row(ec, organism, kcat):
+    return f"{ec}\tm1\t{organism}\t{kcat}\t{kcat}\t1\t*\n"
+
+
+def test_outlier_row_dropped_by_default(tmp_path):
+    # Five real-looking values for the same EC (the reference pool),
+    # plus one 8-decades-lower outlier for that same EC.
+    kcat = "".join(
+        _kcat_row("1.1.1.1", f"org{i}", v)
+        for i, v in enumerate([10, 12, 8, 15, 11])
+    )
+    kcat += _kcat_row("1.1.1.1", "org_outlier", 1e-6)
+    _write_brenda_files(tmp_path, kcat=kcat)
+
+    filtered = load_brenda_data(tmp_path)
+    assert len(filtered.kcat_max) == 5
+    assert 1e-6 not in filtered.kcat_max["kcat"].values
+
+    unfiltered = load_brenda_data(tmp_path, filter_outlier_kcats=False)
+    assert len(unfiltered.kcat_max) == 6
+    assert 1e-6 in unfiltered.kcat_max["kcat"].values
+
+
+def test_reference_pool_widens_to_ec_prefix_when_sparse(tmp_path):
+    # Only one row for 1.1.1.9 itself (too few for its own reference),
+    # but four more under the shared 1.1.1.- prefix -- enough (5) once
+    # widened. The lone 1.1.1.9 row is a real outlier against that
+    # widened reference and should be dropped.
+    kcat = "".join(
+        _kcat_row(ec, f"org{i}", v)
+        for i, (ec, v) in enumerate([
+            ("1.1.1.1", 10), ("1.1.1.2", 12), ("1.1.1.3", 8), ("1.1.1.4", 15),
+        ])
+    )
+    kcat += _kcat_row("1.1.1.9", "org_outlier", 1e-6)
+    _write_brenda_files(tmp_path, kcat=kcat)
+
+    filtered = load_brenda_data(tmp_path)
+    assert "1.1.1.9" not in filtered.kcat_max["ec_code"].values
+    assert len(filtered.kcat_max) == 4
+
+
+def test_outlier_filter_uses_kcat_and_sa_together_as_one_reference_pool(tmp_path):
+    # The reference pool for one EC draws on both the plain kcat table
+    # and the SA-derived table; four kcat rows plus one SA row is
+    # enough (5) to judge a sixth, wildly-off SA row as an outlier.
+    kcat = "".join(
+        _kcat_row("2.3.1.297", f"org{i}", v)
+        for i, v in enumerate([10, 12, 8, 15])
+    )
+    sa = (
+        "2.3.1.297\t*\torg_good\t2.0\t2.0\t1\t*\n"     # ~ SA*MW = 20, in range
+        "2.3.1.297\t*\torg_bad\t1e-8\t1e-8\t1\t*\n"    # ~ SA*MW = 1e-7, outlier
+    )
+    mw = (
+        "2.3.1.297\t*\torg_good\t10000\t1\t*\n"
+        "2.3.1.297\t*\torg_bad\t10000\t1\t*\n"
+    )
+    _write_brenda_files(tmp_path, kcat=kcat, sa=sa, mw=mw)
+
+    filtered = load_brenda_data(tmp_path)
+    assert len(filtered.sa_max) == 1
+    assert filtered.sa_max.iloc[0]["organism"] == "org_good"
+
+
+def test_empty_tables_unaffected_by_outlier_filter(tmp_path):
+    _write_brenda_files(tmp_path)
+    result = load_brenda_data(tmp_path, filter_outlier_kcats=True)
+    assert list(result.kcat_max.columns) == [
+        "ec_code", "substrate", "organism", "kcat", "n",
+    ]
+    assert result.kcat_max.empty
+
+
+# --------------------------------------------------------------------------- #
 # Missing files
 # --------------------------------------------------------------------------- #
 
